@@ -209,6 +209,10 @@ function renderFlow(store) {
                         <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}">${step.prePrompt || ''}</textarea>
                         <label>Text after alternatives:</label>
                         <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}">${step.postPrompt || ''}</textarea>
+                        <label class="flow-step-checkbox-label">
+                            <input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" ${step.onlyLastAnswer ? 'checked' : ''}>
+                            Only include last answer
+                        </label>
                     </div>
                 `;
                 break;
@@ -552,6 +556,7 @@ const agentsPlugin = {
                 newStep.agentId = '';
                 newStep.prePrompt = 'Please choose the best of the following answers:';
                 newStep.postPrompt = 'Explain your choice.';
+                newStep.onlyLastAnswer = false;
                 break;
             case 'echo-answer':
                 newStep.agentId = '';
@@ -582,6 +587,7 @@ const agentsPlugin = {
         if (target.classList.contains('flow-step-post-prompt')) step.postPrompt = target.value;
         if (target.classList.contains('flow-step-delete-ai')) step.deleteAIAnswer = target.checked;
         if (target.classList.contains('flow-step-delete-user')) step.deleteUserMessage = target.checked;
+        if (target.classList.contains('flow-step-only-last-answer')) step.onlyLastAnswer = target.checked;
         if (target.classList.contains('flow-step-clear-from')) step.clearFrom = parseInt(target.value, 10);
         if (target.classList.contains('flow-step-clear-to')) step.clearTo = parseInt(target.value, 10);
         if (target.classList.contains('flow-step-clear-beginning')) {
@@ -985,25 +991,35 @@ const agentsPlugin = {
                     return this.stopFlow('Invalid flow structure for Consolidator.');
                 }
 
-                const consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
-                    let turnContent = '';
-                    let currentMessageInTurn = alternativeStartMessage;
-                    while (currentMessageInTurn) {
-                        if (currentMessageInTurn.value) {
-                            const { role, content } = currentMessageInTurn.value;
-                            turnContent += `**${role.charAt(0).toUpperCase() + role.slice(1)}:**\n${content}\n\n`;
+                let consolidatedContent;
+                if (step.onlyLastAnswer) {
+                    consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
+                        let lastMessageInTurn = alternativeStartMessage;
+                        while (lastMessageInTurn.answerAlternatives && lastMessageInTurn.answerAlternatives.messages.length > 0) {
+                            lastMessageInTurn = lastMessageInTurn.answerAlternatives.messages[0];
                         }
+                        const content = lastMessageInTurn.value?.content || '';
+                        return `--- ALTERNATIVE ${i + 1} ---\n${content.trim()}`;
+                    }).join('\n\n');
+                } else {
+                    consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
+                        let turnContent = '';
+                        let currentMessageInTurn = alternativeStartMessage;
+                        while (currentMessageInTurn) {
+                            if (currentMessageInTurn.value) {
+                                const { role, content } = currentMessageInTurn.value;
+                                turnContent += `**${role.charAt(0).toUpperCase() + role.slice(1)}:**\n${content}\n\n`;
+                            }
 
-                        if (currentMessageInTurn.answerAlternatives && currentMessageInTurn.answerAlternatives.messages.length > 0) {
-                            // In a non-branching chain (like agent-tool-agent), there should only be one message.
-                            // We assume the first message is the continuation of the chain.
-                            currentMessageInTurn = currentMessageInTurn.answerAlternatives.messages[0];
-                        } else {
-                            currentMessageInTurn = null;
+                            if (currentMessageInTurn.answerAlternatives && currentMessageInTurn.answerAlternatives.messages.length > 0) {
+                                currentMessageInTurn = currentMessageInTurn.answerAlternatives.messages[0];
+                            } else {
+                                currentMessageInTurn = null;
+                            }
                         }
-                    }
-                    return `--- ALTERNATIVE ${i + 1} ---\n${turnContent.trim()}`;
-                }).join('\n\n');
+                        return `--- ALTERNATIVE ${i + 1} ---\n${turnContent.trim()}`;
+                    }).join('\n\n');
+                }
 
                 const finalPrompt = `${step.prePrompt || ''}\n\n${consolidatedContent}\n\n${step.postPrompt || ''}`;
                 chat.activeAgentId = step.agentId;
