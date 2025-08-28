@@ -34,7 +34,7 @@ function getAgentsDropdown(step, agentOptions) {
     return `
             <label>Agent:</label>
             <select class="flow-step-agent flow-step-input" data-id="${step.id}" data-key="agentId">
-                <option value="">Select Agent</option>
+                <option value="">Default AI</option>
                 ${agentOptions}
             </select>`;
 }
@@ -69,7 +69,7 @@ defineStep('simple-prompt', {
 
     execute: (step, context) => {
         const { app, store, triggerError, stopFlow } = context;
-        if (!step.agentId || !step.prompt) {
+        if (!step.prompt) {
             triggerError(`Agent step is not fully configured.`);
             return stopFlow('Step not configured.');
         }
@@ -109,7 +109,7 @@ defineStep('multi-prompt', {
 
     execute: (step, context) => {
         const { app, store, triggerError, stopFlow, multiMessageInfo } = context;
-        if (!step.agentId || !step.prompt) {
+        if (!step.prompt) {
             triggerError(`Multi-Message step is not fully configured.`);
             return stopFlow('Step not configured.');
         }
