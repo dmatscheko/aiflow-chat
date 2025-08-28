@@ -6,6 +6,7 @@
 
 import { log, triggerError } from '../utils/logger.js';
 import { hooks } from '../hooks.js';
+import { stepTypes } from './agent-step-definitions.js';
 import { parseFunctionCalls } from '../utils/parsers.js';
 import { addAlternativeToChat } from '../utils/chat.js';
 import { createControlButton } from '../utils/ui.js';
@@ -119,118 +120,15 @@ function renderFlow(store) {
         node.dataset.id = step.id;
         node.style.left = `${step.x}px`;
         node.style.top = `${step.y}px`;
-        let content = '';
         const type = step.type || 'agent'; // Default to agent for old steps
         const agentOptions = (chat.agents || []).map(a => `<option value="${a.id}" ${step.agentId === a.id ? 'selected' : ''}>${a.name}</option>`).join('');
 
-        switch (type) {
-            case 'simple-prompt':
-                content = `
-                    <h4>Simple Prompt</h4>
-                    <div class="flow-step-content">
-                        <label>Agent:</label>
-                        <select class="flow-step-agent flow-step-input" data-id="${step.id}"><option value="">Select Agent</option>${agentOptions}</select>
-                        <label>Prompt:</label>
-                        <textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}">${step.prompt || ''}</textarea>
-                    </div>
-                `;
-                break;
-            case 'clear-history':
-                content = `
-                    <h4>Clear History</h4>
-                    <div class="flow-step-content">
-                        <label>From answer #:</label>
-                        <input type="number" class="flow-step-clear-from flow-step-input" data-id="${step.id}" value="${step.clearFrom || 1}" min="1">
-                        <div class="clear-history-to-container" style="${step.clearToBeginning ? 'display: none;' : ''}">
-                            <label>To answer #:</label>
-                            <input type="number" class="flow-step-clear-to flow-step-input" data-id="${step.id}" value="${step.clearTo || 1}" min="1">
-                        </div>
-                        <label class="flow-step-checkbox-label">
-                            <input type="checkbox" class="flow-step-clear-beginning flow-step-input" data-id="${step.id}" ${step.clearToBeginning ? 'checked' : ''}>
-                            Clear to beginning
-                        </label>
-                        <small>(1 is the last answer)<br><br></small>
-                    </div>
-                `;
-                break;
-            case 'conditional-stop':
-                content = `
-                    <h4>Conditional Stop</h4>
-                    <div class="flow-step-content">
-                        <label>Last Response Condition:</label>
-                        <select class="flow-step-condition-type flow-step-input" data-id="${step.id}">
-                            <option value="contains" ${step.conditionType === 'contains' ? 'selected' : ''}>Contains String</option>
-                            <option value="matches" ${step.conditionType === 'matches' ? 'selected' : ''}>Matches String</option>
-                            <option value="regex" ${step.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option>
-                        </select>
-                        <textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" placeholder="Enter value...">${step.condition || ''}</textarea>
-                        <label>On Match:</label>
-                        <select class="flow-step-on-match flow-step-input" data-id="${step.id}">
-                            <option value="stop" ${step.onMatch === 'stop' ? 'selected' : ''}>Stop flow</option>
-                            <option value="continue" ${step.onMatch === 'continue' ? 'selected' : ''}>Must match to continue</option>
-                        </select>
-                    </div>
-                `;
-                break;
-            case 'branching-prompt':
-                content = `
-                    <h4>Branching Prompt</h4>
-                    <div class="flow-step-content">
-                        <label>Last Response Condition:</label>
-                        <select class="flow-step-condition-type flow-step-input" data-id="${step.id}">
-                            <option value="contains" ${step.conditionType === 'contains' ? 'selected' : ''}>Contains String</option>
-                            <option value="matches" ${step.conditionType === 'matches' ? 'selected' : ''}>Matches String</option>
-                            <option value="regex" ${step.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option>
-                        </select>
-                        <textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" placeholder="Enter value...">${step.condition || ''}</textarea>
-                    </div>
-                `;
-                break;
-            case 'multi-prompt':
-                content = `
-                    <h4>Multi Prompt</h4>
-                    <div class="flow-step-content">
-                        <label>Agent:</label>
-                        <select class="flow-step-agent flow-step-input" data-id="${step.id}"><option value="">Select Agent</option>${agentOptions}</select>
-                        <label>Prompt:</label>
-                        <textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}">${step.prompt || ''}</textarea>
-                        <label>Number of alternatives:</label>
-                        <input type="number" class="flow-step-count flow-step-input" data-id="${step.id}" value="${step.count || 1}" min="1" max="10">
-                    </div>
-                `;
-                break;
-            case 'consolidator':
-                content = `
-                    <h4>Alternatives Consolidator</h4>
-                    <div class="flow-step-content">
-                        <label>Agent:</label>
-                        <select class="flow-step-agent flow-step-input" data-id="${step.id}"><option value="">Select Agent</option>${agentOptions}</select>
-                        <label>Text before alternatives:</label>
-                        <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}">${step.prePrompt || ''}</textarea>
-                        <label>Text after alternatives:</label>
-                        <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}">${step.postPrompt || ''}</textarea>
-                        <label class="flow-step-checkbox-label">
-                            <input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" ${step.onlyLastAnswer ? 'checked' : ''}>
-                            Only include each last answer
-                        </label>
-                    </div>
-                `;
-                break;
-            case 'echo-answer':
-                content = `
-                    <h4>Echo Answer</h4>
-                    <div class="flow-step-content">
-                        <label>Agent:</label>
-                        <select class="flow-step-agent flow-step-input" data-id="${step.id}"><option value="">Select Agent</option>${agentOptions}</select>
-                        <label>Text before AI answer:</label>
-                        <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}">${step.prePrompt || ''}</textarea>
-                        <label>Text after AI answer:</label>
-                        <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}">${step.postPrompt || ''}</textarea>
-                        <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-ai flow-step-input" data-id="${step.id}" ${step.deleteAIAnswer ? 'checked' : ''}> Delete original AI answer</label>
-                        <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-user flow-step-input" data-id="${step.id}" ${step.deleteUserMessage ? 'checked' : ''}> Delete original user message</label>
-                    </div>
-                `;
-                break;
+        const stepDefinition = stepTypes[type];
+        let content = '';
+        if (stepDefinition && stepDefinition.render) {
+            content = stepDefinition.render(step, agentOptions);
+        } else {
+            content = `<h4>Unknown Step Type: ${type}</h4>`;
         }
 
         let outputConnectors = '';
@@ -373,18 +271,15 @@ const agentsPlugin = {
         const flowTabPane = document.createElement('div');
         flowTabPane.classList.add('tab-pane');
         flowTabPane.id = 'flow-tab-pane';
+        const dropdownContent = Object.entries(stepTypes)
+            .map(([type, { label }]) => `<a href="#" data-step-type="${type}">${label}</a>`)
+            .join('');
         flowTabPane.innerHTML = `
             <div class="agents-flow-toolbar">
                 <div class="dropdown">
                     <button id="add-flow-step-btn-dropdown" class="agents-flow-btn">Add Step &#9662;</button>
                     <div id="add-step-dropdown-content" class="dropdown-content">
-                        <a href="#" data-step-type="simple-prompt">Simple Prompt</a>
-                        <a href="#" data-step-type="multi-prompt">Multi Prompt</a>
-                        <a href="#" data-step-type="consolidator">Alt. Consolidator</a>
-                        <a href="#" data-step-type="echo-answer">Echo Answer</a>
-                        <a href="#" data-step-type="clear-history">Clear History</a>
-                        <a href="#" data-step-type="branching-prompt">Branching Prompt</a>
-                        <a href="#" data-step-type="conditional-stop">Conditional Stop</a>
+                        ${dropdownContent}
                     </div>
                 </div>
                 <button id="run-flow-btn" class="agents-flow-btn">Run Flow</button>
@@ -521,51 +416,22 @@ const agentsPlugin = {
     addFlowStep(type = 'simple-prompt') {
         const chat = this.store.get('currentChat');
         if (!chat.flow) chat.flow = { steps: [], connections: [] };
+
+        const stepDefinition = stepTypes[type];
+        if (!stepDefinition) {
+            triggerError(`Unknown step type: ${type}`);
+            return;
+        }
+
         const newStep = {
             id: `step-${Date.now()}`,
             type: type,
             x: 50,
             y: 50,
             isMinimized: false,
+            ...stepDefinition.getDefaults(),
         };
-        switch (type) {
-            case 'simple-prompt':
-                newStep.agentId = '';
-                newStep.prompt = '';
-                break;
-            case 'clear-history':
-                newStep.clearFrom = 2;
-                newStep.clearTo = 1;
-                newStep.clearToBeginning = true;
-                break;
-            case 'conditional-stop':
-                newStep.conditionType = 'contains';
-                newStep.condition = '';
-                newStep.onMatch = 'stop';
-                break;
-            case 'multi-prompt':
-                newStep.agentId = '';
-                newStep.prompt = '';
-                newStep.count = 2;
-                break;
-            case 'branching-prompt':
-                newStep.conditionType = 'contains';
-                newStep.condition = '';
-                break;
-            case 'consolidator':
-                newStep.agentId = '';
-                newStep.prePrompt = 'Please choose the best of the following answers:';
-                newStep.postPrompt = 'Explain your choice.';
-                newStep.onlyLastAnswer = false;
-                break;
-            case 'echo-answer':
-                newStep.agentId = '';
-                newStep.prePrompt = 'Is this idea and code correct? Be concise.\n\n\n';
-                newStep.postPrompt = '';
-                newStep.deleteAIAnswer = true;
-                newStep.deleteUserMessage = true;
-                break;
-        }
+
         chat.flow.steps.push(newStep);
         this.store.set('currentChat', { ...chat });
     },
@@ -576,25 +442,10 @@ const agentsPlugin = {
         const step = chat.flow.steps.find(s => s.id === id);
         if (!step) return;
 
-        const target = e.target;
-        if (target.classList.contains('flow-step-agent')) step.agentId = target.value;
-        if (target.classList.contains('flow-step-prompt')) step.prompt = target.value;
-        if (target.classList.contains('flow-step-condition')) step.condition = target.value;
-        if (target.classList.contains('flow-step-condition-type')) step.conditionType = target.value;
-        if (target.classList.contains('flow-step-on-match')) step.onMatch = target.value;
-        if (target.classList.contains('flow-step-count')) step.count = parseInt(target.value, 10);
-        if (target.classList.contains('flow-step-pre-prompt')) step.prePrompt = target.value;
-        if (target.classList.contains('flow-step-post-prompt')) step.postPrompt = target.value;
-        if (target.classList.contains('flow-step-delete-ai')) step.deleteAIAnswer = target.checked;
-        if (target.classList.contains('flow-step-delete-user')) step.deleteUserMessage = target.checked;
-        if (target.classList.contains('flow-step-only-last-answer')) step.onlyLastAnswer = target.checked;
-        if (target.classList.contains('flow-step-clear-from')) step.clearFrom = parseInt(target.value, 10);
-        if (target.classList.contains('flow-step-clear-to')) step.clearTo = parseInt(target.value, 10);
-        if (target.classList.contains('flow-step-clear-beginning')) {
-            step.clearToBeginning = target.checked;
-            renderFlow(this.store);
+        const stepDefinition = stepTypes[step.type];
+        if (stepDefinition && stepDefinition.onUpdate) {
+            stepDefinition.onUpdate(step, e.target, renderFlow, this.store);
         }
-
 
         this.store.set('currentChat', { ...chat });
     },
@@ -834,281 +685,23 @@ const agentsPlugin = {
         }
 
         this.currentStepId = step.id;
-        const chat = this.store.get('currentChat');
-        const type = step.type || 'simple-prompt'; // Default to agent for old steps
-        const chatlog = this.app.ui.chatBox.chatlog;
+        const type = step.type || 'simple-prompt';
+        const stepDefinition = stepTypes[type];
 
-        switch (type) {
-            case 'simple-prompt':
-                if (!step.agentId || !step.prompt) {
-                    triggerError(`Agent step is not fully configured.`);
-                    return this.stopFlow('Step not configured.');
-                }
-                chat.activeAgentId = step.agentId;
-                this.store.set('currentChat', { ...chat });
-                this.app.submitUserMessage(step.prompt, 'user');
-                break;
-            case 'clear-history': {
-                const chChatlog = this.app.ui.chatBox.chatlog;
-                const chMessages = chChatlog.getActiveMessageValues();
-                const userMessageIndices = chMessages
-                    .map((msg, i) => msg.role === 'user' ? i : -1)
-                    .filter(i => i !== -1);
-
-                const clearFrom = step.clearFrom || 1;
-                const clearTo = step.clearToBeginning ? userMessageIndices.length : (step.clearTo || 1);
-
-                const fromIndex = userMessageIndices.length - clearTo;
-                const toIndex = userMessageIndices.length - clearFrom;
-
-                if (fromIndex < 0 || toIndex < 0 || fromIndex > toIndex) {
-                     this.stopFlow('Invalid range for Clear History.');
-                     break;
-                }
-
-                const startMsgIndex = userMessageIndices[fromIndex];
-                const endMsgIndex = (toIndex + 1 < userMessageIndices.length) ? userMessageIndices[toIndex + 1] : chMessages.length;
-
-                for (let i = endMsgIndex - 1; i >= startMsgIndex; i--) {
-                    chChatlog.deleteNthMessage(i);
-                }
-
-                const nextStep = this.getNextStep(step.id);
-                if (nextStep) {
-                    this.executeStep(nextStep);
-                } else {
-                    this.stopFlow('Flow execution complete.');
-                }
-                break;
-            }
-            case 'branching-prompt':
-                const bpLastMessage = this.app.ui.chatBox.chatlog.getLastMessage()?.value.content || '';
-                let bpIsMatch = false;
-                const bpCondition = step.condition || '';
-
-                try {
-                    switch(step.conditionType) {
-                        case 'regex':
-                            bpIsMatch = new RegExp(bpCondition).test(bpLastMessage);
-                            break;
-                        case 'matches':
-                            bpIsMatch = (bpLastMessage === bpCondition);
-                            break;
-                        case 'contains':
-                        default:
-                            bpIsMatch = bpLastMessage.includes(bpCondition);
-                            break;
-                    }
-                } catch (e) {
-                    triggerError(`Invalid regex in branching step: ${e.message}`);
-                    return this.stopFlow('Invalid regex.');
-                }
-
-                const outputName = bpIsMatch ? 'pass' : 'fail';
-                const nextStep = this.getNextStep(step.id, outputName);
-                if (nextStep) {
-                    this.executeStep(nextStep);
-                } else {
-                    this.stopFlow('Flow execution complete.');
-                }
-                break;
-            case 'multi-prompt':
-                if (!step.agentId || !step.prompt) {
-                    triggerError(`Multi-Message step is not fully configured.`);
-                    return this.stopFlow('Step not configured.');
-                }
-                this.multiMessageInfo.active = true;
-                this.multiMessageInfo.step = step;
-                this.multiMessageInfo.counter = 1;
-                chat.activeAgentId = step.agentId;
-                this.store.set('currentChat', { ...chat });
-
-                chatlog.addMessage({ role: 'user', content: step.prompt });
-                const assistantMessageToBranchFrom = chatlog.addMessage(null);
-                this.multiMessageInfo.messageToBranchFrom = assistantMessageToBranchFrom;
-
-                this.app.generateAIResponse({}, chatlog);
-                break;
-            case 'conditional-stop':
-                const lastMessage = this.app.ui.chatBox.chatlog.getLastMessage()?.value.content || '';
-                let isMatch = false;
-                const condition = step.condition || '';
-
-                try {
-                    switch(step.conditionType) {
-                        case 'regex':
-                            isMatch = new RegExp(condition).test(lastMessage);
-                            break;
-                        case 'matches':
-                            isMatch = (lastMessage === condition);
-                            break;
-                        case 'contains':
-                        default:
-                            isMatch = lastMessage.includes(condition);
-                            break;
-                    }
-                } catch (e) {
-                    triggerError(`Invalid regex in conditional step: ${e.message}`);
-                    return this.stopFlow('Invalid regex.');
-                }
-
-                let shouldContinue = true;
-                if (isMatch) {
-                    if (step.onMatch === 'stop') {
-                        this.stopFlow('Flow stopped by conditional match.');
-                        shouldContinue = false;
-                    }
-                } else {
-                    if (step.onMatch === 'continue') {
-                        this.stopFlow('Flow stopped: condition not met.');
-                        shouldContinue = false;
-                    }
-                }
-
-                if (shouldContinue) {
-                    const nextStep = this.getNextStep(step.id);
-                    if (nextStep) {
-                        this.executeStep(nextStep);
-                    } else {
-                        this.stopFlow('Flow execution complete.');
-                    }
-                }
-                break;
-            case 'consolidator':
-                const activeMessages = chatlog.getActiveMessageValues().map((_, i) => chatlog.getNthMessage(i));
-
-                let sourceMessage = null;
-                for (let i = activeMessages.length - 1; i >= 0; i--) {
-                    const msg = activeMessages[i];
-                    if (msg && msg.answerAlternatives && msg.answerAlternatives.messages.length > 1) {
-                        sourceMessage = msg;
-                        break;
-                    }
-                }
-
-                if (!sourceMessage) {
-                    triggerError(`Consolidator could not find a preceding step with alternatives.`);
-                    return this.stopFlow('Invalid flow structure for Consolidator.');
-                }
-
-                let consolidatedContent;
-                if (step.onlyLastAnswer) {
-                    consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
-                        let lastMessageInTurn = alternativeStartMessage;
-                        while (lastMessageInTurn.answerAlternatives && lastMessageInTurn.answerAlternatives.messages.length > 0) {
-                            lastMessageInTurn = lastMessageInTurn.answerAlternatives.messages[0];
-                        }
-                        const content = lastMessageInTurn.value?.content || '';
-                        return `--- ALTERNATIVE ${i + 1} ---\n${content.trim()}`;
-                    }).join('\n\n');
-                } else {
-                    consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
-                        let turnContent = '';
-                        let currentMessageInTurn = alternativeStartMessage;
-                        while (currentMessageInTurn) {
-                            if (currentMessageInTurn.value) {
-                                const { role, content } = currentMessageInTurn.value;
-                                turnContent += `**${role.charAt(0).toUpperCase() + role.slice(1)}:**\n${content}\n\n`;
-                            }
-
-                            if (currentMessageInTurn.answerAlternatives && currentMessageInTurn.answerAlternatives.messages.length > 0) {
-                                currentMessageInTurn = currentMessageInTurn.answerAlternatives.messages[0];
-                            } else {
-                                currentMessageInTurn = null;
-                            }
-                        }
-                        return `--- ALTERNATIVE ${i + 1} ---\n${turnContent.trim()}`;
-                    }).join('\n\n');
-                }
-
-                const finalPrompt = `${step.prePrompt || ''}\n\n${consolidatedContent}\n\n${step.postPrompt || ''}`;
-                chat.activeAgentId = step.agentId;
-                this.store.set('currentChat', { ...chat });
-                this.app.submitUserMessage(finalPrompt, 'user');
-                break;
-            case 'echo-answer': {
-                const rlaChatlog = this.app.ui.chatBox.chatlog;
-                const rlaMessages = rlaChatlog.getActiveMessageValues().map((msg, i) => ({
-                    ...rlaChatlog.getNthMessage(i),
-                    originalIndex: i
-                }));
-
-                let lastMessage = rlaMessages[rlaMessages.length - 1];
-                let endOfAiAnswerRange = rlaMessages.length - 1;
-
-                if (lastMessage && (lastMessage.value.role === 'user' || lastMessage.value.role === 'system')) {
-                    endOfAiAnswerRange--;
-                }
-
-                let startOfAiAnswerRange = -1;
-                let userMessageIndexToDelete = -1;
-                for (let i = endOfAiAnswerRange; i >= 0; i--) {
-                    const msg = rlaMessages[i].value;
-                    if (msg.role === 'user' || msg.role === 'system') {
-                        startOfAiAnswerRange = i + 1;
-                        userMessageIndexToDelete = i;
-                        break;
-                    }
-                }
-                if (startOfAiAnswerRange === -1) { // No user/system message found before
-                    const firstMessage = rlaChatlog.getFirstMessage();
-                    const hasSystemPrompt = firstMessage && firstMessage.value.role === 'system';
-                    startOfAiAnswerRange = hasSystemPrompt ? 1 : 0;
-                }
-
-                const aiAnswerMessages = rlaMessages.slice(startOfAiAnswerRange, endOfAiAnswerRange + 1);
-
-                if (aiAnswerMessages.length === 0) {
-                    triggerError('Reformat step could not find an AI answer to process.');
-                    return this.stopFlow('No AI answer found.');
-                }
-
-                let fullAnswerText = '';
-                const messagesToDelete = new Set();
-
-                for (const msg of aiAnswerMessages) {
-                    let contentToAppend = '';
-                    if (msg.value) {
-                        if (msg.value.content) {
-                            let content = msg.value.content;
-                            if (typeof content !== 'string') {
-                                content = JSON.stringify(content, null, 2);
-                            }
-                            contentToAppend += content;
-                        }
-                        if (msg.value.tool_calls) {
-                            contentToAppend += JSON.stringify(msg.value.tool_calls, null, 2);
-                        }
-                    }
-
-                    if (contentToAppend) {
-                        fullAnswerText += contentToAppend + '\n\n';
-                    }
-                    messagesToDelete.add(msg.originalIndex);
-                }
-
-                fullAnswerText = fullAnswerText.trim();
-                const newPrompt = `${step.prePrompt || ''}\n\n${fullAnswerText}\n\n${step.postPrompt || ''}`;
-
-                if (step.deleteAIAnswer) {
-                    const indicesToDelete = Array.from(messagesToDelete).sort((a, b) => b - a);
-                    for (const index of indicesToDelete) {
-                        rlaChatlog.deleteNthMessage(index);
-                    }
-
-                    if (step.deleteUserMessage && userMessageIndexToDelete !== -1) {
-                         const userMessage = rlaChatlog.getNthMessage(userMessageIndexToDelete);
-                        if (userMessage && userMessage.value.role === 'user') {
-                            rlaChatlog.deleteNthMessage(userMessageIndexToDelete);
-                        }
-                    }
-                }
-
-                chat.activeAgentId = step.agentId;
-                this.store.set('currentChat', { ...chat });
-                this.app.submitUserMessage(newPrompt, 'user');
-                break;
-            }
+        if (stepDefinition && stepDefinition.execute) {
+            const context = {
+                app: this.app,
+                store: this.store,
+                triggerError: triggerError,
+                stopFlow: (message) => this.stopFlow(message),
+                getNextStep: (stepId, outputName) => this.getNextStep(stepId, outputName),
+                executeStep: (nextStep) => this.executeStep(nextStep),
+                multiMessageInfo: this.multiMessageInfo,
+            };
+            stepDefinition.execute(step, context);
+        } else {
+            triggerError(`Unknown or non-executable step type: ${type}`);
+            this.stopFlow('Unknown step type.');
         }
     },
 
