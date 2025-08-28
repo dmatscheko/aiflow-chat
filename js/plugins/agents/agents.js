@@ -735,27 +735,28 @@ const agentsPlugin = {
         onModifySystemPrompt: (systemContent) => {
             const store = agentsPlugin.store;
             if (!store) return systemContent;
-            let cleanedContent = systemContent
+
+            // Always remove any existing agent definition first.
+            let newSystemContent = systemContent
                 .replace(/\n\n--- AGENT DEFINITION ---\n[\s\S]*?\n--- END AGENT DEFINITION ---/g, '')
                 .replace(/\n\n--- AGENT TOOLS ---\n[\s\S]*?\n--- END AGENT TOOLS ---/g, '');
+
             const chat = store.get('currentChat');
-            if (!chat || !chat.activeAgentId) return cleanedContent;
-            const agent = chat.agents.find(a => a.id === chat.activeAgentId);
-            if (!agent) return cleanedContent;
-            let modified = cleanedContent + `\n\n--- AGENT DEFINITION ---\n${agent.systemPrompt}\n--- END AGENT DEFINITION ---`;
-            const tools = chat.agents.filter(a => a.availableAsTool && a.id !== chat.activeAgentId);
-            if (tools.length > 0) {
-                modified += '\n\n--- AGENT TOOLS ---\n';
+            const agent = chat ? chat.agents.find(a => a.id === chat.activeAgentId) : null;
 
-                modified += `### Agent Tools:
+            if (agent) {
+                // A valid agent is active. Add its definition and tools.
+                newSystemContent += `\n\n--- AGENT DEFINITION ---\n${agent.systemPrompt}\n--- END AGENT DEFINITION ---`;
 
-To call an agent tool, use: <dma:tool_call name="agent_name_agent"><parameter name="prompt">...</parameter></dma:tool_call>
-### Available Tools:\n\n`;
-
-                tools.forEach(t => { modified += `- ${t.name}: ${t.description}\n`; });
-                modified += '\n--- END AGENT TOOLS ---';
+                const tools = chat.agents.filter(a => a.availableAsTool && a.id !== chat.activeAgentId);
+                if (tools.length > 0) {
+                    newSystemContent += '\n\n--- AGENT TOOLS ---\n';
+                    newSystemContent += `### Agent Tools:\n\nTo call an agent tool, use: <dma:tool_call name="agent_name_agent"><parameter name="prompt">...</parameter></dma:tool_call>\n### Available Tools:\n\n`;
+                    tools.forEach(t => { newSystemContent += `- ${t.name}: ${t.description}\n`; });
+                    newSystemContent += '\n--- END AGENT TOOLS ---';
+                }
             }
-            return modified;
+            return newSystemContent;
         },
         onMessageComplete: async (message, chatlog, chatbox) => {
             if (!message.value) return; // Defend against null message value
