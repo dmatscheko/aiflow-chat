@@ -92,12 +92,16 @@ function findLastMessageWithAlternatives(chatlog) {
  * @returns {{startMessage: object, userMessageIndexToDelete: number} | {startMessage: null, userMessageIndexToDelete: number}}
  */
 function findLastAnswerChain(chatlog) {
-    const rlaMessages = chatlog.getActiveMessageValues().map((msg, i) => ({
-        ...chatlog.getNthMessage(i),
-        originalIndex: i
-    }));
+    const rlaMessages = chatlog.getActiveMessageValues().map((_, i) => {
+        const msg = chatlog.getNthMessage(i);
+        if (msg) {
+            // Add a temporary property to the Message instance without changing its prototype
+            msg.originalIndex = i;
+        }
+        return msg;
+    }).filter(Boolean); // Filter out any null messages if chatlog is empty
 
-    let lastMessage = rlaMessages[rlaMessages.length - 1];
+    let lastMessage = rlaMessages.length > 0 ? rlaMessages[rlaMessages.length - 1] : null;
     let endOfAiAnswerRange = rlaMessages.length - 1;
 
     if (lastMessage && (lastMessage.value.role === 'user' || lastMessage.value.role === 'system')) {
