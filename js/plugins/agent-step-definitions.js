@@ -4,6 +4,8 @@
 
 'use strict';
 
+import { extractTurnContent, extractMessagesContent } from '../utils/flow-helpers.js';
+
 const stepTypes = {};
 
 /**
@@ -183,35 +185,10 @@ defineStep('consolidator', {
             return stopFlow('Invalid flow structure for Consolidator.');
         }
 
-        let consolidatedContent;
-        if (step.onlyLastAnswer) {
-            consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
-                let lastMessageInTurn = alternativeStartMessage;
-                while (lastMessageInTurn.answerAlternatives && lastMessageInTurn.answerAlternatives.messages.length > 0) {
-                    lastMessageInTurn = lastMessageInTurn.answerAlternatives.messages[0];
-                }
-                const content = lastMessageInTurn.value?.content || '';
-                return `--- ALTERNATIVE ${i + 1} ---\n${content.trim()}`;
-            }).join('\n\n');
-        } else {
-            consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
-                let turnContent = '';
-                let currentMessageInTurn = alternativeStartMessage;
-                while (currentMessageInTurn) {
-                    if (currentMessageInTurn.value) {
-                        const { role, content } = currentMessageInTurn.value;
-                        turnContent += `**${role.charAt(0).toUpperCase() + role.slice(1)}:**\n${content}\n\n`;
-                    }
-
-                    if (currentMessageInTurn.answerAlternatives && currentMessageInTurn.answerAlternatives.messages.length > 0) {
-                        currentMessageInTurn = currentMessageInTurn.answerAlternatives.messages[0];
-                    } else {
-                        currentMessageInTurn = null;
-                    }
-                }
-                return `--- ALTERNATIVE ${i + 1} ---\n${turnContent.trim()}`;
-            }).join('\n\n');
-        }
+        const consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
+            const turnContent = extractTurnContent(alternativeStartMessage, step.onlyLastAnswer);
+            return `--- ALTERNATIVE ${i + 1} ---\n${turnContent}`;
+        }).join('\n\n');
 
         const finalPrompt = `${step.prePrompt || ''}\n\n${consolidatedContent}\n\n${step.postPrompt || ''}`;
         const chat = store.get('currentChat');
@@ -230,6 +207,7 @@ defineStep('echo-answer', {
         postPrompt: '',
         deleteAIAnswer: true,
         deleteUserMessage: true,
+        onlyLastAnswer: false,
     }),
 
     render: (step, agentOptions) => `
@@ -246,6 +224,10 @@ defineStep('echo-answer', {
             <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.postPrompt || ''}</textarea>
             <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-ai flow-step-input" data-id="${step.id}" data-key="deleteAIAnswer" ${step.deleteAIAnswer ? 'checked' : ''}> Delete original AI answer</label>
             <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-user flow-step-input" data-id="${step.id}" data-key="deleteUserMessage" ${step.deleteUserMessage ? 'checked' : ''}> Delete original user message</label>
+            <label class="flow-step-checkbox-label">
+                <input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.onlyLastAnswer ? 'checked' : ''}>
+                Only include each last answer
+            </label>
         </div>
     `,
 
@@ -256,6 +238,7 @@ defineStep('echo-answer', {
         else if (key === 'postPrompt') step.postPrompt = target.value;
         else if (key === 'deleteAIAnswer') step.deleteAIAnswer = target.checked;
         else if (key === 'deleteUserMessage') step.deleteUserMessage = target.checked;
+        else if (key === 'onlyLastAnswer') step.onlyLastAnswer = target.checked;
     },
 
     execute: (step, context) => {
@@ -296,34 +279,12 @@ defineStep('echo-answer', {
             return stopFlow('No AI answer found.');
         }
 
-        let fullAnswerText = '';
-        const messagesToDelete = new Set();
+        const fullAnswerText = extractMessagesContent(aiAnswerMessages, step.onlyLastAnswer);
 
-        for (const msg of aiAnswerMessages) {
-            let contentToAppend = '';
-            if (msg.value) {
-                if (msg.value.content) {
-                    let content = msg.value.content;
-                    if (typeof content !== 'string') {
-                        content = JSON.stringify(content, null, 2);
-                    }
-                    contentToAppend += content;
-                }
-                if (msg.value.tool_calls) {
-                    contentToAppend += JSON.stringify(msg.value.tool_calls, null, 2);
-                }
-            }
-
-            if (contentToAppend) {
-                fullAnswerText += contentToAppend + '\n\n';
-            }
-            messagesToDelete.add(msg.originalIndex);
-        }
-
-        fullAnswerText = fullAnswerText.trim();
         const newPrompt = `${step.prePrompt || ''}\n\n${fullAnswerText}\n\n${step.postPrompt || ''}`;
 
         if (step.deleteAIAnswer) {
+            const messagesToDelete = new Set(aiAnswerMessages.map(msg => msg.originalIndex));
             const indicesToDelete = Array.from(messagesToDelete).sort((a, b) => b - a);
             for (const index of indicesToDelete) {
                 rlaChatlog.deleteNthMessage(index);
