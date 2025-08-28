@@ -352,10 +352,6 @@ class App {
                 if (newContent !== systemMessage.value.content) {
                     systemMessage.setContent(newContent);
                 }
-
-                // Ensure the payload sent to the API has the potentially modified content.
-                // This is needed because getActiveMessageValues was called before this modification.
-                payload.messages[0].content = newContent;
             }
             payload = hooks.beforeApiCall.reduce((p, fn) => fn(p, this.ui.chatBox) || p, payload);
 
