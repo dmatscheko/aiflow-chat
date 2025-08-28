@@ -119,11 +119,11 @@ mcp = FastMCP(
 
 @mcp.tool
 def read_file(
-    path: Annotated[str, "The virtual path of the file to read."],
+    path: Annotated[str, "The path of the file to read."],
     head: Annotated[int, "The number of lines to read from the beginning of the file."] = None,
     tail: Annotated[int, "The number of lines to read from the end of the file."] = None,
 ) -> str:
-    """Read file contents from the secure file system. Allows reading the whole file, or just the head or tail."""
+    """Read file contents from the file system. Allows reading the whole file, or just the head or tail."""
     try:
         real_path = validate_virtual_path(path)
         if head is not None and tail is not None:
@@ -140,8 +140,8 @@ def read_file(
 
 
 @mcp.tool
-def read_multiple_files(paths: Annotated[str, "A list of virtual paths of the files to read, one path per line."]) -> str:
-    """Read the contents of multiple files efficiently."""
+def read_files(paths: Annotated[str, "A list of paths of the files to read, one path per line."]) -> str:
+    """Read the contents of one or multiple files."""
     try:
         results = []
         seen = set()
@@ -162,8 +162,8 @@ def read_multiple_files(paths: Annotated[str, "A list of virtual paths of the fi
 
 
 @mcp.tool
-def list_directory(path: Annotated[str, "The virtual path of the directory to list."]) -> str:
-    """List the files and directories within a given directory, indicating whether each entry is a file or a directory."""
+def list_directory(path: Annotated[str, "The path of the directory to list."]) -> str:
+    """List the files and directories within a given directory."""
     try:
         real_path = validate_virtual_path(path)
         entries = os.listdir(real_path)
@@ -174,7 +174,7 @@ def list_directory(path: Annotated[str, "The virtual path of the directory to li
 
 
 @mcp.tool
-def directory_tree(path: Annotated[str, "The virtual path of the root directory for the tree listing."]) -> str:
+def directory_tree(path: Annotated[str, "The path of the root directory for the tree listing."]) -> str:
     """Show a recursive directory listing starting from the given path."""
     try:
         return list_files_recursive(path)
@@ -184,7 +184,7 @@ def directory_tree(path: Annotated[str, "The virtual path of the root directory 
 
 @mcp.tool
 def search_files(
-    path: Annotated[str, "The virtual path of the directory to start the search from."],
+    path: Annotated[str, "The path of the directory to start the search from."],
     pattern: Annotated[str, "A glob pattern to filter file and directory names (e.g., '*.py')."] = None,
     excludePatterns: Annotated[list[str], "A list of glob patterns to exclude files or directories."] = None,
 ) -> str:
@@ -196,7 +196,7 @@ def search_files(
 
 
 @mcp.tool
-def get_file_info(path: Annotated[str, "The virtual path of the file or directory to get information about."]) -> str:
+def get_file_info(path: Annotated[str, "The path of the file or directory to get information about."]) -> str:
     """Get metadata for a file or directory, such as size, modification times, and permissions."""
     try:
 
@@ -222,7 +222,7 @@ def get_file_info(path: Annotated[str, "The virtual path of the file or director
 
 @mcp.tool
 def list_allowed_directories() -> str:
-    """List the top-level virtual directories that are accessible."""
+    """List the top-level directories that are accessible."""
     return "### Allowed directories:\n" + "\n".join(_virtual_to_real.keys())
 
 

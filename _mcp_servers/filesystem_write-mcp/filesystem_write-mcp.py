@@ -86,7 +86,7 @@ mcp = FastMCP(
 
 @mcp.tool
 def write_file(
-    path: Annotated[str, "The virtual path of the file to write to. If the file exists, it will be overwritten."],
+    path: Annotated[str, "The path of the file to write to. If the file exists, it will be overwritten."],
     content: Annotated[str, "The content to write to the file."],
 ) -> str:
     """Write or overwrite a file with the given text content."""
@@ -100,7 +100,7 @@ def write_file(
 
 
 @mcp.tool
-def create_directory(path: Annotated[str, "The virtual path of the directory to create. It can be nested (e.g., /data/a/new/dir)."]) -> str:
+def create_directory(path: Annotated[str, "The path of the directory to create. It can be nested (e.g., /data/a/new/dir)."]) -> str:
     """Create a directory, including any necessary parent directories."""
     try:
         real_path = validate_virtual_path(path)
@@ -197,13 +197,13 @@ def _apply_simplified_patch(original_content: str, diff: str):
 
 @mcp.tool
 def apply_diff(
-    path: Annotated[str, "The virtual path of the file to patch."],
+    path: Annotated[str, "The path of the file to patch."],
     diff: Annotated[str, "The simplified diff to apply to the file."],
     dry_run: Annotated[bool, "If true, only check if the patch would apply cleanly, without modifying the file."] = False,
 ) -> str:
-    """Apply a simplified patch format to a file. The format is composed of segments separated by '###'. Each segment starts with a header line like '### ###' or '### line >= x ###'. The 'line >= x' in the header is optional and tells the patch tool to start searching for the patch location from line number x. Segments must directly follow each other without separating empty lines.
+    """Apply a simplified patch format to a file. The format is composed of segments separated by '###'. Each segment starts with a header line like '### ###' or '### line >= x ###'. The 'line >= x' in the header is optional and tells the patch tool to start searching for the patch location from line number x down. Segments must directly follow each other without separating empty lines.
     Within each segment: Lines starting with '-' are lines to be removed. Lines starting with '+' are lines to be added. Lines starting with ' ' are context lines, which must match the original file.
-    The patch is applied sequentially. Each segment is searched for and applied in order, starting from the end of the previous segment, or if line >= x is higher than the line number of the end of the previous segment, the next line to replace is searched from that line downwards.
+    The patch is applied sequentially. Each segment is searched for and applied in order, starting from the end of the previous segments match in the file, or if line >= x is higher than the line number of the end of the previous segment, the next line to replace is searched from that line downwards.
     Example of a patch segment:
     ### line >= 3 ###
     -Beneath the velvet cloak of night so deep,
@@ -230,8 +230,8 @@ def apply_diff(
 
 @mcp.tool
 def move_file(
-    source: Annotated[str, "The virtual path of the file or directory to move."],
-    destination: Annotated[str, "The new virtual path for the file or directory."],
+    source: Annotated[str, "The original path of the file or directory to move."],
+    destination: Annotated[str, "The new path for the file or directory."],
 ) -> str:
     """Move or rename a file or directory. This operation will fail if the destination already exists."""
     try:

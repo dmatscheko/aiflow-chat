@@ -211,7 +211,7 @@ function renderFlow(store) {
                         <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}">${step.postPrompt || ''}</textarea>
                         <label class="flow-step-checkbox-label">
                             <input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" ${step.onlyLastAnswer ? 'checked' : ''}>
-                            Only include last answer
+                            Only include each last answer
                         </label>
                     </div>
                 `;
