@@ -4,7 +4,7 @@
 
 'use strict';
 
-import { extractContentFromTurn, findLastMessageWithAlternatives, findLastAnswerChain } from '../utils/flow-helpers.js';
+import { extractContentFromTurn, findLastMessageWithAlternatives, findLastAnswerChain } from './flow-helpers.js';
 
 const stepTypes = {};
 

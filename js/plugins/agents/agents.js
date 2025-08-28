@@ -4,14 +4,14 @@
 
 'use strict';
 
-import { log, triggerError } from '../utils/logger.js';
-import { hooks } from '../hooks.js';
+import { log, triggerError } from '../../utils/logger.js';
+import { hooks } from '../../hooks.js';
 import { stepTypes } from './agent-step-definitions.js';
-import { parseFunctionCalls } from '../utils/parsers.js';
-import { addAlternativeToChat } from '../utils/chat.js';
-import { createControlButton } from '../utils/ui.js';
-import { processToolCalls, exportJson, importJson } from '../utils/shared.js';
-import { defaultEndpoint } from '../config.js';
+import { parseFunctionCalls } from '../../utils/parsers.js';
+import { addAlternativeToChat } from '../../utils/chat.js';
+import { createControlButton } from '../../utils/ui.js';
+import { processToolCalls, exportJson, importJson } from '../../utils/shared.js';
+import { defaultEndpoint } from '../../config.js';
 
 const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'BUTTON', 'LABEL'];
 
