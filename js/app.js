@@ -342,12 +342,20 @@ class App {
             if (payload.messages.length === 0) return;
             if (payload.messages.length === 1 && payload.messages[0]?.role === 'system') return;
 
-            if (payload.messages[0]?.role === 'system') {
-                let systemContent = payload.messages[0].content;
-                for (let fn of hooks.onModifySystemPrompt) {
-                    systemContent = fn(systemContent) || systemContent;
+            const systemMessage = targetChatlog.getFirstMessage();
+            if (systemMessage && systemMessage.value.role === 'system') {
+                let newContent = systemMessage.value.content;
+                for (const fn of hooks.onModifySystemPrompt) {
+                    newContent = fn(newContent) || newContent;
                 }
-                payload.messages[0].content = systemContent;
+
+                if (newContent !== systemMessage.value.content) {
+                    systemMessage.setContent(newContent);
+                }
+
+                // Ensure the payload sent to the API has the potentially modified content.
+                // This is needed because getActiveMessageValues was called before this modification.
+                payload.messages[0].content = newContent;
             }
             payload = hooks.beforeApiCall.reduce((p, fn) => fn(p, this.ui.chatBox) || p, payload);
 

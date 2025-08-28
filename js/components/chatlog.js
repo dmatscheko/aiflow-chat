@@ -317,8 +317,7 @@ class Chatlog {
         const result = [];
         let message = this.getFirstMessage();
         while (message && message.value) {
-            // Deep copy the message value to prevent mutation of the chatlog state.
-            result.push(JSON.parse(JSON.stringify(message.value)));
+            result.push(message.value);
             message = message.getAnswerMessage();
         }
         return result;
