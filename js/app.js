@@ -19,6 +19,7 @@ import { hooks, registerPlugin } from './hooks.js';
 import { formattingPlugins } from './plugins/formatting.js';
 import { alternativeNavigationPlugin, messageModificationPlugin } from './plugins/ui-controls.js';
 import { agentsPlugin } from './plugins/agents/agents.js';
+import { avatarsPlugin } from './plugins/avatars.js';
 import { mcpPlugin } from './plugins/mcp.js';
 import { errorBubblePlugin } from './plugins/error-bubble.js';
 import { modelParamsPlugin } from './plugins/model-params.js';
