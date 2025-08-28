@@ -28,7 +28,16 @@ function defineStep(type, definition) {
     };
 }
 
-export { defineStep, stepTypes };
+export { stepTypes };
+
+function getAgentsDropdown(step, agentOptions) {
+    return `
+            <label>Agent:</label>
+            <select class="flow-step-agent flow-step-input" data-id="${step.id}" data-key="agentId">
+                <option value="">Select Agent</option>
+                ${agentOptions}
+            </select>`;
+}
 
 // --- Step Type Definitions ---
 
@@ -43,11 +52,7 @@ defineStep('simple-prompt', {
     render: (step, agentOptions) => `
         <h4>Simple Prompt</h4>
         <div class="flow-step-content">
-            <label>Agent:</label>
-            <select class="flow-step-agent flow-step-input" data-id="${step.id}" data-key="agentId">
-                <option value="">Select Agent</option>
-                ${agentOptions}
-            </select>
+            ${getAgentsDropdown(step, agentOptions)}
             <label>Prompt:</label>
             <textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.prompt || ''}</textarea>
         </div>
@@ -87,11 +92,7 @@ defineStep('multi-prompt', {
     render: (step, agentOptions) => `
         <h4>Multi Prompt</h4>
         <div class="flow-step-content">
-            <label>Agent:</label>
-            <select class="flow-step-agent flow-step-input" data-id="${step.id}" data-key="agentId">
-                <option value="">Select Agent</option>
-                ${agentOptions}
-            </select>
+            ${getAgentsDropdown(step, agentOptions)}
             <label>Prompt:</label>
             <textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.prompt || ''}</textarea>
             <label>Number of alternatives:</label>
@@ -142,11 +143,7 @@ defineStep('consolidator', {
     render: (step, agentOptions) => `
         <h4>Alternatives Consolidator</h4>
         <div class="flow-step-content">
-            <label>Agent:</label>
-            <select class="flow-step-agent flow-step-input" data-id="${step.id}" data-key="agentId">
-                <option value="">Select Agent</option>
-                ${agentOptions}
-            </select>
+            ${getAgentsDropdown(step, agentOptions)}
             <label>Text before alternatives:</label>
             <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.prePrompt || ''}</textarea>
             <label>Text after alternatives:</label>
@@ -204,11 +201,7 @@ defineStep('echo-answer', {
     render: (step, agentOptions) => `
         <h4>Echo Answer</h4>
         <div class="flow-step-content">
-            <label>Agent:</label>
-            <select class="flow-step-agent flow-step-input" data-id="${step.id}" data-key="agentId">
-                <option value="">Select Agent</option>
-                ${agentOptions}
-            </select>
+            ${getAgentsDropdown(step, agentOptions)}
             <label>Text before AI answer:</label>
             <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.prePrompt || ''}</textarea>
             <label>Text after AI answer:</label>
@@ -217,7 +210,7 @@ defineStep('echo-answer', {
             <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-user flow-step-input" data-id="${step.id}" data-key="deleteUserMessage" ${step.deleteUserMessage ? 'checked' : ''}> Delete original user message</label>
             <label class="flow-step-checkbox-label">
                 <input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.onlyLastAnswer ? 'checked' : ''}>
-                Only include each last answer
+                Only include last answer
             </label>
         </div>
     `,
