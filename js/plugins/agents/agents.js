@@ -733,13 +733,13 @@ const agentsPlugin = {
     // --- Hooks Definition ---
     hooks: {
         onModifySystemPrompt: (systemContent) => {
-            const store = agentsPlugin.store;
-            if (!store) return systemContent;
-
             // Always remove any existing agent definition first.
             let newSystemContent = systemContent
                 .replace(/\n\n--- AGENT DEFINITION ---\n[\s\S]*?\n--- END AGENT DEFINITION ---/g, '')
                 .replace(/\n\n--- AGENT TOOLS ---\n[\s\S]*?\n--- END AGENT TOOLS ---/g, '');
+
+            const store = agentsPlugin.store;
+            if (!store) return newSystemContent;
 
             const chat = store.get('currentChat');
             const agent = chat ? chat.agents.find(a => a.id === chat.activeAgentId) : null;
