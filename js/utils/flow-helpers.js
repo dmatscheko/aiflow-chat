@@ -5,66 +5,68 @@
 'use strict';
 
 /**
- * Extracts content from a chain of messages linked by answerAlternatives.
- * @param {object} startMessage - The first message in the chain.
- * @param {boolean} onlyLast - If true, only returns content from the last message in the chain.
+ * Extracts content from a turn (a chain of messages).
+ * A turn is traversed by starting with a message and following the active
+ * path through its `answerAlternatives`.
+ *
+ * @param {object} startMessage - The first message in the turn.
+ * @param {boolean} onlyLast - If true, only returns content from the last message in the turn.
  * @returns {string} The extracted content.
  */
-function extractTurnContent(startMessage, onlyLast) {
+function extractContentFromTurn(startMessage, onlyLast) {
+    const messagesInTurn = [];
+    let currentMessage = startMessage;
+    while (currentMessage) {
+        messagesInTurn.push(currentMessage);
+        currentMessage = currentMessage.getAnswerMessage();
+    }
+
+    let content;
     if (onlyLast) {
-        let lastMessageInTurn = startMessage;
-        while (lastMessageInTurn.answerAlternatives && lastMessageInTurn.answerAlternatives.messages.length > 0) {
-            lastMessageInTurn = lastMessageInTurn.answerAlternatives.messages[0];
-        }
-        return lastMessageInTurn.value?.content || '';
-    } else {
-        let turnContent = '';
-        let currentMessageInTurn = startMessage;
-        while (currentMessageInTurn) {
-            if (currentMessageInTurn.value) {
-                const { role, content } = currentMessageInTurn.value;
-                turnContent += `**${role.charAt(0).toUpperCase() + role.slice(1)}:**\n${content}\n\n`;
-            }
-
-            if (currentMessageInTurn.answerAlternatives && currentMessageInTurn.answerAlternatives.messages.length > 0) {
-                currentMessageInTurn = currentMessageInTurn.answerAlternatives.messages[0];
-            } else {
-                currentMessageInTurn = null;
-            }
-        }
-        return turnContent.trim();
-    }
-}
-
-/**
- * Extracts content from a simple array of message objects.
- * @param {Array<object>} messages - The array of message objects to process.
- * @param {boolean} onlyLast - If true, only returns content from the last message in the array.
- * @returns {string} The extracted content.
- */
-function extractMessagesContent(messages, onlyLast) {
-    const messagesToProcess = onlyLast ? messages.slice(-1) : messages;
-    let fullContent = '';
-
-    for (const msg of messagesToProcess) {
-        let contentToAppend = '';
-        if (msg.value) {
-            if (msg.value.content) {
-                let content = msg.value.content;
-                if (typeof content !== 'string') {
-                    content = JSON.stringify(content, null, 2);
+        const lastMessage = messagesInTurn.length > 0 ? messagesInTurn[messagesInTurn.length - 1] : null;
+        if (!lastMessage || !lastMessage.value) {
+            content = '';
+        } else {
+            let contentToReturn = '';
+            if (lastMessage.value.content) {
+                let textContent = lastMessage.value.content;
+                if (typeof textContent !== 'string') {
+                    textContent = JSON.stringify(textContent, null, 2);
                 }
-                contentToAppend += content;
+                contentToReturn += textContent;
             }
-            if (msg.value.tool_calls) {
-                contentToAppend += JSON.stringify(msg.value.tool_calls, null, 2);
+            if (lastMessage.value.tool_calls) {
+                contentToReturn += JSON.stringify(lastMessage.value.tool_calls, null, 2);
+            }
+            content = contentToReturn;
+        }
+    } else {
+        let fullContent = '';
+        for (const msg of messagesInTurn) {
+            if (msg.value) {
+                const { role, content, tool_calls } = msg.value;
+                fullContent += `**${role.charAt(0).toUpperCase() + role.slice(1)}:**\n`;
+                if (content) {
+                    let textContent = content;
+                     if (typeof textContent !== 'string') {
+                        textContent = JSON.stringify(textContent, null, 2);
+                    }
+                    fullContent += textContent + '\n';
+                }
+                if (tool_calls) {
+                    fullContent += JSON.stringify(tool_calls, null, 2) + '\n';
+                }
+                fullContent += '\n';
             }
         }
-        if (contentToAppend) {
-            fullContent += contentToAppend + '\n\n';
-        }
+        content = fullContent.trim();
     }
-    return fullContent.trim();
+
+    return {
+        content: content,
+        messages: messagesInTurn,
+    };
 }
 
-export { extractTurnContent, extractMessagesContent };
+
+export { extractContentFromTurn };

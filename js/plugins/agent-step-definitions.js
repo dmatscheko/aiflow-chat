@@ -4,7 +4,7 @@
 
 'use strict';
 
-import { extractTurnContent, extractMessagesContent } from '../utils/flow-helpers.js';
+import { extractContentFromTurn } from '../utils/flow-helpers.js';
 
 const stepTypes = {};
 
@@ -186,7 +186,7 @@ defineStep('consolidator', {
         }
 
         const consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
-            const turnContent = extractTurnContent(alternativeStartMessage, step.onlyLastAnswer);
+            const { content: turnContent } = extractContentFromTurn(alternativeStartMessage, step.onlyLastAnswer);
             return `--- ALTERNATIVE ${i + 1} ---\n${turnContent}`;
         }).join('\n\n');
 
@@ -272,20 +272,23 @@ defineStep('echo-answer', {
             startOfAiAnswerRange = hasSystemPrompt ? 1 : 0;
         }
 
-        const aiAnswerMessages = rlaMessages.slice(startOfAiAnswerRange, endOfAiAnswerRange + 1);
+        const startMessage = rlaMessages[startOfAiAnswerRange];
 
-        if (aiAnswerMessages.length === 0) {
-            triggerError('Reformat step could not find an AI answer to process.');
+        if (!startMessage) {
+            triggerError('Echo Answer step could not find an AI answer to process.');
             return stopFlow('No AI answer found.');
         }
 
-        const fullAnswerText = extractMessagesContent(aiAnswerMessages, step.onlyLastAnswer);
+        const { content: fullAnswerText, messages: messagesInTurn } = extractContentFromTurn(startMessage, step.onlyLastAnswer);
 
         const newPrompt = `${step.prePrompt || ''}\n\n${fullAnswerText}\n\n${step.postPrompt || ''}`;
 
         if (step.deleteAIAnswer) {
-            const messagesToDelete = new Set(aiAnswerMessages.map(msg => msg.originalIndex));
+            // The messagesInTurn are direct object references from the chatlog
+            const originalIndices = messagesInTurn.map(m => m.originalIndex).filter(i => i !== undefined);
+            const messagesToDelete = new Set(originalIndices);
             const indicesToDelete = Array.from(messagesToDelete).sort((a, b) => b - a);
+
             for (const index of indicesToDelete) {
                 rlaChatlog.deleteNthMessage(index);
             }
