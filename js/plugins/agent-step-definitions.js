@@ -4,7 +4,7 @@
 
 'use strict';
 
-import { extractContentFromTurn } from '../utils/flow-helpers.js';
+import { extractContentFromTurn, findLastMessageWithAlternatives, findLastAnswerChain } from '../utils/flow-helpers.js';
 
 const stepTypes = {};
 
@@ -169,16 +169,7 @@ defineStep('consolidator', {
     execute: (step, context) => {
         const { app, store, triggerError, stopFlow } = context;
         const chatlog = app.ui.chatBox.chatlog;
-        const activeMessages = chatlog.getActiveMessageValues().map((_, i) => chatlog.getNthMessage(i));
-
-        let sourceMessage = null;
-        for (let i = activeMessages.length - 1; i >= 0; i--) {
-            const msg = activeMessages[i];
-            if (msg && msg.answerAlternatives && msg.answerAlternatives.messages.length > 1) {
-                sourceMessage = msg;
-                break;
-            }
-        }
+        const sourceMessage = findLastMessageWithAlternatives(chatlog);
 
         if (!sourceMessage) {
             triggerError(`Consolidator could not find a preceding step with alternatives.`);
@@ -242,37 +233,10 @@ defineStep('echo-answer', {
     },
 
     execute: (step, context) => {
-        const { app, store, triggerError, stopFlow, getNextStep, executeStep } = context;
-        const rlaChatlog = app.ui.chatBox.chatlog;
-        const rlaMessages = rlaChatlog.getActiveMessageValues().map((msg, i) => ({
-            ...rlaChatlog.getNthMessage(i),
-            originalIndex: i
-        }));
+        const { app, store, triggerError, stopFlow } = context;
+        const chatlog = app.ui.chatBox.chatlog;
 
-        let lastMessage = rlaMessages[rlaMessages.length - 1];
-        let endOfAiAnswerRange = rlaMessages.length - 1;
-
-        if (lastMessage && (lastMessage.value.role === 'user' || lastMessage.value.role === 'system')) {
-            endOfAiAnswerRange--;
-        }
-
-        let startOfAiAnswerRange = -1;
-        let userMessageIndexToDelete = -1;
-        for (let i = endOfAiAnswerRange; i >= 0; i--) {
-            const msg = rlaMessages[i].value;
-            if (msg.role === 'user' || msg.role === 'system') {
-                startOfAiAnswerRange = i + 1;
-                userMessageIndexToDelete = i;
-                break;
-            }
-        }
-        if (startOfAiAnswerRange === -1) { // No user/system message found before
-            const firstMessage = rlaChatlog.getFirstMessage();
-            const hasSystemPrompt = firstMessage && firstMessage.value.role === 'system';
-            startOfAiAnswerRange = hasSystemPrompt ? 1 : 0;
-        }
-
-        const startMessage = rlaMessages[startOfAiAnswerRange];
+        const { startMessage, userMessageIndexToDelete } = findLastAnswerChain(chatlog);
 
         if (!startMessage) {
             triggerError('Echo Answer step could not find an AI answer to process.');
@@ -284,19 +248,18 @@ defineStep('echo-answer', {
         const newPrompt = `${step.prePrompt || ''}\n\n${fullAnswerText}\n\n${step.postPrompt || ''}`;
 
         if (step.deleteAIAnswer) {
-            // The messagesInTurn are direct object references from the chatlog
             const originalIndices = messagesInTurn.map(m => m.originalIndex).filter(i => i !== undefined);
             const messagesToDelete = new Set(originalIndices);
             const indicesToDelete = Array.from(messagesToDelete).sort((a, b) => b - a);
 
             for (const index of indicesToDelete) {
-                rlaChatlog.deleteNthMessage(index);
+                chatlog.deleteNthMessage(index);
             }
 
             if (step.deleteUserMessage && userMessageIndexToDelete !== -1) {
-                    const userMessage = rlaChatlog.getNthMessage(userMessageIndexToDelete);
+                const userMessage = chatlog.getNthMessage(userMessageIndexToDelete);
                 if (userMessage && userMessage.value.role === 'user') {
-                    rlaChatlog.deleteNthMessage(userMessageIndexToDelete);
+                    chatlog.deleteNthMessage(userMessageIndexToDelete);
                 }
             }
         }

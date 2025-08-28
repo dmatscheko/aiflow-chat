@@ -69,4 +69,60 @@ function extractContentFromTurn(startMessage, onlyLast) {
 }
 
 
-export { extractContentFromTurn };
+/**
+ * Finds the last message in the active chat history that has multiple alternatives.
+ * @param {object} chatlog - The chatlog instance to search.
+ * @returns {object | null} The message object or null if not found.
+ */
+function findLastMessageWithAlternatives(chatlog) {
+    const activeMessages = chatlog.getActiveMessageValues().map((_, i) => chatlog.getNthMessage(i));
+    for (let i = activeMessages.length - 1; i >= 0; i--) {
+        const msg = activeMessages[i];
+        if (msg && msg.answerAlternatives && msg.answerAlternatives.messages.length > 1) {
+            return msg;
+        }
+    }
+    return null;
+}
+
+/**
+ * Finds the start of the last AI answer chain in the active chat history.
+ * An answer chain is a contiguous block of messages from the assistant.
+ * @param {object} chatlog - The chatlog instance to search.
+ * @returns {{startMessage: object, userMessageIndexToDelete: number} | {startMessage: null, userMessageIndexToDelete: number}}
+ */
+function findLastAnswerChain(chatlog) {
+    const rlaMessages = chatlog.getActiveMessageValues().map((msg, i) => ({
+        ...chatlog.getNthMessage(i),
+        originalIndex: i
+    }));
+
+    let lastMessage = rlaMessages[rlaMessages.length - 1];
+    let endOfAiAnswerRange = rlaMessages.length - 1;
+
+    if (lastMessage && (lastMessage.value.role === 'user' || lastMessage.value.role === 'system')) {
+        endOfAiAnswerRange--;
+    }
+
+    let startOfAiAnswerRange = -1;
+    let userMessageIndexToDelete = -1;
+    for (let i = endOfAiAnswerRange; i >= 0; i--) {
+        const msg = rlaMessages[i].value;
+        if (msg.role === 'user' || msg.role === 'system') {
+            startOfAiAnswerRange = i + 1;
+            userMessageIndexToDelete = i;
+            break;
+        }
+    }
+    if (startOfAiAnswerRange === -1) { // No user/system message found before
+        const firstMessage = chatlog.getFirstMessage();
+        const hasSystemPrompt = firstMessage && firstMessage.value.role === 'system';
+        startOfAiAnswerRange = hasSystemPrompt ? 1 : 0;
+    }
+
+    const startMessage = rlaMessages[startOfAiAnswerRange] || null;
+
+    return { startMessage, userMessageIndexToDelete };
+}
+
+export { extractContentFromTurn, findLastMessageWithAlternatives, findLastAnswerChain };
