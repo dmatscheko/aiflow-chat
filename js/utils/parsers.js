@@ -17,6 +17,8 @@ export function parseFunctionCalls(content, tools = []) {
     const nameRegex = /name="([^"]*)"/;
     const paramsRegex = /<parameter\s+name="([^"]*)">([\s\S]*?)<\/parameter>/g;
 
+    if (!content) return { toolCalls, positions, isSelfClosings };
+
     for (const match of content.matchAll(functionCallRegex)) {
         const startIndex = match.index;
         const endIndex = startIndex + match[0].length;
