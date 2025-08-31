@@ -50,7 +50,8 @@ export const mcpPlugin = {
     isInitialized: false,
     initPromise: null,
 
-    init: function(app) {
+    init: function(app, toolCallService) {
+        this.toolCallService = toolCallService;
         this.configService = app.configService;
 
         // Bind all methods to this instance
@@ -123,7 +124,7 @@ export const mcpPlugin = {
         /**
          * Appends tool descriptions to the system prompt before API calls if MCP is configured.
          * @param {Object} payload - The API payload.
-         * @param {import('../managers/ui-manager.js').default} chatbox - The UIManager instance (acting as chatbox).
+         * @param {import('../components/chatbox.js').ChatBox} chatbox - The ChatBox instance.
          * @returns {Object} The modified payload.
          */
         beforeApiCall: function (payload, chatbox) {
@@ -147,7 +148,7 @@ export const mcpPlugin = {
             if (content !== originalContent) {
                 systemMessage.value.content = content;
                 systemMessage.cache = null;
-                chatbox.render();
+                chatbox.update();
             }
 
             return payload;
@@ -157,14 +158,14 @@ export const mcpPlugin = {
          * adds tool outputs to chatlog, and auto-continues the assistant response.
          * @param {import('../components/chatlog.js').Message} message - The completed message.
          * @param {import('../components/chatlog.js').Chatlog} chatlog - The chatlog.
-         * @param {import('../managers/ui-manager.js').default} chatbox - The UIManager instance (acting as chatbox).
+         * @param {import('../components/chatbox.js').ChatBox} chatbox - The ChatBox instance.
          */
-        onMessageComplete: async function (message, chatlog, chatbox) {
+        onMessageComplete: async function (message, chatlog, uiManager) {
             if (!message.value || message.value.role !== 'assistant' || message !== chatlog.getLastMessage()) {
                 return;
             }
             const context = { message, plugin: this }; // Pass message for metadata updates
-            await processToolCalls(message, chatlog, chatbox, this.filterMcpCalls, this.executeMcpCall, context, this.tools);
+            await this.toolCallService.process(message, chatlog, uiManager, this.filterMcpCalls, this.executeMcpCall, context, this.tools);
         },
         /**
          * Replaces citation XML tags with HTML superscript links.
