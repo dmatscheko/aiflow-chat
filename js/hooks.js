@@ -5,7 +5,7 @@ export const hooks = {
     afterMessageAdd: [], // Called after a message is added to the chatlog. Args: (messageObj).
     beforeApiCall: [], // Called before making the API call, allows modifying the payload. Args: (payload, chatbox) => modifiedPayload.
     onChunkReceived: [], // Called when a streaming chunk is received from the API. Args: (deltaContent).
-    onMessageComplete: [], // Called when an assistant message is fully streamed/completed. Args: (messageObj, chatlog, chatbox).
+    onMessageComplete: [], // Called when an assistant message is fully streamed/completed. Args: (messageObj, chatbox).
     onError: [], // Called on API or processing errors. Args: (error).
     onFormatContent: [], // Called during content formatting (e.g., for Markdown, etc.). Args: (text, pos) => html.
     onPostFormatContent: [], // Called after content is formatted into a wrapper element. Args: (wrapperEl, messageObj, pos).
