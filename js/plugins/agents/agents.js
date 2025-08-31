@@ -15,26 +15,35 @@ import { renderAgentList, showAgentForm, hideAgentForm, renderFlow } from './age
 
 const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'BUTTON', 'LABEL'];
 
+/**
+ * @class AgentsPlugin
+ * @classdesc The main class for the Agents and Flow plugin.
+ * This plugin adds functionality for creating agents and defining execution flows.
+ */
 class AgentsPlugin {
     constructor() {
         this.name = 'agents';
         this.app = null;
         this.store = null;
         this.flowExecutor = null;
-        this.flowRunning = false;
-        this.currentStepId = null;
-        this.stepCounter = 0;
+        this._flowRunning = false;
+        this._currentStepId = null;
+        this._stepCounter = 0;
         this.maxSteps = 20;
-        this.dragInfo = { active: false, target: null, offsetX: 0, offsetY: 0 };
-        this.panInfo = { active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 };
-        this.connectionInfo = { active: false, fromNode: null, fromConnector: null, tempLine: null };
-        this.multiMessageInfo = { active: false, step: null, counter: 0, messageToBranchFrom: null };
+        this._dragInfo = { active: false, target: null, offsetX: 0, offsetY: 0 };
+        this._panInfo = { active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 };
+        this._connectionInfo = { active: false, fromNode: null, fromConnector: null, tempLine: null };
+        this._multiMessageInfo = { active: false, step: null, counter: 0, messageToBranchFrom: null };
 
         // Bind hook methods to this instance
         this.hooks.onModifySystemPrompt = this.hooks.onModifySystemPrompt.bind(this);
         this.hooks.onMessageComplete = this.hooks.onMessageComplete.bind(this);
     }
 
+    /**
+     * Initializes the plugin, setting up tabs, UI elements, and event listeners.
+     * @param {import('../../app.js').default} app - The main application instance.
+     */
     init(app) {
         this.app = app;
         this.store = app.store;
@@ -70,10 +79,15 @@ class AgentsPlugin {
 
         // --- Hooks ---
         hooks.onCancel.push(() => {
-            if (this.flowRunning) this.flowExecutor.stopFlow('Execution cancelled by user.');
+            if (this._flowRunning) this.flowExecutor.stopFlow('Execution cancelled by user.');
         });
     }
 
+    /**
+     * Creates the 'Agents' tab and its content.
+     * @param {HTMLElement} tabContent - The parent element for the tab pane.
+     * @private
+     */
     createAgentsTab(tabContent) {
         const agentsTabPane = document.createElement('div');
         agentsTabPane.classList.add('tab-pane');
@@ -113,6 +127,11 @@ class AgentsPlugin {
         tabContent.appendChild(agentsTabPane);
     }
 
+    /**
+     * Creates the 'Flow' tab and its content.
+     * @param {HTMLElement} tabContent - The parent element for the tab pane.
+     * @private
+     */
     createFlowTab(tabContent) {
         const flowTabPane = document.createElement('div');
         flowTabPane.classList.add('tab-pane');
@@ -142,6 +161,10 @@ class AgentsPlugin {
         tabContent.appendChild(flowTabPane);
     }
 
+    /**
+     * Sets up all the event listeners for the plugin's UI.
+     * @private
+     */
     setupEventListeners() {
         // Tab switching
         document.getElementById('tabs').addEventListener('click', this.handleTabClick.bind(this));
@@ -185,6 +208,10 @@ class AgentsPlugin {
     }
 
     // --- Event Handlers ---
+    /**
+     * Handles tab switching.
+     * @param {Event} e - The click event.
+     */
     handleTabClick(e) {
         if (e.target.classList.contains('tab-button')) {
             const tabName = e.target.dataset.tab;
@@ -197,6 +224,10 @@ class AgentsPlugin {
         }
     }
 
+    /**
+     * Saves a new agent or updates an existing one based on the form data.
+     * @param {Event} e - The form submission event.
+     */
     saveAgent(e) {
         e.preventDefault();
         const id = document.getElementById('agent-id').value;
@@ -231,6 +262,10 @@ class AgentsPlugin {
         hideAgentForm();
     }
 
+    /**
+     * Handles clicks on the agent list (activate, edit, delete).
+     * @param {Event} e - The click event.
+     */
     handleAgentListClick(e) {
         const id = e.target.dataset.id;
         if (!id) return;
@@ -249,6 +284,10 @@ class AgentsPlugin {
         this.store.set('currentChat', { ...chat });
     }
 
+    /**
+     * Adds a new step to the flow canvas.
+     * @param {string} [type='simple-prompt'] - The type of the step to add.
+     */
     addFlowStep(type = 'simple-prompt') {
         const chat = this.store.get('currentChat');
         if (!chat.flow) chat.flow = { steps: [], connections: [] };
@@ -272,6 +311,10 @@ class AgentsPlugin {
         this.store.set('currentChat', { ...chat });
     }
 
+    /**
+     * Handles changes to input fields within a flow step.
+     * @param {Event} e - The change event.
+     */
     handleFlowStepChange(e) {
         const id = e.target.dataset.id;
         const chat = this.store.get('currentChat');
@@ -286,6 +329,10 @@ class AgentsPlugin {
         this.store.set('currentChat', { ...chat });
     }
 
+    /**
+     * Handles clicks on the flow canvas for deleting steps or connections.
+     * @param {Event} e - The click event.
+     */
     handleFlowCanvasClick(e) {
         const chat = this.store.get('currentChat');
         let chatModified = false;
@@ -328,110 +375,151 @@ class AgentsPlugin {
         }
     }
 
+    _handleConnectorMouseDown(target) {
+        this._connectionInfo.active = true;
+        this._connectionInfo.fromNode = target.closest('.flow-step-card');
+        this._connectionInfo.fromConnector = target;
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('stroke', 'red');
+        line.setAttribute('stroke-width', '2');
+        this._connectionInfo.tempLine = line;
+        document.getElementById('flow-svg-layer').appendChild(line);
+    }
+
+    _handleNodeDragMouseDown(target, e) {
+        e.preventDefault();
+        this._dragInfo.active = true;
+        this._dragInfo.target = target.closest('.flow-step-card');
+        this._dragInfo.offsetX = e.clientX - this._dragInfo.target.offsetLeft;
+        this._dragInfo.offsetY = e.clientY - this._dragInfo.target.offsetTop;
+    }
+
+    _handleCanvasPanMouseDown(e) {
+        e.preventDefault();
+        const canvasWrapper = document.getElementById('flow-canvas-wrapper');
+        this._panInfo.active = true;
+        this._panInfo.startX = e.clientX;
+        this._panInfo.startY = e.clientY;
+        this._panInfo.scrollLeft = canvasWrapper.scrollLeft;
+        this._panInfo.scrollTop = canvasWrapper.scrollTop;
+        e.target.closest('#flow-canvas').classList.add('panning');
+    }
+
+    /**
+     * Handles the mouse down event on the flow canvas for dragging, panning, and creating connections.
+     * @param {Event} e - The mouse down event.
+     */
     handleFlowCanvasMouseDown(e) {
         const target = e.target;
-        const canvasWrapper = document.getElementById('flow-canvas-wrapper');
-
-        // Prevent interference with form elements inside a step card
-        if (target.closest('.flow-step-card') && INTERACTIVE_TAGS.includes(target.tagName)) {
-            return;
-        }
+        if (target.closest('.flow-step-card') && INTERACTIVE_TAGS.includes(target.tagName)) return;
 
         if (target.classList.contains('connector')) {
-            this.connectionInfo.active = true;
-            this.connectionInfo.fromNode = target.closest('.flow-step-card');
-            this.connectionInfo.fromConnector = target;
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('stroke', 'red');
-            line.setAttribute('stroke-width', '2');
-            this.connectionInfo.tempLine = line;
-            document.getElementById('flow-svg-layer').appendChild(line);
-        } else if (target.closest('.flow-step-card') && !INTERACTIVE_TAGS.includes(target.tagName)) {
-            e.preventDefault();
-            this.dragInfo.active = true;
-            this.dragInfo.target = target.closest('.flow-step-card');
-            this.dragInfo.offsetX = e.clientX - this.dragInfo.target.offsetLeft;
-            this.dragInfo.offsetY = e.clientY - this.dragInfo.target.offsetTop;
-        } else if (e.target.id === 'flow-canvas' || e.target.id === 'flow-node-container' || e.target.id === 'flow-svg-layer') {
-            e.preventDefault();
-            this.panInfo.active = true;
-            this.panInfo.startX = e.clientX;
-            this.panInfo.startY = e.clientY;
-            this.panInfo.scrollLeft = canvasWrapper.scrollLeft;
-            this.panInfo.scrollTop = canvasWrapper.scrollTop;
-            e.target.closest('#flow-canvas').classList.add('panning');
+            this._handleConnectorMouseDown(target);
+        } else if (target.closest('.flow-step-card')) {
+            this._handleNodeDragMouseDown(target, e);
+        } else if (['flow-canvas', 'flow-node-container', 'flow-svg-layer'].includes(target.id)) {
+            this._handleCanvasPanMouseDown(e);
         }
     }
 
+    _handleNodeDragMouseMove(e) {
+        const newX = e.clientX - this._dragInfo.offsetX;
+        const newY = e.clientY - this._dragInfo.offsetY;
+        this._dragInfo.target.style.left = `${newX}px`;
+        this._dragInfo.target.style.top = `${newY}px`;
+        const step = this.store.get('currentChat').flow.steps.find(s => s.id === this._dragInfo.target.dataset.id);
+        if (step) {
+            step.x = newX;
+            step.y = newY;
+        }
+        renderFlow(this.store);
+    }
+
+    _handleConnectorMouseMove(e) {
+        const fromRect = this._connectionInfo.fromConnector.getBoundingClientRect();
+        const canvasWrapper = document.getElementById('flow-canvas-wrapper');
+        const canvasRect = canvasWrapper.getBoundingClientRect();
+        const startX = fromRect.left - canvasRect.left + fromRect.width / 2 + canvasWrapper.scrollLeft;
+        const startY = fromRect.top - canvasRect.top + fromRect.height / 2 + canvasWrapper.scrollTop;
+        this._connectionInfo.tempLine.setAttribute('x1', startX);
+        this._connectionInfo.tempLine.setAttribute('y1', startY);
+        this._connectionInfo.tempLine.setAttribute('x2', e.clientX - canvasRect.left + canvasWrapper.scrollLeft);
+        this._connectionInfo.tempLine.setAttribute('y2', e.clientY - canvasRect.top + canvasWrapper.scrollTop);
+    }
+
+    _handleCanvasPanMouseMove(e) {
+        e.preventDefault();
+        const canvasWrapper = document.getElementById('flow-canvas-wrapper');
+        const dx = e.clientX - this._panInfo.startX;
+        const dy = e.clientY - this._panInfo.startY;
+        canvasWrapper.scrollLeft = this._panInfo.scrollLeft - dx;
+        canvasWrapper.scrollTop = this._panInfo.scrollTop - dy;
+    }
+
+    /**
+     * Handles the mouse move event on the flow canvas.
+     * @param {Event} e - The mouse move event.
+     */
     handleFlowCanvasMouseMove(e) {
-        if (this.dragInfo.active) {
-            const newX = e.clientX - this.dragInfo.offsetX;
-            const newY = e.clientY - this.dragInfo.offsetY;
-            this.dragInfo.target.style.left = `${newX}px`;
-            this.dragInfo.target.style.top = `${newY}px`;
-            const step = this.store.get('currentChat').flow.steps.find(s => s.id === this.dragInfo.target.dataset.id);
-            if (step) { step.x = newX; step.y = newY; }
-            renderFlow(this.store);
-        } else if (this.connectionInfo.active) {
-            const fromRect = this.connectionInfo.fromConnector.getBoundingClientRect();
-            const canvasWrapper = document.getElementById('flow-canvas-wrapper');
-            const canvasRect = canvasWrapper.getBoundingClientRect();
-            const startX = fromRect.left - canvasRect.left + fromRect.width / 2 + canvasWrapper.scrollLeft;
-            const startY = fromRect.top - canvasRect.top + fromRect.height / 2 + canvasWrapper.scrollTop;
-            this.connectionInfo.tempLine.setAttribute('x1', startX);
-            this.connectionInfo.tempLine.setAttribute('y1', startY);
-            this.connectionInfo.tempLine.setAttribute('x2', e.clientX - canvasRect.left + canvasWrapper.scrollLeft);
-            this.connectionInfo.tempLine.setAttribute('y2', e.clientY - canvasRect.top + canvasWrapper.scrollTop);
-        } else if (this.panInfo.active) {
-            e.preventDefault();
-            const canvasWrapper = document.getElementById('flow-canvas-wrapper');
-            const dx = e.clientX - this.panInfo.startX;
-            const dy = e.clientY - this.panInfo.startY;
-            canvasWrapper.scrollLeft = this.panInfo.scrollLeft - dx;
-            canvasWrapper.scrollTop = this.panInfo.scrollTop - dy;
+        if (this._dragInfo.active) {
+            this._handleNodeDragMouseMove(e);
+        } else if (this._connectionInfo.active) {
+            this._handleConnectorMouseMove(e);
+        } else if (this._panInfo.active) {
+            this._handleCanvasPanMouseMove(e);
         }
     }
 
-    handleFlowCanvasMouseUp(e) {
-        if (this.dragInfo.active) {
-            this.store.set('currentChat', { ...this.store.get('currentChat') });
-        } else if (this.connectionInfo.active) {
-            const toConnector = e.target.classList.contains('connector') ? e.target : e.target.closest('.connector');
-            if (toConnector && toConnector.dataset.type === 'in' && toConnector !== this.connectionInfo.fromConnector) {
-                const toNode = toConnector.closest('.flow-step-card');
-                const fromNode = this.connectionInfo.fromNode;
-                const fromConnector = this.connectionInfo.fromConnector;
-                const chat = this.store.get('currentChat');
+    _handleConnectionMouseUp(e) {
+        const toConnector = e.target.classList.contains('connector') ? e.target : e.target.closest('.connector');
+        if (toConnector && toConnector.dataset.type === 'in' && toConnector !== this._connectionInfo.fromConnector) {
+            const toNode = toConnector.closest('.flow-step-card');
+            const fromNode = this._connectionInfo.fromNode;
+            const fromConnector = this._connectionInfo.fromConnector;
+            const chat = this.store.get('currentChat');
 
-                if (!chat.flow.connections) chat.flow.connections = [];
+            if (!chat.flow.connections) chat.flow.connections = [];
 
-                const newConnection = {
-                    from: fromNode.dataset.id,
-                    to: toNode.dataset.id,
-                    outputName: fromConnector.dataset.outputName
-                };
+            const newConnection = {
+                from: fromNode.dataset.id,
+                to: toNode.dataset.id,
+                outputName: fromConnector.dataset.outputName
+            };
 
-                // Prevent duplicate connections from the same output port
-                const connectionExists = chat.flow.connections.some(c =>
-                    c.from === newConnection.from && c.outputName === newConnection.outputName
-                );
+            const connectionExists = chat.flow.connections.some(c =>
+                c.from === newConnection.from && c.outputName === newConnection.outputName
+            );
 
-                if (!connectionExists) {
-                    chat.flow.connections.push(newConnection);
-                    this.store.set('currentChat', { ...chat });
-                } else {
-                    log(2, "Connection from this output port already exists.");
-                }
+            if (!connectionExists) {
+                chat.flow.connections.push(newConnection);
+                this.store.set('currentChat', { ...chat });
+            } else {
+                log(2, "Connection from this output port already exists.");
             }
-            this.connectionInfo.tempLine.remove();
-        } else if (this.panInfo.active) {
+        }
+        this._connectionInfo.tempLine.remove();
+    }
+
+    /**
+     * Handles the mouse up event on the flow canvas.
+     * @param {Event} e - The mouse up event.
+     */
+    handleFlowCanvasMouseUp(e) {
+        if (this._dragInfo.active) {
+            this.store.set('currentChat', { ...this.store.get('currentChat') });
+        } else if (this._connectionInfo.active) {
+            this._handleConnectionMouseUp(e);
+        } else if (this._panInfo.active) {
             document.getElementById('flow-canvas').classList.remove('panning');
         }
-        this.dragInfo.active = false;
-        this.connectionInfo.active = false;
-        this.panInfo.active = false;
+        this._dragInfo.active = false;
+        this._connectionInfo.active = false;
+        this._panInfo.active = false;
     }
 
+    /**
+     * Exports the current flow to a JSON file.
+     */
     exportFlow() {
         const chat = this.store.get('currentChat');
         if (!chat || !chat.flow) {
@@ -442,6 +530,9 @@ class AgentsPlugin {
         exportJson(chat.flow, filenameBase);
     }
 
+    /**
+     * Imports a flow from a JSON file.
+     */
     importFlow() {
         importJson('application/json', (importedFlow) => {
             if (importedFlow && Array.isArray(importedFlow.steps) && Array.isArray(importedFlow.connections)) {
@@ -454,6 +545,9 @@ class AgentsPlugin {
         });
     }
 
+    /**
+     * Exports the agents from the current chat to a JSON file.
+     */
     exportAgents() {
         const chat = this.store.get('currentChat');
         if (!chat || !chat.agents || chat.agents.length === 0) {
@@ -464,6 +558,9 @@ class AgentsPlugin {
         exportJson(chat.agents, filenameBase);
     }
 
+    /**
+     * Imports agents from a JSON file into the current chat.
+     */
     importAgents() {
         importJson('application/json', (importedAgents) => {
             if (!Array.isArray(importedAgents)) {
@@ -521,12 +618,12 @@ class AgentsPlugin {
             const { toolCalls } = parseFunctionCalls(message.value.content);
 
             // --- Multi-Message Continuation ---
-            if (this.flowRunning && this.multiMessageInfo.active) {
+            if (this._flowRunning && this._multiMessageInfo.active) {
                 if (toolCalls.length > 0) return; // Wait for tool calls to complete
 
-                const { step, counter, messageToBranchFrom } = this.multiMessageInfo;
+                const { step, counter, messageToBranchFrom } = this._multiMessageInfo;
                 if (counter < step.count) {
-                    this.multiMessageInfo.counter++;
+                    this._multiMessageInfo.counter++;
                     const chat = this.store.get('currentChat');
                     chat.activeAgentId = step.agentId;
                     this.store.set('currentChat', { ...chat });
@@ -534,7 +631,7 @@ class AgentsPlugin {
                     hooks.onGenerateAIResponse.forEach(fn => fn({}, chatlog));
                     return;
                 } else {
-                    this.multiMessageInfo = { active: false, step: null, counter: 0, messageToBranchFrom: null };
+                    this._multiMessageInfo = { active: false, step: null, counter: 0, messageToBranchFrom: null };
                 }
             }
 
@@ -548,9 +645,9 @@ class AgentsPlugin {
             // --- Flow Continuation ---
             // Re-parse *after* processToolCalls might have added its own messages.
             const newToolCalls = parseFunctionCalls(message.value.content).toolCalls;
-            if (this.flowRunning && newToolCalls.length === 0) {
+            if (this._flowRunning && newToolCalls.length === 0) {
                 const currentChat = this.store.get('currentChat');
-                const currentStep = currentChat.flow.steps.find(s => s.id === this.currentStepId);
+                const currentStep = currentChat.flow.steps.find(s => s.id === this._currentStepId);
 
                 if (currentStep && currentStep.type === 'prompt-and-clear') {
                     const activeMessages = chatlog.getActiveMessageValues();
@@ -564,7 +661,7 @@ class AgentsPlugin {
                 }
 
                 const { steps, connections } = currentChat.flow;
-                const nextStep = this.flowExecutor.getNextStep(this.currentStepId);
+                const nextStep = this.flowExecutor.getNextStep(this._currentStepId);
                 if (nextStep) {
                     this.flowExecutor.executeStep(nextStep);
                 } else {

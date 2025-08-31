@@ -239,9 +239,9 @@ class App {
                 return;
             }
             this.chatUIManager.submitMessage(this.ui.messageEl.value, document.querySelector('input[name="user_role"]:checked').value);
-            document.getElementById('user').checked = true;
             this.ui.messageEl.value = '';
             this.ui.messageEl.style.height = 'auto';
+            document.getElementById('user').checked = true;
         });
         this.ui.messageEl.addEventListener('keydown', event => {
             if (event.key === 'Enter' && (event.shiftKey || event.ctrlKey || event.altKey)) {

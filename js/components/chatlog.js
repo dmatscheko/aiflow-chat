@@ -9,11 +9,11 @@ import { hooks } from '../hooks.js';
 
 /**
  * @class Message
- * Represents a single message in the chatlog.
+ * @classdesc Represents a single message in the chat. A message can have alternative responses.
  */
 class Message {
     /**
-     * @param {Object} value - The message value, e.g., { role: 'user', content: 'Hello' }.
+     * @param {Object} value - The message value, e.g., { role: 'user', content: 'Hello' }. Can be null for an empty message placeholder.
      */
     constructor(value) {
         log(5, 'Message: Constructor called with value', value);
@@ -85,7 +85,7 @@ class Message {
 
 /**
  * @class Alternatives
- * Manages a set of alternative messages at a given point in the chatlog.
+ * @classdesc Manages a set of alternative messages for a single turn in the conversation.
  */
 class Alternatives {
     constructor() {
@@ -174,7 +174,8 @@ class Alternatives {
 
 /**
  * @class Chatlog
- * Manages the entire chat history as a tree of alternatives.
+ * @classdesc Manages the entire chat history as a tree of messages and their alternatives.
+ * It provides methods to navigate and manipulate the chat history and notifies subscribers of changes.
  */
 class Chatlog {
     constructor() {

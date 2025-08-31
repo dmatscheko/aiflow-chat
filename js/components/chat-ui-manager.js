@@ -6,7 +6,7 @@
 
 import { ChatBox } from './chatbox.js';
 import { Chatlog, Message } from './chatlog.js';
-import { log } from '../utils/logger.js';
+import { log, triggerError } from '../utils/logger.js';
 import { hooks } from '../hooks.js';
 
 /**
@@ -132,12 +132,16 @@ class ChatUIManager {
     }
 
     /**
-     * Resets the editing state of a message in the chat.
+     * Sets the position of the message being edited.
+     * @param {number | null} pos - The position of the message, or null to exit edit mode.
      */
     setEditingPos(pos) {
         this.editingPos = pos;
     }
 
+    /**
+     * Resets the current editing state, clearing the input and restoring any message being edited.
+     */
     resetEditing() {
         if (!this.chatlog) return;
         const currentEditingPos = this.editingPos;
@@ -166,12 +170,10 @@ class ChatUIManager {
             this.updateMessageText(msg, message.trim());
         }
         this.resetEditing();
-        document.getElementById('user').checked = true;
 
         const editedMsg = this.chatlog.getNthMessage(editedPos);
         if (editedMsg.value.role !== 'assistant' && editedMsg.answerAlternatives === null && this.chatlog.getFirstMessage() !== editedMsg) {
-            this.addMessageWithContent({ role: 'assistant', content: null });
-            await this.aiService.generateAIResponse(this.chatlog, this.chatBox, {});
+            await this._generateResponse();
         }
     }
 
@@ -201,21 +203,74 @@ class ChatUIManager {
             }
             const newMessage = this.addMessageWithContent({ role: userRole, content: modifiedContent });
             hooks.afterMessageAdd.forEach(fn => fn(newMessage));
-            this.addMessageWithoutContent();
         }
 
         this.store.set('regenerateLastAnswer', false);
+        await this._generateResponse();
+    }
 
-        await this.aiService.generateAIResponse(this.chatlog, this.chatBox, {});
+    async _generateResponse() {
+        this.addMessageWithoutContent();
+        const targetMessage = this.chatlog.getLastMessage();
 
-        // Final update to ensure UI is consistent after response generation, especially for flows.
-        this.chatBox.update();
+        try {
+            const stream = this.aiService.generateAIResponse(this.chatlog, this.chatBox, {});
+            for await (const event of stream) {
+                if (event.type === 'chunk') {
+                    targetMessage.appendContent(event.delta);
+                    this.chatlog.notify();
+                } else if (event.type === 'done') {
+                    targetMessage.metadata = event.metadata;
+                    targetMessage.cache = null;
+                    hooks.onMessageComplete.forEach(fn => fn(targetMessage, this.chatlog, this.chatBox));
+                    this.chatlog.notify();
+                } else if (event.type === 'error') {
+                    this._handleStreamError(event.error, targetMessage);
+                }
+            }
+        } catch (error) {
+            this._handleStreamError(error, targetMessage);
+        } finally {
+            // Final update to ensure UI is consistent after response generation, especially for flows.
+            this.chatBox.update();
+        }
+    }
+
+    _handleStreamError(error, targetMessage) {
+        if (error.name === 'AbortError') {
+            log(3, 'ChatUIManager: Response aborted');
+            hooks.onCancel.forEach(fn => fn());
+            this.store.set('controller', new AbortController());
+            if (targetMessage && targetMessage.value === null) {
+                const lastAlternatives = this.chatlog.getLastAlternatives();
+                lastAlternatives.messages.pop();
+                lastAlternatives.activeMessageIndex = lastAlternatives.messages.length - 1;
+            } else if (targetMessage) {
+                targetMessage.appendContent('\n\n[Response aborted by user]');
+            }
+            if(targetMessage) targetMessage.cache = null;
+            this.chatlog.notify();
+            return;
+        }
+
+        log(1, 'ChatUIManager: Stream error', error);
+        triggerError(error.message);
+        if (targetMessage.value === null) {
+            targetMessage.value = { role: 'assistant', content: `[Error: ${error.message}. Retry or check connection.]` };
+            hooks.afterMessageAdd.forEach(fn => fn(targetMessage));
+        } else {
+            targetMessage.appendContent(`\n\n[Error: ${error.message}. Retry or check connection.]`);
+        }
+        targetMessage.cache = null;
+        this.chatlog.notify();
     }
 
     /**
-     * Submits a user message, handles editing, and triggers AI response.
-     * @param {string} message - The message to submit.
-     * @param {string} userRole - The role of the user.
+     * Submits a message to the chat.
+     * This method handles both new messages and messages that are being edited.
+     * It will then trigger the AI response generation if necessary.
+     * @param {string} message - The text content of the message to submit.
+     * @param {string} userRole - The role of the user submitting the message (e.g., 'user', 'assistant').
      */
     async submitMessage(message, userRole) {
         log(3, 'ChatUIManager: submitMessage called with role', userRole);
