@@ -7,7 +7,6 @@
 import { Chatlog, Alternatives } from '../components/chatlog.js';
 import { firstPrompt } from '../config.js';
 import { log, triggerError } from '../utils/logger.js';
-import { getDatePrompt, resetEditing, addMessageToChat } from '../utils/chat.js';
 import { hooks } from '../hooks.js';
 
 /**
@@ -57,7 +56,9 @@ class ChatService {
         const id = Date.now().toString();
         const title = 'New Chat';
         const chatlog = new Chatlog();
-        addMessageToChat(chatlog, { role: 'system', content: firstPrompt + getDatePrompt() });
+        const now = new Date();
+        const datePrompt = `\n\nKnowledge cutoff: none\nCurrent date: ${now.toISOString().slice(0, 10)}\nCurrent time: ${now.toTimeString().slice(0, 5)}`;
+        chatlog.addMessage({ role: 'system', content: firstPrompt + datePrompt });
         const newChat = { id, title, chatlog, modelSettings: {}, agents: [], flow: { steps: [], connections: [] } };
         this.chats.push(newChat);
         this.store.set('chats', this.chats);
@@ -73,9 +74,7 @@ class ChatService {
         log(3, 'ChatService: switchChat called for id', id);
         if (this.currentChatId === id) return;
 
-        const ui = this.store.get('ui');
-        resetEditing(this.store, ui.chatBox.chatlog, ui.chatBox);
-
+        // The resetEditing logic will be handled by the UIManager when a chat is switched.
         this.persistChats();
         this.currentChatId = id;
         const currentChat = this.chats.find(c => c.id === id);
@@ -178,7 +177,9 @@ class ChatService {
                     log(4, 'ChatService: Adding missing system prompt in loadChats');
                     const oldRoot = chatlog.rootAlternatives;
                     chatlog.rootAlternatives = new Alternatives();
-                    const sysMsg = chatlog.rootAlternatives.addMessage({ role: 'system', content: firstPrompt + getDatePrompt() });
+                    const now = new Date();
+                    const datePrompt = `\n\nKnowledge cutoff: none\nCurrent date: ${now.toISOString().slice(0, 10)}\nCurrent time: ${now.toTimeString().slice(0, 5)}`;
+                    const sysMsg = chatlog.rootAlternatives.addMessage({ role: 'system', content: firstPrompt + datePrompt });
                     sysMsg.answerAlternatives = oldRoot;
                 }
                 const flow = chatData.flow || { steps: [], connections: [] };
@@ -195,7 +196,7 @@ class ChatService {
                     rootData = parsed.rootAlternatives;
                 } else {
                     const tempLog = new Chatlog();
-                    parsed.forEach(msg => addMessageToChat(tempLog, msg));
+                    parsed.forEach(msg => tempLog.addMessage(msg));
                     rootData = tempLog.toJSON();
                 }
                 const chatlog = new Chatlog();

@@ -5,14 +5,13 @@
 'use strict';
 
 import Store from './state/store.js';
-import ApiService from './services/api-service.js';
+import NetworkService from './services/network-service.js';
 import ChatService from './services/chat-service.js';
 import ConfigService from './services/config-service.js';
 import SettingsPanel from './components/settings-panel.js';
-import { ChatBox } from './components/chatbox.js';
+import UIManager from './managers/ui-manager.js';
 import ChatListView from './components/chatlist-view.js';
 import { log, triggerError } from './utils/logger.js';
-import { resetEditing } from './utils/chat.js';
 import { showLogin, showLogout } from './utils/ui.js';
 import { exportJson, importJson } from './utils/shared.js';
 import { hooks, registerPlugin } from './hooks.js';
@@ -34,7 +33,6 @@ class App {
     constructor() {
         log(5, 'App: Constructor called');
         this.ui = {
-            chatBox: null,
             messageEl: document.getElementById('messageInput'),
             submitButton: document.getElementById('submitButton'),
             newChatButton: document.getElementById('newChatButton'),
@@ -52,7 +50,7 @@ class App {
         });
 
         this.configService = new ConfigService(this.store);
-        this.apiService = new ApiService(this.store);
+        this.networkService = new NetworkService(this.store);
         this.chatService = new ChatService(this.store, this.configService);
 
         this.settingsPanel = new SettingsPanel({
@@ -66,7 +64,8 @@ class App {
             onTitleEdited: (chatId, newTitle) => this.chatService.updateChatTitle(chatId, newTitle),
         });
 
-        this.ui.chatBox = new ChatBox(this.store);
+        this.chatLogManager = new ChatLogManager(this.store);
+        this.uiManager = new UIManager(this.store, this.chatLogManager);
 
         this.store.subscribe('receiving', (val) => {
             this.ui.submitButton.innerHTML = val ? messageStop : messageSubmit;
@@ -80,7 +79,7 @@ class App {
         if (window.innerWidth <= 1037) {
             document.getElementById('chatListContainer').classList.add('hidden');
         }
-        hooks.onGenerateAIResponse.push((options, chatlog) => this.generateAIResponse(options, chatlog));
+        hooks.onGenerateAIResponse.push((options, chatLogManager) => this.generateAIResponse(options, chatLogManager));
     }
 
     /**
@@ -91,7 +90,7 @@ class App {
         this.registerPlugins();
         this.setupGlobalErrorHandlers();
 
-        this.ui.chatBox.onUpdate = () => this.chatService.persistChats();
+        this.uiManager.onUpdate = () => this.chatService.persistChats();
 
         this.chatService.init();
 
@@ -173,7 +172,9 @@ class App {
      */
     onChatSwitched(chat) {
         log(3, 'App: onChatSwitched called for chat', chat?.id);
-        this.ui.chatBox.setChatlog(chat?.chatlog || null);
+        const newChatlog = chat ? chat.chatlog : null;
+        this.chatLogManager.setChatlog(newChatlog);
+        // The UIManager will be updated via its subscription to the ChatLogManager
         if (window.innerWidth <= 1037) {
             document.getElementById('chatListContainer').classList.add('hidden');
         }
@@ -191,7 +192,7 @@ class App {
             return false;
         }
         try {
-            const models = await this.apiService.getModels(endpoint, apiKey);
+            const models = await this.networkService.getModels(endpoint, apiKey);
             this.configService.setItem('models', JSON.stringify(models));
 
             if (models && models.length > 0) {
@@ -258,7 +259,7 @@ class App {
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape') {
                 this.store.get('controller').abort();
-                resetEditing(this.store, this.ui.chatBox.chatlog, this.ui.chatBox);
+                this.uiManager.resetEditing();
             }
         });
         this.ui.newChatButton.addEventListener('click', () => {
@@ -300,7 +301,7 @@ class App {
      * @param {Object} [options={}] - Options for the generation.
      * @param {Chatlog} [targetChatlog=this.chatlog] - The chatlog to generate a response for.
      */
-    async generateAIResponse(options = {}, targetChatlog = this.ui.chatBox.chatlog) {
+    async generateAIResponse(options = {}, targetChatLogManager = this.chatLogManager) {
         log(3, 'App: generateAIResponse called');
         if (this.store.get('receiving')) return;
 
@@ -328,10 +329,10 @@ class App {
         }
 
         this.store.set('receiving', true);
-        const targetMessage = targetChatlog.getLastMessage();
+        const targetMessage = targetChatLogManager.getLastMessage();
         try {
             let payload = {
-                messages: targetChatlog.getActiveMessageValues().filter(m => m.content !== null),
+                messages: targetChatLogManager.getActiveMessageValues().filter(m => m.content !== null),
                 stream: true
             };
 
@@ -342,7 +343,7 @@ class App {
             if (payload.messages.length === 0) return;
             if (payload.messages.length === 1 && payload.messages[0]?.role === 'system') return;
 
-            const systemMessage = targetChatlog.getFirstMessage();
+            const systemMessage = targetChatLogManager.getFirstMessage();
             if (systemMessage && systemMessage.value.role === 'system') {
                 let newContent = systemMessage.value.content;
                 for (const fn of hooks.onModifySystemPrompt) {
@@ -353,12 +354,12 @@ class App {
                     systemMessage.setContent(newContent);
                 }
             }
-            payload = hooks.beforeApiCall.reduce((p, fn) => fn(p, this.ui.chatBox) || p, payload);
+            payload = hooks.beforeApiCall.reduce((p, fn) => fn(p, this.uiManager, targetChatLogManager) || p, payload);
 
             const endpoint = this.configService.getItem('endpoint', defaultEndpoint)
             const apiKey = this.configService.getItem('apiKey', '');
             const abortSignal = this.store.get('controller').signal;
-            const reader = await this.apiService.streamAPIResponse(payload, endpoint, apiKey, abortSignal);
+            const reader = await this.networkService.streamAPIResponse(payload, endpoint, apiKey, abortSignal);
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -381,8 +382,7 @@ class App {
                 if (delta === '') continue;
                 log(5, 'App: Received chunk', delta);
                 hooks.onChunkReceived.forEach(fn => fn(delta));
-                targetMessage.appendContent(delta);
-                targetChatlog.notify();
+                this.uiManager.appendMessageText(targetMessage, delta);
             }
         } catch (error) {
             this.store.set('receiving', false); // Ensure receiving is false on error
@@ -390,40 +390,35 @@ class App {
                 log(3, 'App: Response aborted');
                 hooks.onCancel.forEach(fn => fn());
                 this.store.set('controller', new AbortController());
-                const lastMessage = targetChatlog.getLastMessage();
+                const lastMessage = targetChatLogManager.getLastMessage();
                 if (lastMessage && lastMessage.value === null) {
-                    const lastAlternatives = targetChatlog.getLastAlternatives();
-                    lastAlternatives.messages.pop();
-                    lastAlternatives.activeMessageIndex = lastAlternatives.messages.length - 1;
-                    targetChatlog.notify();
+                    targetChatLogManager.deleteMessage(lastMessage);
                 } else if (lastMessage) {
-                    lastMessage.appendContent('\n\n[Response aborted by user]');
-                    lastMessage.cache = null;
+                    this.uiManager.appendMessageText(lastMessage, '\n\n[Response aborted by user]');
                 }
                 return;
             }
             log(1, 'App: generateAIResponse error', error);
             triggerError(error.message);
-            const lastMessage = targetChatlog.getLastMessage();
+            const lastMessage = targetChatLogManager.getLastMessage();
             if (lastMessage.value === null) {
-                lastMessage.value = { role: 'assistant', content: `[Error: ${error.message}. Retry or check connection.]` };
+                this.uiManager.changeMessageText(lastMessage, `[Error: ${error.message}. Retry or check connection.]`);
                 hooks.afterMessageAdd.forEach(fn => fn(lastMessage));
             } else {
-                lastMessage.appendContent(`\n\n[Error: ${error.message}. Retry or check connection.]`);
+                this.uiManager.appendMessageText(lastMessage, `\n\n[Error: ${error.message}. Retry or check connection.]`);
             }
-            lastMessage.cache = null;
         } finally {
             // Set receiving to false before calling hooks, in case a hook triggers another generation
             this.store.set('receiving', false);
-            const lastMessage = targetChatlog.getLastMessage();
+            const lastMessage = targetChatLogManager.getLastMessage();
 
             // Set metadata here so hooks can use it
             if (lastMessage && lastMessage.value !== null) {
                 lastMessage.cache = null;
                 lastMessage.metadata = { model: mergedSettings.model, temperature: mergedSettings.temperature, top_p: mergedSettings.top_p };
-                hooks.onMessageComplete.forEach(fn => fn(lastMessage, targetChatlog, this.ui.chatBox));
+                hooks.onMessageComplete.forEach(fn => fn(lastMessage, this.uiManager, targetChatLogManager));
             }
-            targetChatlog.notify();
+            targetChatLogManager.notify();
             this.chatService.persistChats();
         }
     }
@@ -435,34 +430,28 @@ class App {
      */
     async submitUserMessage(message, userRole) {
         log(3, 'App: submitUserMessage called with role', userRole);
-        // Ensure we are acting on the chatlog instance currently displayed in the UI
-        const currentChatlog = this.ui.chatBox.chatlog;
-        if (!currentChatlog) return;
+        if (!this.chatLogManager.chatlog) return;
 
         const editedPos = this.store.get('editingPos');
         log(4, 'App: editingPos is', editedPos);
         if (editedPos !== null) {
             log(4, 'App: Editing message at pos', editedPos);
-            const msg = currentChatlog.getNthMessage(editedPos);
+            const msg = this.chatLogManager.getNthMessage(editedPos);
             if (msg) {
                 msg.value.role = userRole;
-                msg.setContent(message.trim());
-                msg.cache = null;
-                this.ui.chatBox.update();
+                this.uiManager.changeMessageText(msg, message.trim());
             }
             this.store.set('editingPos', null);
             document.getElementById('user').checked = true;
-            const editedMsg = currentChatlog.getNthMessage(editedPos);
-            if (editedMsg.value.role !== 'assistant' && editedMsg.answerAlternatives === null && currentChatlog.getFirstMessage() !== editedMsg) {
-                currentChatlog.addMessage({ role: 'assistant', content: null });
-                this.ui.chatBox.update();
-                await this.generateAIResponse({}, currentChatlog);
+            const editedMsg = this.chatLogManager.getNthMessage(editedPos);
+            if (editedMsg.value.role !== 'assistant' && editedMsg.answerAlternatives === null && this.chatLogManager.getFirstMessage() !== editedMsg) {
+                this.uiManager.addMessageWithoutContent();
+                await this.generateAIResponse();
             }
             return;
         }
 
         if (!this.store.get('regenerateLastAnswer') && !message) return;
-        // Allow flow to submit messages even if another response is being generated
         if (this.store.get('receiving') && !agentsPlugin.flowRunning) return;
 
         if (userRole === 'assistant') {
@@ -472,9 +461,8 @@ class App {
                 if (result === false) return;
                 if (typeof result === 'string') modifiedContent = result;
             }
-            const newMessage = currentChatlog.addMessage({ role: userRole, content: modifiedContent });
+            const newMessage = this.uiManager.addMessageWithContent({ role: userRole, content: modifiedContent });
             hooks.afterMessageAdd.forEach(fn => fn(newMessage));
-            this.ui.chatBox.update();
             return;
         }
 
@@ -486,18 +474,13 @@ class App {
                 if (result === false) return;
                 if (typeof result === 'string') modifiedContent = result;
             }
-            const newMessage = currentChatlog.addMessage({ role: userRole, content: modifiedContent });
+            const newMessage = this.uiManager.addMessageWithContent({ role: userRole, content: modifiedContent });
             hooks.afterMessageAdd.forEach(fn => fn(newMessage));
-            currentChatlog.addMessage(null);
+            this.uiManager.addMessageWithoutContent();
         }
 
         this.store.set('regenerateLastAnswer', false);
-        this.ui.chatBox.update(); // Initial update to show user message
-
-        await this.generateAIResponse({}, currentChatlog);
-
-        // Final update to ensure UI is consistent after response generation, especially for flows.
-        this.ui.chatBox.update();
+        await this.generateAIResponse();
     }
 }
 

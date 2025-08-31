@@ -13,14 +13,14 @@ import { hooks } from '../hooks.js';
  * and adds the results back to the chat.
  *
  * @param {import('../components/chatlog.js').Message} message - The message containing the tool calls.
- * @param {import('../components/chatlog.js').Chatlog} chatlog - The chatlog instance.
- * @param {import('../components/chatbox.js').ChatBox} chatbox - The chatbox instance.
+ * @param {import('../managers/chat-log-manager.js').default} chatLogManager - The ChatLogManager instance.
+ * @param {import('../managers/ui-manager.js').default} uiManager - The UIManager instance.
  * @param {function(object): boolean} filterCallback - A function to filter which tool calls to process.
  * @param {function(object): Promise<object>} executeCallback - An async function to execute a tool call and return the result.
  * @param {object} context - Additional context to pass to the callbacks.
  * @param {Array<object>} [tools=[]] - A list of available tools with their schemas.
  */
-export async function processToolCalls(message, chatlog, chatbox, filterCallback, executeCallback, context, tools = []) {
+export async function processToolCalls(message, chatLogManager, uiManager, filterCallback, executeCallback, context, tools = []) {
     if (message.value.role !== 'assistant') return;
 
     const { toolCalls, positions, isSelfClosings } = parseFunctionCalls(message.value.content, tools);
@@ -55,7 +55,7 @@ export async function processToolCalls(message, chatlog, chatbox, filterCallback
     }
     message.value.content = content;
     message.cache = null;
-    chatbox.update(false);
+    uiManager.render(false);
 
     let toolContents = '';
     toolResults.forEach((tr, i) => {
@@ -66,10 +66,10 @@ export async function processToolCalls(message, chatlog, chatbox, filterCallback
     });
 
     if (toolContents) {
-        chatlog.addMessage({ role: 'tool', content: toolContents });
-        chatlog.addMessage(null);
-        chatbox.update();
-        hooks.onGenerateAIResponse.forEach(fn => fn({}, chatlog));
+        chatLogManager.addMessage({ role: 'tool', content: toolContents });
+        chatLogManager.addMessage(null);
+        uiManager.render();
+        hooks.onGenerateAIResponse.forEach(fn => fn({}, chatLogManager));
     }
 }
 

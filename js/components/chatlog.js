@@ -5,7 +5,6 @@
 'use strict';
 
 import { log } from '../utils/logger.js';
-import { hooks } from '../hooks.js';
 
 /**
  * @class Message
@@ -162,139 +161,37 @@ class Alternatives {
 
 /**
  * @class Chatlog
- * Manages the entire chat history as a tree of alternatives.
+ * A data structure for the chat history as a tree of alternatives.
  */
 class Chatlog {
     constructor() {
         log(5, 'Chatlog: Constructor called');
         this.rootAlternatives = null;
-        this.subscribers = [];
     }
 
-    /**
-     * Subscribes a callback to chatlog changes.
-     * @param {Function} cb - The callback to subscribe.
-     */
-    subscribe(cb) {
-        log(5, 'Chatlog: subscribe called');
-        this.subscribers.push(cb);
-    }
-
-    /**
-     * Unsubscribes a callback from chatlog changes.
-     * @param {Function} cb - The callback to unsubscribe.
-     */
-    unsubscribe(cb) {
-        log(5, 'Chatlog: unsubscribe called');
-        this.subscribers = this.subscribers.filter(s => s !== cb);
-    }
-
-    /**
-     * Notifies all subscribers of a change.
-     * @param {boolean} [scroll=true] - Whether to scroll to the bottom.
-     */
-    notify(scroll = true) {
-        log(5, 'Chatlog: notify called');
-        this.subscribers.forEach(cb => cb(scroll));
-        hooks.onChatUpdated.forEach(fn => fn(this));
-    }
-
-    /**
-     * Adds a message to the chatlog.
-     * @param {Object} value - The value of the message to add.
-     * @returns {Message} The newly added message.
-     */
     addMessage(value) {
         log(4, 'Chatlog: addMessage called with role', value?.role);
         const lastMessage = this.getLastMessage();
         if (!lastMessage) {
             this.rootAlternatives = new Alternatives();
             const msg = this.rootAlternatives.addMessage(value);
-            this.notify();
             return msg;
         }
         if (lastMessage.value === null) {
             lastMessage.value = value;
-            this.notify();
             return lastMessage;
         }
         lastMessage.answerAlternatives = new Alternatives();
         const msg = lastMessage.answerAlternatives.addMessage(value);
-        this.notify();
         return msg;
     }
 
-    /**
-     * Gets the position of a message in the active path.
-     * @param {Message} message - The message to find.
-     * @returns {number} The position of the message.
-     */
-    getMessagePos(message) {
-        log(5, 'Chatlog: getMessagePos called');
-        let pos = 0;
-        let current = this.rootAlternatives;
-        while (current) {
-            const activeMessage = current.getActiveMessage();
-            if (!activeMessage || !activeMessage.answerAlternatives || activeMessage === message) return pos;
-            current = activeMessage.answerAlternatives;
-            pos++;
-        }
-        return 0;
-    }
-
-    /**
-     * Gets the first message in the active path.
-     * @returns {Message | null} The first message.
-     */
-    getFirstMessage() {
-        log(5, 'Chatlog: getFirstMessage called');
-        return this.rootAlternatives ? this.rootAlternatives.getActiveMessage() : null;
-    }
-
-    /**
-     * Gets the last message in the active path.
-     * @returns {Message | null} The last message.
-     */
     getLastMessage() {
         log(5, 'Chatlog: getLastMessage called');
         const lastAlternatives = this.getLastAlternatives();
         return lastAlternatives ? lastAlternatives.getActiveMessage() : null;
     }
 
-    /**
-     * Gets the nth message in the active path.
-     * @param {number} n - The index of the message to get.
-     * @returns {Message | null} The nth message.
-     */
-    getNthMessage(n) {
-        log(5, 'Chatlog: getNthMessage called for n', n);
-        const alternatives = this.getNthAlternatives(parseInt(n));
-        return alternatives ? alternatives.getActiveMessage() : null;
-    }
-
-    /**
-     * Gets the alternatives at the nth position in the active path.
-     * @param {number} n - The index of the alternatives to get.
-     * @returns {Alternatives | null} The nth alternatives.
-     */
-    getNthAlternatives(n) {
-        log(5, 'Chatlog: getNthAlternatives called for n', n);
-        let pos = 0;
-        let current = this.rootAlternatives;
-        while (current) {
-            if (pos >= n) return current;
-            const activeMessage = current.getActiveMessage();
-            if (!activeMessage || !activeMessage.answerAlternatives) break;
-            current = activeMessage.answerAlternatives;
-            pos++;
-        }
-        return null;
-    }
-
-    /**
-     * Gets the last set of alternatives in the active path.
-     * @returns {Alternatives | null} The last alternatives.
-     */
     getLastAlternatives() {
         log(5, 'Chatlog: getLastAlternatives called');
         let current = this.rootAlternatives;
@@ -308,23 +205,15 @@ class Chatlog {
         return last;
     }
 
-    /**
-     * Returns an array of active message values along the path.
-     * @returns {Array<Object>} The active message values.
-     */
-    getActiveMessageValues() {
-        log(5, 'Chatlog: getActiveMessageValues called');
-        const result = [];
-        let message = this.getFirstMessage();
-        while (message && message.value) {
-            result.push(message.value);
-            message = message.getAnswerMessage();
-        }
-        return result;
+    getFirstMessage() {
+        log(5, 'Chatlog: getFirstMessage called');
+        return this.rootAlternatives ? this.rootAlternatives.getActiveMessage() : null;
     }
 
     /**
      * Loads the chatlog from serialized alternatives data.
+     * This is a "dumb" load; it just reconstructs the objects.
+     * The ChatLogManager is responsible for cleaning and notifying.
      * @param {Object} alternativesData - The serialized alternatives data.
      */
     load(alternativesData) {
@@ -345,176 +234,7 @@ class Chatlog {
             return alt;
         };
         this.rootAlternatives = buildAlternatives(alternativesData);
-        this.clean();
         log(3, 'Chatlog: Loaded with message count', msgCount);
-        this.notify();
-    }
-
-    /**
-     * Removes messages with null values (incomplete messages).
-     */
-    clean() {
-        log(4, 'Chatlog: clean called');
-        if (!this.rootAlternatives) return;
-        const badMessages = [];
-        const stack = [this.rootAlternatives];
-        while (stack.length > 0) {
-            const alt = stack.pop();
-            alt.messages.forEach(msg => {
-                if (msg.value === null || (msg.value && msg.value.content === null)) {
-                    badMessages.push(msg);
-                }
-                if (msg.answerAlternatives) stack.push(msg.answerAlternatives);
-            });
-        }
-        badMessages.forEach(msg => this.deleteMessage(msg));
-        this.notify();
-    }
-
-    /**
-     * Clears all caches in the chatlog.
-     */
-    clearCache() {
-        log(4, 'Chatlog: clearCache called');
-        this.load(this.rootAlternatives);
-    }
-
-    /**
-     * Finds the Alternatives object that contains the given message.
-     * @param {Message} messageToFind - The message to find.
-     * @returns {Alternatives | null} The Alternatives object or null if not found.
-     */
-    findAlternativesForMessage(messageToFind) {
-        if (!this.rootAlternatives) return null;
-        const stack = [this.rootAlternatives];
-        while (stack.length > 0) {
-            const alts = stack.pop();
-            if (alts.messages.includes(messageToFind)) {
-                return alts;
-            }
-            alts.messages.forEach(msg => {
-                if (msg.answerAlternatives) {
-                    stack.push(msg.answerAlternatives);
-                }
-            });
-        }
-        return null;
-    }
-
-    /**
-     * Finds the parent message of a given Alternatives object.
-     * @param {Alternatives} alternativesToFind - The alternatives object to find the parent of.
-     * @returns {Message | null} The parent message or null if it's the root.
-     */
-    findParentOfAlternatives(alternativesToFind) {
-        if (!this.rootAlternatives || this.rootAlternatives === alternativesToFind) {
-            return null;
-        }
-        const stack = [this.rootAlternatives];
-        while (stack.length > 0) {
-            const alts = stack.pop();
-            for (const msg of alts.messages) {
-                if (msg.answerAlternatives === alternativesToFind) {
-                    return msg;
-                }
-                if (msg.answerAlternatives) {
-                    stack.push(msg.answerAlternatives);
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Deletes a specific message from the chatlog and all subsequent messages.
-     * @param {Message} message - The message object to delete.
-     */
-    deleteMessage(message) {
-        log(4, 'Chatlog: deleteMessage called for', message);
-        const alternatives = this.findAlternativesForMessage(message);
-        if (!alternatives) return;
-
-        const index = alternatives.messages.indexOf(message);
-        if (index === -1) return;
-
-        alternatives.messages.splice(index, 1);
-
-        if (alternatives.messages.length === 0) {
-            const parent = this.findParentOfAlternatives(alternatives);
-            if (parent) {
-                parent.answerAlternatives = null;
-            } else if (alternatives === this.rootAlternatives) {
-                this.rootAlternatives = null;
-            }
-        } else {
-            if (alternatives.activeMessageIndex === index) {
-                alternatives.activeMessageIndex = Math.max(0, alternatives.messages.length - 1);
-            } else if (alternatives.activeMessageIndex > index) {
-                alternatives.activeMessageIndex--;
-            }
-        }
-
-        alternatives.clearCache();
-        this.notify();
-    }
-
-    /**
-     * Deletes only the message at the nth position, preserving subsequent messages by relinking.
-     * @param {number} pos - The position of the message to delete.
-     */
-    deleteNthMessage(pos) {
-        log(4, 'Chatlog: deleteNthMessage called for pos', pos);
-        const msgToDelete = this.getNthMessage(pos);
-        if (!msgToDelete) return;
-
-        const childAlternatives = msgToDelete.answerAlternatives;
-
-        if (pos === 0) {
-            // If we're deleting the root message, its children become the new root
-            this.rootAlternatives = childAlternatives;
-        } else {
-            // If we're deleting a message in the middle, link its parent to its children
-            const parentMsg = this.getNthMessage(pos - 1);
-            if (parentMsg) {
-                parentMsg.answerAlternatives = childAlternatives;
-            }
-        }
-        this.notify();
-    }
-
-    /**
-     * Cycles through the alternative messages for a given message.
-     * @param {Message} message - The message whose alternatives to cycle.
-     * @param {'next' | 'prev'} direction - The direction to cycle.
-     */
-    cycleAlternatives(message, direction) {
-        log(4, `Chatlog: cycleAlternatives called for`, message, `direction: ${direction}`);
-        const alternatives = this.findAlternativesForMessage(message);
-        if (!alternatives) return;
-
-        if (direction === 'next') {
-            alternatives.next();
-        } else if (direction === 'prev') {
-            alternatives.prev();
-        }
-
-        this.notify(false);
-    }
-
-    /**
-     * Adds a new alternative message at the same level as the given message.
-     * @param {Message} message - The message to add an alternative to.
-     * @param {Object} newValue - The value for the new message.
-     * @returns {Message} The newly created message.
-     */
-    addAlternative(message, newValue) {
-        log(4, `Chatlog: addAlternative called for`, message);
-        const alternatives = this.findAlternativesForMessage(message);
-        if (!alternatives) return null;
-
-        const newMessage = alternatives.addMessage(newValue);
-        this.notify();
-        return newMessage;
     }
 
     /**
