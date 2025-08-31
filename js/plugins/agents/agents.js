@@ -15,21 +15,27 @@ import { renderAgentList, showAgentForm, hideAgentForm, renderFlow } from './age
 
 const INTERACTIVE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT', 'OPTION', 'BUTTON', 'LABEL'];
 
-const agentsPlugin = {
-    name: 'agents',
-    app: null,
-    store: null,
-    flowExecutor: null,
-    flowRunning: false, // State managed by the executor, but needed for checks
-    currentStepId: null, // State managed by the executor
-    stepCounter: 0, // State managed by the executor
-    maxSteps: 20, // State managed by the executor
-    dragInfo: { active: false, target: null, offsetX: 0, offsetY: 0 },
-    panInfo: { active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 },
-    connectionInfo: { active: false, fromNode: null, fromConnector: null, tempLine: null },
-    multiMessageInfo: { active: false, step: null, counter: 0, messageToBranchFrom: null }, // State managed by the executor
+class AgentsPlugin {
+    constructor() {
+        this.name = 'agents';
+        this.app = null;
+        this.store = null;
+        this.flowExecutor = null;
+        this.flowRunning = false;
+        this.currentStepId = null;
+        this.stepCounter = 0;
+        this.maxSteps = 20;
+        this.dragInfo = { active: false, target: null, offsetX: 0, offsetY: 0 };
+        this.panInfo = { active: false, startX: 0, startY: 0, scrollLeft: 0, scrollTop: 0 };
+        this.connectionInfo = { active: false, fromNode: null, fromConnector: null, tempLine: null };
+        this.multiMessageInfo = { active: false, step: null, counter: 0, messageToBranchFrom: null };
 
-    init: function(app) {
+        // Bind hook methods to this instance
+        this.hooks.onModifySystemPrompt = this.hooks.onModifySystemPrompt.bind(this);
+        this.hooks.onMessageComplete = this.hooks.onMessageComplete.bind(this);
+    }
+
+    init(app) {
         this.app = app;
         this.store = app.store;
         this.flowExecutor = new AgentFlowExecutor(this);
@@ -50,6 +56,25 @@ const agentsPlugin = {
 
         // Dynamically add tab panes
         const tabContent = document.getElementById('tab-content');
+        this.createAgentsTab(tabContent);
+        this.createFlowTab(tabContent);
+
+        // --- Event Listeners ---
+        this.setupEventListeners();
+
+        // --- Store Subscription ---
+        this.store.subscribe('currentChat', () => {
+            renderAgentList(this.store);
+            setTimeout(() => renderFlow(this.store), 0);
+        });
+
+        // --- Hooks ---
+        hooks.onCancel.push(() => {
+            if (this.flowRunning) this.flowExecutor.stopFlow('Execution cancelled by user.');
+        });
+    }
+
+    createAgentsTab(tabContent) {
         const agentsTabPane = document.createElement('div');
         agentsTabPane.classList.add('tab-pane');
         agentsTabPane.id = 'agents-tab-pane';
@@ -86,7 +111,9 @@ const agentsPlugin = {
             </div>
         `;
         tabContent.appendChild(agentsTabPane);
+    }
 
+    createFlowTab(tabContent) {
         const flowTabPane = document.createElement('div');
         flowTabPane.classList.add('tab-pane');
         flowTabPane.id = 'flow-tab-pane';
@@ -113,17 +140,18 @@ const agentsPlugin = {
             </div>
         `;
         tabContent.appendChild(flowTabPane);
+    }
 
-        // --- Event Listeners ---
+    setupEventListeners() {
         // Tab switching
-        document.getElementById('tabs').addEventListener('click', e => this.handleTabClick(e));
+        document.getElementById('tabs').addEventListener('click', this.handleTabClick.bind(this));
         // Agent UI
         document.getElementById('add-agent-btn').addEventListener('click', () => showAgentForm(null, this.store));
         document.getElementById('cancel-agent-form').addEventListener('click', hideAgentForm);
-        document.getElementById('agent-form').addEventListener('submit', e => this.saveAgent(e));
-        document.getElementById('agent-list').addEventListener('click', e => this.handleAgentListClick(e));
-        document.getElementById('export-agents-btn').addEventListener('click', () => this.exportAgents());
-        document.getElementById('import-agents-btn').addEventListener('click', () => this.importAgents());
+        document.getElementById('agent-form').addEventListener('submit', this.saveAgent.bind(this));
+        document.getElementById('agent-list').addEventListener('click', this.handleAgentListClick.bind(this));
+        document.getElementById('export-agents-btn').addEventListener('click', this.exportAgents.bind(this));
+        document.getElementById('import-agents-btn').addEventListener('click', this.importAgents.bind(this));
         // Flow UI
         document.getElementById('add-flow-step-btn-dropdown').addEventListener('click', (e) => {
             e.stopPropagation();
@@ -137,8 +165,8 @@ const agentsPlugin = {
             }
         });
         document.getElementById('run-flow-btn').addEventListener('click', () => this.flowExecutor.toggleFlow());
-        document.getElementById('export-flow-btn').addEventListener('click', () => this.exportFlow());
-        document.getElementById('import-flow-btn').addEventListener('click', () => this.importFlow());
+        document.getElementById('export-flow-btn').addEventListener('click', this.exportFlow.bind(this));
+        document.getElementById('import-flow-btn').addEventListener('click', this.importFlow.bind(this));
 
         window.addEventListener('click', (e) => {
             if (!e.target.matches('#add-flow-step-btn-dropdown')) {
@@ -149,23 +177,12 @@ const agentsPlugin = {
             }
         });
         const canvas = document.getElementById('flow-canvas');
-        canvas.addEventListener('mousedown', e => this.handleFlowCanvasMouseDown(e));
-        canvas.addEventListener('mousemove', e => this.handleFlowCanvasMouseMove(e));
-        canvas.addEventListener('mouseup', e => this.handleFlowCanvasMouseUp(e));
-        canvas.addEventListener('change', e => this.handleFlowStepChange(e));
-        canvas.addEventListener('click', e => this.handleFlowCanvasClick(e));
-
-        // --- Store Subscription ---
-        this.store.subscribe('currentChat', () => {
-            renderAgentList(this.store);
-            setTimeout(() => renderFlow(this.store), 0);
-        });
-
-        // --- Hooks ---
-        hooks.onCancel.push(() => {
-            if (this.flowRunning) this.flowExecutor.stopFlow('Execution cancelled by user.');
-        });
-    },
+        canvas.addEventListener('mousedown', this.handleFlowCanvasMouseDown.bind(this));
+        canvas.addEventListener('mousemove', this.handleFlowCanvasMouseMove.bind(this));
+        canvas.addEventListener('mouseup', this.handleFlowCanvasMouseUp.bind(this));
+        canvas.addEventListener('change', this.handleFlowStepChange.bind(this));
+        canvas.addEventListener('click', this.handleFlowCanvasClick.bind(this));
+    }
 
     // --- Event Handlers ---
     handleTabClick(e) {
@@ -178,7 +195,7 @@ const agentsPlugin = {
             e.target.classList.add('active');
             document.getElementById(`${tabName}-tab-pane`).classList.add('active');
         }
-    },
+    }
 
     saveAgent(e) {
         e.preventDefault();
@@ -212,7 +229,7 @@ const agentsPlugin = {
         }
         this.store.set('currentChat', { ...chat });
         hideAgentForm();
-    },
+    }
 
     handleAgentListClick(e) {
         const id = e.target.dataset.id;
@@ -230,7 +247,7 @@ const agentsPlugin = {
             }
         }
         this.store.set('currentChat', { ...chat });
-    },
+    }
 
     addFlowStep(type = 'simple-prompt') {
         const chat = this.store.get('currentChat');
@@ -253,7 +270,7 @@ const agentsPlugin = {
 
         chat.flow.steps.push(newStep);
         this.store.set('currentChat', { ...chat });
-    },
+    }
 
     handleFlowStepChange(e) {
         const id = e.target.dataset.id;
@@ -267,7 +284,7 @@ const agentsPlugin = {
         }
 
         this.store.set('currentChat', { ...chat });
-    },
+    }
 
     handleFlowCanvasClick(e) {
         const chat = this.store.get('currentChat');
@@ -309,7 +326,7 @@ const agentsPlugin = {
         if (chatModified) {
             this.store.set('currentChat', { ...chat });
         }
-    },
+    }
 
     handleFlowCanvasMouseDown(e) {
         const target = e.target;
@@ -344,7 +361,7 @@ const agentsPlugin = {
             this.panInfo.scrollTop = canvasWrapper.scrollTop;
             e.target.closest('#flow-canvas').classList.add('panning');
         }
-    },
+    }
 
     handleFlowCanvasMouseMove(e) {
         if (this.dragInfo.active) {
@@ -373,7 +390,7 @@ const agentsPlugin = {
             canvasWrapper.scrollLeft = this.panInfo.scrollLeft - dx;
             canvasWrapper.scrollTop = this.panInfo.scrollTop - dy;
         }
-    },
+    }
 
     handleFlowCanvasMouseUp(e) {
         if (this.dragInfo.active) {
@@ -413,7 +430,7 @@ const agentsPlugin = {
         this.dragInfo.active = false;
         this.connectionInfo.active = false;
         this.panInfo.active = false;
-    },
+    }
 
     exportFlow() {
         const chat = this.store.get('currentChat');
@@ -423,7 +440,7 @@ const agentsPlugin = {
         }
         const filenameBase = `flow_${chat.title.replace(/\s/g, '_')}`;
         exportJson(chat.flow, filenameBase);
-    },
+    }
 
     importFlow() {
         importJson('application/json', (importedFlow) => {
@@ -435,7 +452,7 @@ const agentsPlugin = {
                 triggerError('Invalid flow file format.');
             }
         });
-    },
+    }
 
     exportAgents() {
         const chat = this.store.get('currentChat');
@@ -445,7 +462,7 @@ const agentsPlugin = {
         }
         const filenameBase = `agents_${chat.title.replace(/\s/g, '_')}`;
         exportJson(chat.agents, filenameBase);
-    },
+    }
 
     importAgents() {
         importJson('application/json', (importedAgents) => {
@@ -470,18 +487,16 @@ const agentsPlugin = {
 
             this.store.set('currentChat', { ...chat });
         });
-    },
+    }
 
-
-    // --- Hooks Definition ---
-    hooks: {
-        onModifySystemPrompt: (systemContent) => {
+    hooks = {
+        onModifySystemPrompt(systemContent) {
             // Always remove any existing agent definition first.
             let newSystemContent = systemContent
                 .replace(/\n\n--- AGENT DEFINITION ---\n[\s\S]*?\n--- END AGENT DEFINITION ---/g, '')
                 .replace(/\n\n--- AGENT TOOLS ---\n[\s\S]*?\n--- END AGENT TOOLS ---/g, '');
 
-            const store = agentsPlugin.store;
+            const store = this.store;
             if (!store) return newSystemContent;
 
             const chat = store.get('currentChat');
@@ -501,41 +516,41 @@ const agentsPlugin = {
             }
             return newSystemContent;
         },
-        onMessageComplete: async (message, chatlog, chatbox) => {
+        async onMessageComplete(message, chatlog, chatbox) {
             if (!message.value) return; // Defend against null message value
             const { toolCalls } = parseFunctionCalls(message.value.content);
 
             // --- Multi-Message Continuation ---
-            if (agentsPlugin.flowRunning && agentsPlugin.multiMessageInfo.active) {
+            if (this.flowRunning && this.multiMessageInfo.active) {
                 if (toolCalls.length > 0) return; // Wait for tool calls to complete
 
-                const { step, counter, messageToBranchFrom } = agentsPlugin.multiMessageInfo;
+                const { step, counter, messageToBranchFrom } = this.multiMessageInfo;
                 if (counter < step.count) {
-                    agentsPlugin.multiMessageInfo.counter++;
-                    const chat = agentsPlugin.store.get('currentChat');
+                    this.multiMessageInfo.counter++;
+                    const chat = this.store.get('currentChat');
                     chat.activeAgentId = step.agentId;
-                    agentsPlugin.store.set('currentChat', { ...chat });
-                    agentsPlugin.app.chatUIManager.addMessageWithoutContent(messageToBranchFrom);
+                    this.store.set('currentChat', { ...chat });
+                    this.app.chatUIManager.addMessageWithoutContent(messageToBranchFrom);
                     hooks.onGenerateAIResponse.forEach(fn => fn({}, chatlog));
                     return;
                 } else {
-                    agentsPlugin.multiMessageInfo = { active: false, step: null, counter: 0, messageToBranchFrom: null };
+                    this.multiMessageInfo = { active: false, step: null, counter: 0, messageToBranchFrom: null };
                 }
             }
 
             // --- Agent Tool Call Processing ---
             const context = {
-                app: agentsPlugin.app,
-                store: agentsPlugin.store,
+                app: this.app,
+                store: this.store,
             };
             await processToolCalls(message, chatlog, chatbox, filterAgentCalls, executeAgentCall, context);
 
             // --- Flow Continuation ---
             // Re-parse *after* processToolCalls might have added its own messages.
             const newToolCalls = parseFunctionCalls(message.value.content).toolCalls;
-            if (agentsPlugin.flowRunning && newToolCalls.length === 0) {
-                const currentChat = agentsPlugin.store.get('currentChat');
-                const currentStep = currentChat.flow.steps.find(s => s.id === agentsPlugin.currentStepId);
+            if (this.flowRunning && newToolCalls.length === 0) {
+                const currentChat = this.store.get('currentChat');
+                const currentStep = currentChat.flow.steps.find(s => s.id === this.currentStepId);
 
                 if (currentStep && currentStep.type === 'prompt-and-clear') {
                     const activeMessages = chatlog.getActiveMessageValues();
@@ -549,16 +564,17 @@ const agentsPlugin = {
                 }
 
                 const { steps, connections } = currentChat.flow;
-                const nextStep = agentsPlugin.flowExecutor.getNextStep(agentsPlugin.currentStepId);
+                const nextStep = this.flowExecutor.getNextStep(this.currentStepId);
                 if (nextStep) {
-                    agentsPlugin.flowExecutor.executeStep(nextStep);
+                    this.flowExecutor.executeStep(nextStep);
                 } else {
-                    agentsPlugin.flowExecutor.stopFlow('Flow execution complete.');
+                    this.flowExecutor.stopFlow('Flow execution complete.');
                 }
             }
         }
     }
-};
+}
+
 function filterAgentCalls(call) {
     return call.name.endsWith('_agent');
 }
@@ -614,4 +630,6 @@ async function executeAgentCall(call, context) {
         return { id: call.id, error: error.message || 'Unknown error during agent execution.' };
     }
 }
+
+const agentsPlugin = new AgentsPlugin();
 export { agentsPlugin };

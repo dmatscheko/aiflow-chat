@@ -46,6 +46,18 @@ class Message {
     }
 
     /**
+     * Sets the role of the message.
+     * @param {string} role - The new role.
+     */
+    setRole(role) {
+        log(5, 'Message: setRole called');
+        if (this.value) {
+            this.value.role = role;
+        }
+        this.cache = null;
+    }
+
+    /**
      * Sets the content of the message.
      * @param {string} content - The new content.
      */

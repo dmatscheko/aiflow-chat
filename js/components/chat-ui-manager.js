@@ -8,7 +8,6 @@ import { ChatBox } from './chatbox.js';
 import { Chatlog, Message } from './chatlog.js';
 import { log } from '../utils/logger.js';
 import { hooks } from '../hooks.js';
-import { agentsPlugin } from '../plugins/agents/agents.js';
 
 /**
  * @class ChatUIManager
@@ -18,13 +17,11 @@ class ChatUIManager {
     /**
      * @param {import('../state/store.js').default} store - The application's state store.
      * @param {import('../services/ai-service.js').AIService} aiService - The AI service.
-     * @param {Object} agentsPlugin - The agents plugin instance.
      */
-    constructor(store, aiService, agentsPlugin) {
+    constructor(store, aiService) {
         log(3, 'ChatUIManager: Constructor called');
         this.store = store;
         this.aiService = aiService;
-        this.agentsPlugin = agentsPlugin;
         this.editingPos = null;
         this.chatlog = null;
         this.chatBox = new ChatBox(store, this);
@@ -101,6 +98,17 @@ class ChatUIManager {
     }
 
     /**
+     * Updates the role of a message.
+     * @param {Message} message - The message to update.
+     * @param {string} newRole - The new role.
+     */
+    updateMessageRole(message, newRole) {
+        if (!this.chatlog) return;
+        message.setRole(newRole);
+        this.chatlog.notify();
+    }
+
+    /**
      * Sets a message into edit mode, changing its appearance to '🤔...'.
      * @param {Message} message - The message to put into edit mode.
      */
@@ -149,35 +157,27 @@ class ChatUIManager {
         }
     }
 
-    /**
-     * Submits a user message, handles editing, and triggers AI response.
-     * @param {string} message - The message to submit.
-     * @param {string} userRole - The role of the user.
-     */
-    async submitMessage(message, userRole) {
-        log(3, 'ChatUIManager: submitMessage called with role', userRole);
-        if (!this.chatlog) return;
-
+    async _handleEditSubmission(message, userRole) {
         const editedPos = this.editingPos;
-        if (editedPos !== null) {
-            log(4, 'ChatUIManager: Editing message at pos', editedPos);
-            const msg = this.chatlog.getNthMessage(editedPos);
-            if (msg) {
-                msg.value.role = userRole;
-                this.updateMessageText(msg, message.trim());
-            }
-            this.resetEditing();
-            document.getElementById('user').checked = true;
-            const editedMsg = this.chatlog.getNthMessage(editedPos);
-            if (editedMsg.value.role !== 'assistant' && editedMsg.answerAlternatives === null && this.chatlog.getFirstMessage() !== editedMsg) {
-                this.addMessageWithContent({ role: 'assistant', content: null });
-                await this.aiService.generateAIResponse(this.chatlog, this.chatBox, {});
-            }
-            return;
+        log(4, 'ChatUIManager: Editing message at pos', editedPos);
+        const msg = this.chatlog.getNthMessage(editedPos);
+        if (msg) {
+            this.updateMessageRole(msg, userRole);
+            this.updateMessageText(msg, message.trim());
         }
+        this.resetEditing();
+        document.getElementById('user').checked = true;
 
+        const editedMsg = this.chatlog.getNthMessage(editedPos);
+        if (editedMsg.value.role !== 'assistant' && editedMsg.answerAlternatives === null && this.chatlog.getFirstMessage() !== editedMsg) {
+            this.addMessageWithContent({ role: 'assistant', content: null });
+            await this.aiService.generateAIResponse(this.chatlog, this.chatBox, {});
+        }
+    }
+
+    async _handleNewSubmission(message, userRole) {
         if (!this.store.get('regenerateLastAnswer') && !message) return;
-        if (this.store.get('receiving') && !this.agentsPlugin.flowRunning) return;
+        if (this.store.get('receiving')) return;
 
         if (userRole === 'assistant') {
             let modifiedContent = message;
@@ -210,6 +210,22 @@ class ChatUIManager {
 
         // Final update to ensure UI is consistent after response generation, especially for flows.
         this.chatBox.update();
+    }
+
+    /**
+     * Submits a user message, handles editing, and triggers AI response.
+     * @param {string} message - The message to submit.
+     * @param {string} userRole - The role of the user.
+     */
+    async submitMessage(message, userRole) {
+        log(3, 'ChatUIManager: submitMessage called with role', userRole);
+        if (!this.chatlog) return;
+
+        if (this.editingPos !== null) {
+            await this._handleEditSubmission(message, userRole);
+        } else {
+            await this._handleNewSubmission(message, userRole);
+        }
     }
 }
 

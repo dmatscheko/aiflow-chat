@@ -53,7 +53,7 @@ class App {
         this.apiService = new ApiService(this.store);
         this.chatService = new ChatService(this.store, this.configService);
         this.aiService = new AIService(this.store, this.configService, this.apiService);
-        this.chatUIManager = new ChatUIManager(this.store, this.aiService, agentsPlugin);
+        this.chatUIManager = new ChatUIManager(this.store, this.aiService);
 
         this.settingsPanel = new SettingsPanel({
             configService: this.configService,
@@ -231,6 +231,11 @@ class App {
             log(4, 'App: Submit button clicked, receiving:', this.store.get('receiving'));
             if (this.store.get('receiving')) {
                 this.store.get('controller').abort();
+                return;
+            }
+            if (agentsPlugin.flowRunning) {
+                log(2, 'App: submission prevented, flow is running.');
+                triggerError('Cannot submit messages while a flow is running.');
                 return;
             }
             this.chatUIManager.submitMessage(this.ui.messageEl.value, document.querySelector('input[name="user_role"]:checked').value);
