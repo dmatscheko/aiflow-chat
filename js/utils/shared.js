@@ -14,13 +14,13 @@ import { hooks } from '../hooks.js';
  *
  * @param {import('../components/chatlog.js').Message} message - The message containing the tool calls.
  * @param {import('../components/chatlog.js').Chatlog} chatlog - The chatlog instance.
- * @param {import('../components/chatbox.js').ChatBox} chatbox - The chatbox instance.
+ * @param {import('../managers/ui-manager.js').default} chatbox - The UIManager instance (acting as chatbox).
  * @param {function(object): boolean} filterCallback - A function to filter which tool calls to process.
  * @param {function(object): Promise<object>} executeCallback - An async function to execute a tool call and return the result.
  * @param {object} context - Additional context to pass to the callbacks.
  * @param {Array<object>} [tools=[]] - A list of available tools with their schemas.
  */
-export async function processToolCalls(message, chatlog, uiManager, filterCallback, executeCallback, context, tools = []) {
+export async function processToolCalls(message, chatlog, chatbox, filterCallback, executeCallback, context, tools = []) {
     if (message.value.role !== 'assistant') return;
 
     const { toolCalls, positions, isSelfClosings } = parseFunctionCalls(message.value.content, tools);
@@ -53,7 +53,9 @@ export async function processToolCalls(message, chatlog, uiManager, filterCallba
         startTag = startTag.slice(0, endSlice) + insert + endTag;
         content = content.slice(0, pos.start) + startTag + content.slice(gtIndex + 1);
     }
-    uiManager.updateMessageContent(message, content);
+    message.value.content = content;
+    message.cache = null;
+    chatbox.render(false);
 
     let toolContents = '';
     toolResults.forEach((tr, i) => {
@@ -64,8 +66,9 @@ export async function processToolCalls(message, chatlog, uiManager, filterCallba
     });
 
     if (toolContents) {
-        uiManager.addMessage({ role: 'tool', content: toolContents });
-        uiManager.addStreamingMessage('assistant');
+        chatlog.addMessage({ role: 'tool', content: toolContents });
+        chatlog.addMessage(null);
+        chatbox.render();
         hooks.onGenerateAIResponse.forEach(fn => fn({}, chatlog));
     }
 }
