@@ -7,7 +7,6 @@
 import { Chatlog, Alternatives } from '../components/chatlog.js';
 import { firstPrompt } from '../config.js';
 import { log, triggerError } from '../utils/logger.js';
-import { getDatePrompt, resetEditing } from '../utils/chat.js';
 import { hooks } from '../hooks.js';
 
 /**
@@ -30,6 +29,13 @@ class ChatService {
      */
     init() {
         this.loadChats();
+        const initialId = this.currentChatId || this.chats[0]?.id;
+        if (this.chats.length === 0) {
+            this.createNewChat();
+        } else {
+            this.switchChat(initialId);
+        }
+
         this.store.subscribe('currentChat', (chat) => {
             if (chat) {
                 const index = this.chats.findIndex(c => c.id === chat.id);
@@ -50,10 +56,13 @@ class ChatService {
         const id = Date.now().toString();
         const title = 'New Chat';
         const chatlog = new Chatlog();
-        chatlog.addMessage({ role: 'system', content: firstPrompt + getDatePrompt() });
+        const now = new Date();
+        const datePrompt = `\n\nKnowledge cutoff: none\nCurrent date: ${now.toISOString().slice(0, 10)}\nCurrent time: ${now.toTimeString().slice(0, 5)}`;
+        chatlog.addMessage({ role: 'system', content: firstPrompt + datePrompt });
         const newChat = { id, title, chatlog, modelSettings: {}, agents: [], flow: { steps: [], connections: [] } };
         this.chats.push(newChat);
         this.store.set('chats', this.chats);
+        this.switchChat(id);
         return newChat;
     }
 
@@ -65,6 +74,7 @@ class ChatService {
         log(3, 'ChatService: switchChat called for id', id);
         if (this.currentChatId === id) return;
 
+        // The resetEditing logic will be handled by the UIManager when a chat is switched.
         this.persistChats();
         this.currentChatId = id;
         const currentChat = this.chats.find(c => c.id === id);
@@ -72,27 +82,22 @@ class ChatService {
     }
 
     /**
-    /**
      * Deletes a chat session.
      * @param {string} chatId - The ID of the chat to delete.
-     * @returns {string|null} The ID of the next chat to select, or 'new' if a new chat should be created, or null if no switch is needed.
      */
     deleteChat(chatId) {
         log(4, 'ChatService: deleteChat called for', chatId);
         this.chats = this.chats.filter(c => c.id !== chatId);
         this.store.set('chats', this.chats);
 
-        let nextChatId = null;
         if (this.currentChatId === chatId) {
             if (this.chats.length > 0) {
-                nextChatId = this.chats[0].id;
+                this.switchChat(this.chats[0].id);
             } else {
-                // Special value to indicate that a new chat should be created.
-                nextChatId = 'new';
+                this.createNewChat();
             }
         }
         this.persistChats();
-        return nextChatId;
     }
 
     /**
@@ -172,7 +177,9 @@ class ChatService {
                     log(4, 'ChatService: Adding missing system prompt in loadChats');
                     const oldRoot = chatlog.rootAlternatives;
                     chatlog.rootAlternatives = new Alternatives();
-                    const sysMsg = chatlog.rootAlternatives.addMessage({ role: 'system', content: firstPrompt + getDatePrompt() });
+                    const now = new Date();
+                    const datePrompt = `\n\nKnowledge cutoff: none\nCurrent date: ${now.toISOString().slice(0, 10)}\nCurrent time: ${now.toTimeString().slice(0, 5)}`;
+                    const sysMsg = chatlog.rootAlternatives.addMessage({ role: 'system', content: firstPrompt + datePrompt });
                     sysMsg.answerAlternatives = oldRoot;
                 }
                 const flow = chatData.flow || { steps: [], connections: [] };
@@ -189,7 +196,7 @@ class ChatService {
                     rootData = parsed.rootAlternatives;
                 } else {
                     const tempLog = new Chatlog();
-                    parsed.forEach(msg => addMessageToChat(tempLog, msg));
+                    parsed.forEach(msg => tempLog.addMessage(msg));
                     rootData = tempLog.toJSON();
                 }
                 const chatlog = new Chatlog();
@@ -221,10 +228,8 @@ class ChatService {
     }
 
     /**
-    /**
      * Imports a chat from a JSON file content.
      * @param {string} fileContent - The content of the JSON file.
-     * @returns {Object|null} The imported chat object, or null on error.
      */
     importChat(fileContent) {
         try {
@@ -256,15 +261,13 @@ class ChatService {
 
             const flow = loaded.flow || { steps: [], connections: [] };
             if (!flow.connections) flow.connections = [];
-            const newChat = { id, title, chatlog, modelSettings, agents, flow };
-            this.chats.push(newChat);
+            this.chats.push({ id, title, chatlog, modelSettings, agents, flow });
             this.store.set('chats', this.chats);
+            this.switchChat(id);
             this.persistChats();
-            return newChat;
         } catch (error) {
             log(1, 'ChatService: Invalid chatlog file', error);
             triggerError('Invalid chatlog file. Failed to parse loaded chatlog:', error);
-            return null;
         }
     }
 }
