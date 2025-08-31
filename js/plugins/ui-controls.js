@@ -6,6 +6,7 @@
 
 import { triggerError, log } from '../utils/logger.js';
 import { createControlButton } from '../utils/ui.js';
+import { resetEditing, addAlternativeToChat } from '../utils/chat.js';
 import { hooks } from '../hooks.js';
 
 /**
@@ -25,23 +26,22 @@ export const alternativeNavigationPlugin = {
          * Renders navigation controls for alternative messages.
          * @param {HTMLElement} container - The container for the controls.
          * @param {Message} message - The message object.
-         * @param {import('../managers/ui-manager.js').default} uiManager - The UIManager instance.
-         * @param {import('../managers/chat-log-manager.js').default} chatLogManager - The ChatLogManager instance.
+         * @param {Chatlog} chatlog - The chatlog instance.
          */
-        onRenderMessageControls: function(container, message, uiManager, chatLogManager) {
-            const alternatives = chatLogManager.findAlternativesForMessage(message);
+        onRenderMessageControls: function(container, message, chatlog, uiManager) {
+            const alternatives = chatlog.findAlternativesForMessage(message);
             if (!alternatives || alternatives.messages.length <= 1) return;
 
             const prevBtn = createControlButton(
                 'Previous Message',
                 '<svg width="16" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 7.766c0-1.554-1.696-2.515-3.029-1.715l-7.056 4.234c-1.295.777-1.295 2.653 0 3.43l7.056 4.234c1.333.8 3.029-.16 3.029-1.715V7.766zM9.944 12L17 7.766v8.468L9.944 12zM6 6a1 1 0 0 1 1 1v10a1 1 0 1 1-2 0V7a1 1 0 0 1 1-1z" fill="currentColor"/></svg>',
-                () => chatLogManager.cycleAlternatives(message, 'prev')
+                () => uiManager.cycleAlternatives(message, 'prev')
             );
 
             const nextBtn = createControlButton(
                 'Next Message',
                 '<svg width="16" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7.766c0-1.554 1.696-2.515 3.029-1.715l7.056 4.234c1.295.777 1.295 2.653 0 3.43L8.03 17.949c-1.333.8-3.029-.16-3.029-1.715V7.766zM14.056 12L7 7.766v8.468L14.056 12zM18 6a1 1 0 0 1 1 1v10a1 1 0 1 1-2 0V7a1 1 0 0 1 1-1z" fill="currentColor"/></svg>',
-                () => chatLogManager.cycleAlternatives(message, 'next')
+                () => uiManager.cycleAlternatives(message, 'next')
             );
 
             const status = document.createElement('span');
@@ -69,10 +69,10 @@ export const messageModificationPlugin = {
          * Renders modification controls for a message.
          * @param {HTMLElement} container - The container for the controls.
          * @param {Message} message - The message object.
-         * @param {import('../managers/ui-manager.js').default} uiManager - The UIManager instance.
-         * @param {import('../managers/chat-log-manager.js').default} chatLogManager - The ChatLogManager instance.
+         * @param {Chatlog} chatlog - The chatlog instance.
+         * @param {ChatBox} chatbox - The ChatBox instance.
          */
-        onRenderMessageControls: function(container, message, uiManager, chatLogManager) {
+        onRenderMessageControls: function(container, message, chatlog, uiManager) {
             const store = uiManager.store;
             const ui = store.get('ui');
             const messageInput = ui.messageEl;
@@ -82,20 +82,20 @@ export const messageModificationPlugin = {
                 '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H5a1 1 0 1 1 0-2h6V5a1 1 0 0 1 1-1z" fill="currentColor"/></svg>',
                 () => {
                     log(4, 'Add button clicked for message', message);
-                    uiManager.resetEditing();
+                    resetEditing(store, chatlog, uiManager.chatBox);
                     if (message.value.role === 'assistant') {
                         // Regenerate AI message
-                        chatLogManager.addAlternative(message, { role: message.value.role, content: null });
-                        hooks.onGenerateAIResponse.forEach(fn => fn({}, chatLogManager));
+                        uiManager.addStreamingMessage(message.value.role, message);
+                        hooks.onGenerateAIResponse.forEach(fn => fn({}, chatlog));
                     } else {
                         if (messageInput.value !== '' && messageInput.value !== message.value.content.trim()) {
                             triggerError("Chat input is not empty.");
                             return;
                         }
                         // Add a new editable alternative for user/system/tool messages with placeholder
-                        const pos = chatLogManager.getMessagePos(message);
+                        const pos = chatlog.getMessagePos(message);
                         const originalContent = message.value.content;
-                        chatLogManager.addAlternative(message, { role: message.value.role, content: null });
+                        uiManager.addAlternative({ role: message.value.role, content: null }, message);
                         messageInput.value = originalContent ? originalContent.trim() : '';
                         messageInput.dispatchEvent(new Event('input', { bubbles: true }));
                         store.set('editingPos', pos);
@@ -115,17 +115,14 @@ export const messageModificationPlugin = {
                         triggerError("Chat input is not empty.");
                         return;
                     }
-                    uiManager.resetEditing();
+                    resetEditing(store, chatlog, uiManager.chatBox);
                     messageInput.value = message.value.content.trim();
                     messageInput.dispatchEvent(new Event('input', { bubbles: true }));
 
-                    const pos = chatLogManager.getMessagePos(message);
-                    store.set('editingPos', pos);
+                    uiManager.setEditMode(message);
 
                     const roleRadio = document.getElementById(message.value.role);
                     if (roleRadio) roleRadio.checked = true;
-
-                    uiManager.setMessageToEditMode(message);
 
                     messageInput.focus();
                 }
@@ -136,7 +133,7 @@ export const messageModificationPlugin = {
                 '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2h4a1 1 0 1 1 0 2h-1.069l-.867 12.142A2 2 0 0 1 17.069 22H6.93a2 2 0 0 1-1.995-1.858L4.07 8H3a1 1 0 0 1 0-2h4V4zm2 2h6V4H9v2zM6.074 8l.857 12H17.07l.857-12H6.074zM10 10a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1zm4 0a1 1 0 0 1 1 1v6a1 1 0 1 1-2 0v-6a1 1 0 0 1 1-1z" fill="currentColor"/></svg>',
                 () => {
                     log(4, 'Delete button clicked for message', message);
-                    chatLogManager.deleteMessage(message);
+                    uiManager.deleteMessage(message, true);
                 }
             );
 

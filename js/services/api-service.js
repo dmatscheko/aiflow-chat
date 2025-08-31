@@ -1,12 +1,19 @@
 /**
- * @fileoverview Handles all network communication with the AI backend.
+ * @fileoverview Service for handling all interactions with the OpenAI-compatible API.
  */
 
 'use strict';
 
 import { log, triggerError } from '../utils/logger.js';
 
-class NetworkService {
+/**
+ * @class ApiService
+ * Handles all interactions with the OpenAI-compatible API.
+ */
+class ApiService {
+    /**
+     * @param {import('../state/store.js').default} store - The application's state store.
+     */
     constructor(store) {
         this.store = store;
     }
@@ -18,7 +25,7 @@ class NetworkService {
      * @returns {Promise<Array<Object>>} A promise that resolves to an array of model objects.
      */
     async getModels(endpoint, apiKey) {
-        log(3, 'NetworkService: getModels called');
+        log(3, 'ApiService: getModels called');
         const modelsUrl = endpoint.replace(/\/chat\/completions$/, '/models');
         try {
             const headers = { 'Content-Type': 'application/json' };
@@ -36,7 +43,7 @@ class NetworkService {
             const models = (data.data || []).sort((a, b) => a.id.localeCompare(b.id));
             return models;
         } catch (err) {
-            log(1, 'NetworkService: Failed to load models', err);
+            log(1, 'ApiService: Failed to load models', err);
             triggerError(`Failed to load models: ${err.message}`);
             throw err;
         }
@@ -51,7 +58,7 @@ class NetworkService {
      * @returns {Promise<ReadableStreamDefaultReader>} A promise that resolves to a stream reader.
      */
     async streamAPIResponse(payload, endpoint, apiKey, abortSignal) {
-        log(4, 'NetworkService: streamAPIResponse called with payload model', payload.model);
+        log(4, 'ApiService: streamAPIResponse called with payload model', payload.model);
         const headers = {
             'Content-Type': 'application/json'
         };
@@ -67,7 +74,7 @@ class NetworkService {
         });
 
         if (!response.ok) {
-            log(1, 'NetworkService: API response not ok', response.status, response.statusText);
+            log(1, 'ApiService: API response not ok', response.status, response.statusText);
             const errorBody = await response.text();
             let errorMessage = `API error: ${response.statusText} (${response.status})`;
             if (errorBody) {
@@ -91,4 +98,4 @@ class NetworkService {
     }
 }
 
-export default NetworkService;
+export default ApiService;

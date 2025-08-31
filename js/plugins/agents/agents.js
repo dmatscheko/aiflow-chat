@@ -8,7 +8,6 @@ import { log, triggerError } from '../../utils/logger.js';
 import { hooks } from '../../hooks.js';
 import { stepTypes } from './agent-step-definitions.js';
 import { parseFunctionCalls } from '../../utils/parsers.js';
-import { addAlternativeToChat } from '../../utils/chat.js';
 import { createControlButton } from '../../utils/ui.js';
 import { processToolCalls, exportJson, importJson } from '../../utils/shared.js';
 import { defaultEndpoint } from '../../config.js';
@@ -758,7 +757,7 @@ const agentsPlugin = {
             }
             return newSystemContent;
         },
-        onMessageComplete: async (message, chatlog, chatbox) => {
+        onMessageComplete: async (message, chatlog, uiManager) => {
             if (!message.value) return; // Defend against null message value
             const { toolCalls } = parseFunctionCalls(message.value.content);
 
@@ -772,7 +771,7 @@ const agentsPlugin = {
                     const chat = agentsPlugin.store.get('currentChat');
                     chat.activeAgentId = step.agentId;
                     agentsPlugin.store.set('currentChat', { ...chat });
-                    addAlternativeToChat(chatlog, messageToBranchFrom, null);
+                    uiManager.addAlternative({ role: 'assistant', content: null }, messageToBranchFrom);
                     agentsPlugin.app.generateAIResponse({}, chatlog);
                     return;
                 } else {
@@ -785,7 +784,7 @@ const agentsPlugin = {
                 app: agentsPlugin.app,
                 store: agentsPlugin.store,
             };
-            await processToolCalls(message, chatlog, chatbox, filterAgentCalls, executeAgentCall, context);
+            await processToolCalls(message, chatlog, uiManager, filterAgentCalls, executeAgentCall, context);
 
             // --- Flow Continuation ---
             // Re-parse *after* processToolCalls might have added its own messages.
@@ -840,8 +839,8 @@ async function executeAgentCall(call, context) {
             { role: 'system', content: agentToCall.systemPrompt },
             { role: 'user', content: prompt }
         ],
-        temperature: Number(app.ui.temperatureEl.value),
-        top_p: Number(app.ui.topPEl.value),
+        temperature: app.configService.getModelSettings().temperature,
+        top_p: app.configService.getModelSettings().top_p,
         stream: true
     };
 

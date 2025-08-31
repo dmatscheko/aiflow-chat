@@ -5,13 +5,14 @@
 'use strict';
 
 import Store from './state/store.js';
-import NetworkService from './services/network-service.js';
+import ApiService from './services/api-service.js';
 import ChatService from './services/chat-service.js';
 import ConfigService from './services/config-service.js';
 import SettingsPanel from './components/settings-panel.js';
-import UIManager from './managers/ui-manager.js';
+import ChatUIManager from './services/ui-manager.js';
 import ChatListView from './components/chatlist-view.js';
 import { log, triggerError } from './utils/logger.js';
+import { resetEditing } from './utils/chat.js';
 import { showLogin, showLogout } from './utils/ui.js';
 import { exportJson, importJson } from './utils/shared.js';
 import { hooks, registerPlugin } from './hooks.js';
@@ -50,7 +51,7 @@ class App {
         });
 
         this.configService = new ConfigService(this.store);
-        this.networkService = new NetworkService(this.store);
+        this.apiService = new ApiService(this.store);
         this.chatService = new ChatService(this.store, this.configService);
 
         this.settingsPanel = new SettingsPanel({
@@ -58,28 +59,26 @@ class App {
             app: this,
         });
 
+        this.uiManager = new ChatUIManager(this.store, this.chatService, this.apiService, this.configService);
+
         this.chatListView = new ChatListView({
-            onChatSelected: (chatId) => this.chatService.switchChat(chatId),
-            onChatDeleted: (chatId) => this.chatService.deleteChat(chatId),
+            onChatSelected: (chatId) => this.uiManager.switchChat(chatId),
+            onChatDeleted: (chatId) => this.uiManager.deleteChat(chatId),
             onTitleEdited: (chatId, newTitle) => this.chatService.updateChatTitle(chatId, newTitle),
         });
-
-        this.chatLogManager = new ChatLogManager(this.store);
-        this.uiManager = new UIManager(this.store, this.chatLogManager);
 
         this.store.subscribe('receiving', (val) => {
             this.ui.submitButton.innerHTML = val ? messageStop : messageSubmit;
         });
         this.store.subscribe('chats', (chats) => this.chatListView.render(chats, this.store.get('currentChat')));
         this.store.subscribe('currentChat', (chat) => {
-            this.onChatSwitched(chat);
             this.chatListView.render(this.store.get('chats'), chat);
         });
 
         if (window.innerWidth <= 1037) {
             document.getElementById('chatListContainer').classList.add('hidden');
         }
-        hooks.onGenerateAIResponse.push((options, chatLogManager) => this.generateAIResponse(options, chatLogManager));
+        hooks.onGenerateAIResponse.push(this.uiManager.generateAIResponse.bind(this.uiManager));
     }
 
     /**
@@ -90,9 +89,18 @@ class App {
         this.registerPlugins();
         this.setupGlobalErrorHandlers();
 
-        this.uiManager.onUpdate = () => this.chatService.persistChats();
-
         this.chatService.init();
+
+        let chatIdToSelect = this.chatService.currentChatId;
+        if (!chatIdToSelect) {
+            if (this.chatService.chats.length === 0) {
+                const newChat = this.chatService.createNewChat();
+                chatIdToSelect = newChat.id;
+            } else {
+                chatIdToSelect = this.chatService.chats[0].id;
+            }
+        }
+        this.uiManager.switchChat(chatIdToSelect);
 
         this.settingsPanel.setApiKey(this.configService.getItem('apiKey', ''));
         this.settingsPanel.setEndpoint(this.configService.getItem('endpoint', defaultEndpoint));
@@ -166,19 +174,6 @@ class App {
         }
     }
 
-    /**
-     * Handles chat switching.
-     * @param {Object} chat - The chat to switch to.
-     */
-    onChatSwitched(chat) {
-        log(3, 'App: onChatSwitched called for chat', chat?.id);
-        const newChatlog = chat ? chat.chatlog : null;
-        this.chatLogManager.setChatlog(newChatlog);
-        // The UIManager will be updated via its subscription to the ChatLogManager
-        if (window.innerWidth <= 1037) {
-            document.getElementById('chatListContainer').classList.add('hidden');
-        }
-    }
 
     /**
      * Fetches models from the API.
@@ -192,7 +187,7 @@ class App {
             return false;
         }
         try {
-            const models = await this.networkService.getModels(endpoint, apiKey);
+            const models = await this.apiService.getModels(endpoint, apiKey);
             this.configService.setItem('models', JSON.stringify(models));
 
             if (models && models.length > 0) {
@@ -234,7 +229,7 @@ class App {
                 this.store.get('controller').abort();
                 return;
             }
-            this.submitUserMessage(this.ui.messageEl.value, document.querySelector('input[name="user_role"]:checked').value);
+            this.uiManager.submitMessage(this.ui.messageEl.value, document.querySelector('input[name="user_role"]:checked').value);
             document.getElementById('user').checked = true;
             this.ui.messageEl.value = '';
             this.ui.messageEl.style.height = 'auto';
@@ -259,15 +254,12 @@ class App {
         document.addEventListener('keydown', event => {
             if (event.key === 'Escape') {
                 this.store.get('controller').abort();
-                this.uiManager.resetEditing();
+                resetEditing(this.store, this.uiManager.chatBox.chatlog, this.uiManager.chatBox);
             }
         });
         this.ui.newChatButton.addEventListener('click', () => {
             log(4, 'App: New chat button clicked');
-            if (this.store.get('receiving')) this.store.get('controller').abort();
-            this.ui.messageEl.value = startMessage;
-            this.ui.messageEl.style.height = 'auto';
-            this.chatService.createNewChat();
+            this.uiManager.createNewChat();
         });
         this.ui.saveChatButton.addEventListener('click', () => {
             log(4, 'App: Save chat button clicked');
@@ -286,7 +278,10 @@ class App {
         this.ui.loadChatButton.addEventListener('click', () => {
             log(4, 'App: Load chat button clicked');
             importJson('application/json', (jsonContent) => {
-                this.chatService.importChat(JSON.stringify(jsonContent));
+                const newChat = this.chatService.importChat(JSON.stringify(jsonContent));
+                if (newChat) {
+                    this.uiManager.switchChat(newChat.id);
+                }
             });
         });
 
@@ -301,187 +296,7 @@ class App {
      * @param {Object} [options={}] - Options for the generation.
      * @param {Chatlog} [targetChatlog=this.chatlog] - The chatlog to generate a response for.
      */
-    async generateAIResponse(options = {}, targetChatLogManager = this.chatLogManager) {
-        log(3, 'App: generateAIResponse called');
-        if (this.store.get('receiving')) return;
 
-        // 1. Get settings from all scopes
-        const globalSettings = this.configService.getModelSettings();
-        const currentChat = this.store.get('currentChat');
-        const chatSettings = currentChat?.modelSettings || {};
-
-        let agentSettings = {};
-        const activeAgentId = currentChat?.activeAgentId;
-        if (activeAgentId) {
-            const agent = currentChat.agents.find(a => a.id === activeAgentId);
-            if (agent && agent.useCustomModelSettings) {
-                agentSettings = agent.modelSettings || {};
-            }
-        }
-
-        // 2. Merge settings (agent > chat > global > options)
-        const mergedSettings = { ...globalSettings, ...chatSettings, ...agentSettings, ...options };
-
-        if (!mergedSettings.model) {
-            log(2, 'App: No model selected');
-            triggerError('Please select a model.');
-            return;
-        }
-
-        this.store.set('receiving', true);
-        const targetMessage = targetChatLogManager.getLastMessage();
-        try {
-            let payload = {
-                messages: targetChatLogManager.getActiveMessageValues().filter(m => m.content !== null),
-                stream: true
-            };
-
-            // 3. Apply settings to payload via hook
-            hooks.onModelSettings.forEach(fn => fn(payload, mergedSettings));
-
-            // Don't send a request if there are no messages or only a system prompt.
-            if (payload.messages.length === 0) return;
-            if (payload.messages.length === 1 && payload.messages[0]?.role === 'system') return;
-
-            const systemMessage = targetChatLogManager.getFirstMessage();
-            if (systemMessage && systemMessage.value.role === 'system') {
-                let newContent = systemMessage.value.content;
-                for (const fn of hooks.onModifySystemPrompt) {
-                    newContent = fn(newContent) || newContent;
-                }
-
-                if (newContent !== systemMessage.value.content) {
-                    systemMessage.setContent(newContent);
-                }
-            }
-            payload = hooks.beforeApiCall.reduce((p, fn) => fn(p, this.uiManager, targetChatLogManager) || p, payload);
-
-            const endpoint = this.configService.getItem('endpoint', defaultEndpoint)
-            const apiKey = this.configService.getItem('apiKey', '');
-            const abortSignal = this.store.get('controller').signal;
-            const reader = await this.networkService.streamAPIResponse(payload, endpoint, apiKey, abortSignal);
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const valueStr = new TextDecoder().decode(value);
-                if (valueStr.startsWith('{')) {
-                    const data = JSON.parse(valueStr);
-                    if (data.error) throw new Error(data.error.message);
-                }
-                const chunks = valueStr.split('\n');
-                let delta = '';
-                chunks.forEach(chunk => {
-                    if (!chunk.startsWith('data: ')) return;
-                    chunk = chunk.substring(6);
-                    if (chunk === '' || chunk === '[DONE]') return;
-                    const data = JSON.parse(chunk);
-                    if (data.error) throw new Error(data.error.message);
-                    delta += data.choices[0].delta.content || '';
-                });
-                if (delta === '') continue;
-                log(5, 'App: Received chunk', delta);
-                hooks.onChunkReceived.forEach(fn => fn(delta));
-                this.uiManager.appendMessageText(targetMessage, delta);
-            }
-        } catch (error) {
-            this.store.set('receiving', false); // Ensure receiving is false on error
-            if (error.name === 'AbortError') {
-                log(3, 'App: Response aborted');
-                hooks.onCancel.forEach(fn => fn());
-                this.store.set('controller', new AbortController());
-                const lastMessage = targetChatLogManager.getLastMessage();
-                if (lastMessage && lastMessage.value === null) {
-                    targetChatLogManager.deleteMessage(lastMessage);
-                } else if (lastMessage) {
-                    this.uiManager.appendMessageText(lastMessage, '\n\n[Response aborted by user]');
-                }
-                return;
-            }
-            log(1, 'App: generateAIResponse error', error);
-            triggerError(error.message);
-            const lastMessage = targetChatLogManager.getLastMessage();
-            if (lastMessage.value === null) {
-                this.uiManager.changeMessageText(lastMessage, `[Error: ${error.message}. Retry or check connection.]`);
-                hooks.afterMessageAdd.forEach(fn => fn(lastMessage));
-            } else {
-                this.uiManager.appendMessageText(lastMessage, `\n\n[Error: ${error.message}. Retry or check connection.]`);
-            }
-        } finally {
-            // Set receiving to false before calling hooks, in case a hook triggers another generation
-            this.store.set('receiving', false);
-            const lastMessage = targetChatLogManager.getLastMessage();
-
-            // Set metadata here so hooks can use it
-            if (lastMessage && lastMessage.value !== null) {
-                lastMessage.cache = null;
-                lastMessage.metadata = { model: mergedSettings.model, temperature: mergedSettings.temperature, top_p: mergedSettings.top_p };
-                hooks.onMessageComplete.forEach(fn => fn(lastMessage, this.uiManager, targetChatLogManager));
-            }
-            targetChatLogManager.notify();
-            this.chatService.persistChats();
-        }
-    }
-
-    /**
-     * Submits a user message.
-     * @param {string} message - The message to submit.
-     * @param {string} userRole - The role of the user.
-     */
-    async submitUserMessage(message, userRole) {
-        log(3, 'App: submitUserMessage called with role', userRole);
-        if (!this.chatLogManager.chatlog) return;
-
-        const editedPos = this.store.get('editingPos');
-        log(4, 'App: editingPos is', editedPos);
-        if (editedPos !== null) {
-            log(4, 'App: Editing message at pos', editedPos);
-            const msg = this.chatLogManager.getNthMessage(editedPos);
-            if (msg) {
-                msg.value.role = userRole;
-                this.uiManager.changeMessageText(msg, message.trim());
-            }
-            this.store.set('editingPos', null);
-            document.getElementById('user').checked = true;
-            const editedMsg = this.chatLogManager.getNthMessage(editedPos);
-            if (editedMsg.value.role !== 'assistant' && editedMsg.answerAlternatives === null && this.chatLogManager.getFirstMessage() !== editedMsg) {
-                this.uiManager.addMessageWithoutContent();
-                await this.generateAIResponse();
-            }
-            return;
-        }
-
-        if (!this.store.get('regenerateLastAnswer') && !message) return;
-        if (this.store.get('receiving') && !agentsPlugin.flowRunning) return;
-
-        if (userRole === 'assistant') {
-            let modifiedContent = message;
-            for (let fn of hooks.beforeUserMessageAdd) {
-                const result = fn(modifiedContent, userRole);
-                if (result === false) return;
-                if (typeof result === 'string') modifiedContent = result;
-            }
-            const newMessage = this.uiManager.addMessageWithContent({ role: userRole, content: modifiedContent });
-            hooks.afterMessageAdd.forEach(fn => fn(newMessage));
-            return;
-        }
-
-        if (!this.store.get('regenerateLastAnswer')) {
-            message = message.trim();
-            let modifiedContent = message;
-            for (let fn of hooks.beforeUserMessageAdd) {
-                const result = fn(modifiedContent, userRole);
-                if (result === false) return;
-                if (typeof result === 'string') modifiedContent = result;
-            }
-            const newMessage = this.uiManager.addMessageWithContent({ role: userRole, content: modifiedContent });
-            hooks.afterMessageAdd.forEach(fn => fn(newMessage));
-            this.uiManager.addMessageWithoutContent();
-        }
-
-        this.store.set('regenerateLastAnswer', false);
-        await this.generateAIResponse();
-    }
 }
 
 export default App;
