@@ -15,10 +15,12 @@ import { triggerError } from '../utils/logger.js';
 class ChatBox {
     /**
      * @param {import('../state/store.js').default} store - The application's state store.
+     * @param {import('./chat-ui-manager.js').ChatUIManager} chatUIManager - The Chat UI Manager.
      */
-    constructor(store) {
+    constructor(store, chatUIManager) {
         log(5, 'ChatBox: Constructor called');
         this.store = store;
+        this.chatUIManager = chatUIManager;
         this.container = document.getElementById('chat');
         this.chatlog = null;
         this.onUpdate = null; // Callback for after updates.
@@ -136,7 +138,7 @@ class ChatBox {
         // Create a container for controls and call the hook
         const controlsContainer = document.createElement('span');
         controlsContainer.classList.add('message-controls', 'nobreak');
-        hooks.onRenderMessageControls.forEach(fn => fn(controlsContainer, message, this.chatlog, this));
+        hooks.onRenderMessageControls.forEach(fn => fn(controlsContainer, message, this.chatlog, this, this.chatUIManager));
         msgTitleStrip.appendChild(controlsContainer);
 
         el.appendChild(msgTitleStrip);

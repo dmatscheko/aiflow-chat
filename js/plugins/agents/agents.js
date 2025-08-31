@@ -8,7 +8,6 @@ import { log, triggerError } from '../../utils/logger.js';
 import { hooks } from '../../hooks.js';
 import { stepTypes } from './agent-step-definitions.js';
 import { parseFunctionCalls } from '../../utils/parsers.js';
-import { addAlternativeToChat } from '../../utils/chat.js';
 import { createControlButton } from '../../utils/ui.js';
 import { processToolCalls, exportJson, importJson } from '../../utils/shared.js';
 import { defaultEndpoint } from '../../config.js';
@@ -772,8 +771,8 @@ const agentsPlugin = {
                     const chat = agentsPlugin.store.get('currentChat');
                     chat.activeAgentId = step.agentId;
                     agentsPlugin.store.set('currentChat', { ...chat });
-                    addAlternativeToChat(chatlog, messageToBranchFrom, null);
-                    agentsPlugin.app.generateAIResponse({}, chatlog);
+                    agentsPlugin.app.chatUIManager.addMessageWithoutContent(messageToBranchFrom);
+                    hooks.onGenerateAIResponse.forEach(fn => fn({}, chatlog));
                     return;
                 } else {
                     agentsPlugin.multiMessageInfo = { active: false, step: null, counter: 0, messageToBranchFrom: null };
