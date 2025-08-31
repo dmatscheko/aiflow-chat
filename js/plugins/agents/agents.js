@@ -640,7 +640,7 @@ class AgentsPlugin {
                 app: this.app,
                 store: this.store,
             };
-            await processToolCalls(message, chatlog, chatbox, filterAgentCalls, executeAgentCall, context);
+            await processToolCalls(message, chatlog, chatbox, this._filterAgentCalls.bind(this), this._executeAgentCall.bind(this), context);
 
             // --- Flow Continuation ---
             // Re-parse *after* processToolCalls might have added its own messages.
@@ -670,61 +670,61 @@ class AgentsPlugin {
             }
         }
     }
-}
 
-function filterAgentCalls(call) {
-    return call.name.endsWith('_agent');
-}
-
-async function executeAgentCall(call, context) {
-    const { app, store } = context;
-    const currentChat = store.get('currentChat');
-    const agentToCall = currentChat.agents.find(a => `${a.name.toLowerCase().replace(/\s+/g, '_')}_agent` === call.name);
-
-    if (!agentToCall) {
-        return { id: call.id, error: `Agent "${call.name}" not found.` };
-    }
-    const prompt = call.params.prompt;
-    if (typeof prompt !== 'string') {
-        return { id: call.id, error: `Agent call to "${call.name}" is missing the "prompt" parameter.` };
+    _filterAgentCalls(call) {
+        return call.name.endsWith('_agent');
     }
 
-    const payload = {
-        model: app.configService.getItem('model', ''),
-        messages: [
-            { role: 'system', content: agentToCall.systemPrompt },
-            { role: 'user', content: prompt }
-        ],
-        temperature: Number(app.ui.temperatureEl.value),
-        top_p: Number(app.ui.topPEl.value),
-        stream: true
-    };
+    async _executeAgentCall(call, context) {
+        const { app, store } = context;
+        const currentChat = store.get('currentChat');
+        const agentToCall = currentChat.agents.find(a => `${a.name.toLowerCase().replace(/\s+/g, '_')}_agent` === call.name);
 
-    try {
-        const reader = await app.apiService.streamAPIResponse(payload, app.configService.getItem('endpoint', defaultEndpoint), app.configService.getItem('apiKey', ''), new AbortController().signal);
-        let responseContent = '';
-        const decoder = new TextDecoder();
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value);
-            chunk.split('\n').forEach(line => {
-                if (line.startsWith('data: ')) {
-                    const data = line.substring(6);
-                    if (data.trim() !== '[DONE]') {
-                        try {
-                            responseContent += JSON.parse(data).choices[0]?.delta?.content || '';
-                        } catch (e) {
-                            log(2, 'Error parsing agent response chunk', e);
+        if (!agentToCall) {
+            return { id: call.id, error: `Agent "${call.name}" not found.` };
+        }
+        const prompt = call.params.prompt;
+        if (typeof prompt !== 'string') {
+            return { id: call.id, error: `Agent call to "${call.name}" is missing the "prompt" parameter.` };
+        }
+
+        const payload = {
+            model: app.configService.getItem('model', ''),
+            messages: [
+                { role: 'system', content: agentToCall.systemPrompt },
+                { role: 'user', content: prompt }
+            ],
+            temperature: Number(app.ui.temperatureEl.value),
+            top_p: Number(app.ui.topPEl.value),
+            stream: true
+        };
+
+        try {
+            const reader = await app.apiService.streamAPIResponse(payload, app.configService.getItem('endpoint', defaultEndpoint), app.configService.getItem('apiKey', ''), new AbortController().signal);
+            let responseContent = '';
+            const decoder = new TextDecoder();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value);
+                chunk.split('\n').forEach(line => {
+                    if (line.startsWith('data: ')) {
+                        const data = line.substring(6);
+                        if (data.trim() !== '[DONE]') {
+                            try {
+                                responseContent += JSON.parse(data).choices[0]?.delta?.content || '';
+                            } catch (e) {
+                                log(2, 'Error parsing agent response chunk', e);
+                            }
                         }
                     }
-                }
-            });
+                });
+            }
+            return { id: call.id, content: responseContent };
+        } catch (error) {
+            log(1, 'Agent call failed', error);
+            return { id: call.id, error: error.message || 'Unknown error during agent execution.' };
         }
-        return { id: call.id, content: responseContent };
-    } catch (error) {
-        log(1, 'Agent call failed', error);
-        return { id: call.id, error: error.message || 'Unknown error during agent execution.' };
     }
 }
 

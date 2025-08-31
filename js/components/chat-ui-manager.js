@@ -7,7 +7,6 @@
 import { ChatBox } from './chatbox.js';
 import { Chatlog, Message } from './chatlog.js';
 import { log, triggerError } from '../utils/logger.js';
-import { hooks } from '../hooks.js';
 
 /**
  * @class ChatUIManager
@@ -17,11 +16,13 @@ class ChatUIManager {
     /**
      * @param {import('../state/store.js').default} store - The application's state store.
      * @param {import('../services/ai-service.js').AIService} aiService - The AI service.
+     * @param {Object} hooks - The application's hooks object.
      */
-    constructor(store, aiService) {
+    constructor(store, aiService, hooks) {
         log(3, 'ChatUIManager: Constructor called');
         this.store = store;
         this.aiService = aiService;
+        this.hooks = hooks;
         this.editingPos = null;
         this.chatlog = null;
         this.chatBox = new ChatBox(store, this);
@@ -183,26 +184,26 @@ class ChatUIManager {
 
         if (userRole === 'assistant') {
             let modifiedContent = message;
-            for (let fn of hooks.beforeUserMessageAdd) {
+            for (let fn of this.hooks.beforeUserMessageAdd) {
                 const result = fn(modifiedContent, userRole);
                 if (result === false) return;
                 if (typeof result === 'string') modifiedContent = result;
             }
             const newMessage = this.addMessageWithContent({ role: userRole, content: modifiedContent });
-            hooks.afterMessageAdd.forEach(fn => fn(newMessage));
+            this.hooks.afterMessageAdd.forEach(fn => fn(newMessage));
             return;
         }
 
         if (!this.store.get('regenerateLastAnswer')) {
             message = message.trim();
             let modifiedContent = message;
-            for (let fn of hooks.beforeUserMessageAdd) {
+            for (let fn of this.hooks.beforeUserMessageAdd) {
                 const result = fn(modifiedContent, userRole);
                 if (result === false) return;
                 if (typeof result === 'string') modifiedContent = result;
             }
             const newMessage = this.addMessageWithContent({ role: userRole, content: modifiedContent });
-            hooks.afterMessageAdd.forEach(fn => fn(newMessage));
+            this.hooks.afterMessageAdd.forEach(fn => fn(newMessage));
         }
 
         this.store.set('regenerateLastAnswer', false);
@@ -222,7 +223,7 @@ class ChatUIManager {
                 } else if (event.type === 'done') {
                     targetMessage.metadata = event.metadata;
                     targetMessage.cache = null;
-                    hooks.onMessageComplete.forEach(fn => fn(targetMessage, this.chatlog, this.chatBox));
+                    this.hooks.onMessageComplete.forEach(fn => fn(targetMessage, this.chatlog, this.chatBox));
                     this.chatlog.notify();
                 } else if (event.type === 'error') {
                     this._handleStreamError(event.error, targetMessage);
@@ -239,7 +240,7 @@ class ChatUIManager {
     _handleStreamError(error, targetMessage) {
         if (error.name === 'AbortError') {
             log(3, 'ChatUIManager: Response aborted');
-            hooks.onCancel.forEach(fn => fn());
+            this.hooks.onCancel.forEach(fn => fn());
             this.store.set('controller', new AbortController());
             if (targetMessage && targetMessage.value === null) {
                 const lastAlternatives = this.chatlog.getLastAlternatives();
@@ -257,7 +258,7 @@ class ChatUIManager {
         triggerError(error.message);
         if (targetMessage.value === null) {
             targetMessage.value = { role: 'assistant', content: `[Error: ${error.message}. Retry or check connection.]` };
-            hooks.afterMessageAdd.forEach(fn => fn(targetMessage));
+            this.hooks.afterMessageAdd.forEach(fn => fn(targetMessage));
         } else {
             targetMessage.appendContent(`\n\n[Error: ${error.message}. Retry or check connection.]`);
         }

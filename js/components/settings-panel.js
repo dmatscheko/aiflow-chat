@@ -9,13 +9,13 @@ import { hooks } from '../hooks.js';
 
 /**
  * @class SettingsPanel
- * Manages the settings panel UI.
+ * @classdesc Manages the settings panel UI, including login/logout and other configuration.
  */
 class SettingsPanel {
     /**
      * @param {Object} options - The options for the settings panel.
-     * @param {Function} options.configService - The configuration service.
-     * @param {Function} options.app - The main app object.
+     * @param {import('../services/config-service.js').default} options.configService - The configuration service.
+     * @param {import('../app.js').default} options.app - The main application instance.
      */
     constructor({ configService, app }) {
         this.configService = configService;
@@ -35,6 +35,7 @@ class SettingsPanel {
 
     /**
      * Initializes the settings panel by setting up event listeners.
+     * @private
      */
     init() {
         log(3, 'SettingsPanel: init called');
@@ -47,6 +48,7 @@ class SettingsPanel {
 
     /**
      * Toggles the visibility of the settings panel.
+     * @param {'open' | 'close' | 'toggle'} [state='toggle'] - Optionally force the panel to a specific state.
      */
     toggle(state = 'toggle') {
         let isOpen;
@@ -72,7 +74,8 @@ class SettingsPanel {
     }
 
     /**
-     * Handles the login button click.
+     * Handles the login button click, saving credentials and triggering the app's login flow.
+     * @private
      */
     handleLogin() {
         log(4, 'SettingsPanel: handleLogin called');
@@ -96,7 +99,8 @@ class SettingsPanel {
     }
 
     /**
-     * Handles the logout button click.
+     * Handles the logout button click, clearing credentials and triggering the app's login flow.
+     * @private
      */
     handleLogout() {
         this.ui.apiKeyEl.value = '';

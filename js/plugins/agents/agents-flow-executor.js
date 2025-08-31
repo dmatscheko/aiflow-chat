@@ -27,6 +27,7 @@ class AgentFlowExecutor {
         this.plugin.currentStepId = null;
         this.plugin.multiMessageInfo = { active: false, step: null, counter: 0, messageToBranchFrom: null };
         this.updateRunButton(false);
+        this.plugin.app.ui.submitButton.disabled = false;
         const chat = this.store.get('currentChat');
         if (chat) {
             chat.activeAgentId = null;
@@ -81,6 +82,7 @@ class AgentFlowExecutor {
         this.plugin.flowRunning = true;
         this.plugin.stepCounter = 0;
         this.updateRunButton(true);
+        this.plugin.app.ui.submitButton.disabled = true;
         this.executeStep(startingNodes[0]);
     }
 

@@ -5,7 +5,6 @@
 'use strict';
 
 import { log, triggerError } from '../utils/logger.js';
-import { hooks } from '../hooks.js';
 import { defaultEndpoint } from '../config.js';
 
 /**
@@ -18,11 +17,13 @@ class AIService {
      * @param {import('../state/store.js').default} store - The application's state store.
      * @param {import('./config-service.js').default} configService - The configuration service.
      * @param {import('./api-service.js').default} apiService - The API service.
+ * @param {Object} hooks - The application's hooks object.
      */
-    constructor(store, configService, apiService) {
+constructor(store, configService, apiService, hooks) {
         this.store = store;
         this.configService = configService;
         this.apiService = apiService;
+    this.hooks = hooks;
     }
 
     /**
@@ -62,7 +63,7 @@ class AIService {
             stream: true
         };
 
-        hooks.onModelSettings.forEach(fn => fn(payload, mergedSettings));
+        this.hooks.onModelSettings.forEach(fn => fn(payload, mergedSettings));
 
         if (payload.messages.length === 0 || (payload.messages.length === 1 && payload.messages[0]?.role === 'system')) {
             return null;
@@ -71,7 +72,7 @@ class AIService {
         const systemMessage = targetChatlog.getFirstMessage();
         if (systemMessage && systemMessage.value.role === 'system') {
             let newContent = systemMessage.value.content;
-            for (const fn of hooks.onModifySystemPrompt) {
+            for (const fn of this.hooks.onModifySystemPrompt) {
                 newContent = fn(newContent) || newContent;
             }
             if (newContent !== systemMessage.value.content) {
@@ -79,7 +80,7 @@ class AIService {
             }
         }
 
-        return hooks.beforeApiCall.reduce((p, fn) => fn(p, chatBox) || p, payload);
+        return this.hooks.beforeApiCall.reduce((p, fn) => fn(p, chatBox) || p, payload);
     }
 
     /**
@@ -140,7 +141,7 @@ class AIService {
                 });
 
                 if (delta) {
-                    hooks.onChunkReceived.forEach(fn => fn(delta));
+                    this.hooks.onChunkReceived.forEach(fn => fn(delta));
                     yield { type: 'chunk', delta: delta };
                 }
             }

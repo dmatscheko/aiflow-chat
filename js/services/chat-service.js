@@ -11,11 +11,12 @@ import { hooks } from '../hooks.js';
 
 /**
  * @class ChatService
- * Manages chat sessions, including creating, switching, loading, and persisting chats.
+ * @classdesc Manages the lifecycle of chat sessions, including creating, switching, loading, and persisting chats.
  */
 class ChatService {
     /**
      * @param {import('../state/store.js').default} store - The application's state store.
+     * @param {import('./config-service.js').default} configService - The configuration service.
      */
     constructor(store, configService) {
         this.store = store;
@@ -35,7 +36,7 @@ class ChatService {
     }
 
     /**
-     * Initializes the chat service by loading chats from storage or creating a new one.
+     * Initializes the chat service by loading chats from storage or creating a new one if none exist.
      */
     init() {
         this.loadChats();
@@ -58,7 +59,7 @@ class ChatService {
     }
 
     /**
-     * Creates a new chat session.
+     * Creates a new, empty chat session and switches to it.
      * @returns {Object} The new chat object.
      */
     createNewChat() {
@@ -89,7 +90,7 @@ class ChatService {
     }
 
     /**
-     * Deletes a chat session.
+     * Deletes a chat session by its ID.
      * @param {string} chatId - The ID of the chat to delete.
      */
     deleteChat(chatId) {
@@ -123,6 +124,7 @@ class ChatService {
 
     /**
      * Persists all chat sessions to local storage.
+     * @private
      */
     persistChats() {
         log(5, 'ChatService: persistChats called');
@@ -151,7 +153,8 @@ class ChatService {
     }
 
     /**
-     * Loads chat sessions from local storage.
+     * Loads chat sessions from local storage, handling legacy formats.
+     * @private
      */
     loadChats() {
         log(3, 'ChatService: loadChats called');
@@ -233,8 +236,8 @@ class ChatService {
     }
 
     /**
-     * Imports a chat from a JSON file content.
-     * @param {string} fileContent - The content of the JSON file.
+     * Imports a chat from a JSON string.
+     * @param {string} fileContent - The JSON string content of the chat to import.
      */
     importChat(fileContent) {
         try {

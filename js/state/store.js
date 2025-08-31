@@ -9,7 +9,8 @@ import { log } from '../utils/logger.js';
 
 /**
  * @class Store
- * A simple reactive state store with a pub-sub mechanism for observing changes.
+ * @classdesc A simple reactive state store with a pub-sub mechanism for observing changes.
+ * It holds the application's state and notifies subscribers when parts of the state change.
  */
 class Store {
     /**
@@ -24,7 +25,7 @@ class Store {
     /**
      * Gets a value from the store by key.
      * @param {string} key - The key of the value to get.
-     * @returns {*} The value associated with the key.
+     * @returns {*} The value associated with the key, or undefined if the key does not exist.
      */
     get(key) {
         log(5, 'Store: get called for key', key);
@@ -57,7 +58,7 @@ class Store {
     /**
      * Subscribes to changes for a specific key.
      * @param {string} key - The key to subscribe to.
-     * @param {Function} cb - The callback to execute when the value changes.
+     * @param {Function} cb - The callback to execute when the value changes. The new value is passed as an argument.
      */
     subscribe(key, cb) {
         log(5, 'Store: subscribe called for key', key);
@@ -68,7 +69,7 @@ class Store {
     /**
      * Unsubscribes from changes for a specific key.
      * @param {string} key - The key to unsubscribe from.
-     * @param {Function} cb - The callback to remove.
+     * @param {Function} cb - The callback to remove. If not provided, all subscribers for the key are removed.
      */
     unsubscribe(key, cb) {
         log(5, 'Store: unsubscribe called for key', key);

@@ -9,14 +9,14 @@ import { createControlButton } from '../utils/ui.js';
 
 /**
  * @class ChatListView
- * Manages the chat list UI.
+ * @classdesc Manages the display and interaction of the chat list sidebar.
  */
 class ChatListView {
     /**
      * @param {Object} options - The options for the chat list view.
-     * @param {Function} options.onChatSelected - Callback for when a chat is selected.
-     * @param {Function} options.onChatDeleted - Callback for when a chat is deleted.
-     * @param {Function} options.onTitleEdited - Callback for when a chat title is edited.
+     * @param {function(string): void} options.onChatSelected - Callback for when a chat is selected.
+     * @param {function(string): void} options.onChatDeleted - Callback for when a chat is deleted.
+     * @param {function(string, string): void} options.onTitleEdited - Callback for when a chat title is edited.
      */
     constructor({ onChatSelected, onChatDeleted, onTitleEdited }) {
         this.onChatSelected = onChatSelected;
@@ -29,9 +29,9 @@ class ChatListView {
     }
 
     /**
-     * Renders the chat list.
-     * @param {Array<Object>} chats - The list of chats to render.
-     * @param {Object} currentChat - The currently active chat.
+     * Renders the list of chats in the sidebar.
+     * @param {Array<Object>} chats - The array of chat objects to render.
+     * @param {Object} currentChat - The currently active chat object.
      */
     render(chats, currentChat) {
         log(3, 'ChatListView: render called');
@@ -66,10 +66,12 @@ class ChatListView {
     }
 
     /**
-     * Handles the editing of a chat title.
-     * @param {HTMLElement} li - The list item element.
-     * @param {HTMLElement} titleEl - The title element.
-     * @param {Object} chat - The chat object.
+     * Enables editing for a chat title.
+     * Replaces the title span with an input field and sets up event listeners to save or cancel the edit.
+     * @param {HTMLElement} li - The list item element for the chat.
+     * @param {HTMLElement} titleEl - The span element containing the chat title.
+     * @param {Object} chat - The chat object being edited.
+     * @private
      */
     editTitle(li, titleEl, chat) {
         const input = document.createElement('input');

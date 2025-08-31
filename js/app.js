@@ -28,9 +28,12 @@ import { startMessage, messageSubmit, messageStop, defaultEndpoint } from './con
 
 /**
  * @class App
- * Main application orchestrator.
+ * @classdesc The main application class that orchestrates all services, components, and plugins.
  */
 class App {
+    /**
+     * Initializes all services and components.
+     */
     constructor() {
         log(5, 'App: Constructor called');
         this.ui = {
@@ -52,8 +55,8 @@ class App {
         this.configService = new ConfigService(this.store);
         this.apiService = new ApiService(this.store);
         this.chatService = new ChatService(this.store, this.configService);
-        this.aiService = new AIService(this.store, this.configService, this.apiService);
-        this.chatUIManager = new ChatUIManager(this.store, this.aiService);
+        this.aiService = new AIService(this.store, this.configService, this.apiService, hooks);
+        this.chatUIManager = new ChatUIManager(this.store, this.aiService, hooks);
 
         this.settingsPanel = new SettingsPanel({
             configService: this.configService,
@@ -84,7 +87,8 @@ class App {
     }
 
     /**
-     * Initializes the application.
+     * Initializes the application by registering plugins, setting up handlers,
+     * initializing services, and setting up event listeners.
      */
     async init() {
         log(3, 'App: init called');
@@ -106,7 +110,8 @@ class App {
     }
 
     /**
-     * Registers all the plugins.
+     * Registers all the plugins used in the application.
+     * @private
      */
     registerPlugins() {
         registerPlugin(agentsPlugin, this);
@@ -121,7 +126,8 @@ class App {
     }
 
     /**
-     * Sets up global error handlers.
+     * Sets up global error handlers to catch and log unhandled errors and promise rejections.
+     * @private
      */
     setupGlobalErrorHandlers() {
         window.addEventListener('error', (event) => {
@@ -137,7 +143,8 @@ class App {
     }
 
     /**
-     * Handles the login process.
+     * Handles the initial login process, checking for an endpoint and loading models.
+     * @private
      */
     async handleLogin() {
         let success = this.configService.getItem('endpoint', '') !== '';
@@ -168,8 +175,9 @@ class App {
     }
 
     /**
-     * Handles chat switching.
-     * @param {Object} chat - The chat to switch to.
+     * Handles the UI updates when a chat is switched.
+     * @param {Object} chat - The new chat object to switch to.
+     * @private
      */
     onChatSwitched(chat) {
         log(3, 'App: onChatSwitched called for chat', chat?.id);
@@ -180,8 +188,9 @@ class App {
     }
 
     /**
-     * Fetches models from the API.
-     * @returns {Promise<boolean>} True if models were loaded successfully.
+     * Fetches the list of available models from the API endpoint.
+     * @returns {Promise<boolean>} True if models were loaded successfully, false otherwise.
+     * @private
      */
     async loadModels() {
         log(3, 'App: loadModels called');
@@ -223,7 +232,8 @@ class App {
     }
 
     /**
-     * Sets up the main event listeners.
+     * Sets up the main event listeners for the application UI.
+     * @private
      */
     setUpEventListeners() {
         log(3, 'App: setUpEventListeners called');
@@ -231,11 +241,6 @@ class App {
             log(4, 'App: Submit button clicked, receiving:', this.store.get('receiving'));
             if (this.store.get('receiving')) {
                 this.store.get('controller').abort();
-                return;
-            }
-            if (agentsPlugin.flowRunning) {
-                log(2, 'App: submission prevented, flow is running.');
-                triggerError('Cannot submit messages while a flow is running.');
                 return;
             }
             this.chatUIManager.submitMessage(this.ui.messageEl.value, document.querySelector('input[name="user_role"]:checked').value);
