@@ -44,7 +44,6 @@ class App {
             receiving: false,
             regenerateLastAnswer: false,
             controller: new AbortController(),
-            editingPos: null,
             chats: [],
             currentChat: null,
             ui: this.ui,
@@ -53,8 +52,8 @@ class App {
         this.configService = new ConfigService(this.store);
         this.apiService = new ApiService(this.store);
         this.chatService = new ChatService(this.store, this.configService);
-        this.chatUIManager = new ChatUIManager(this.store);
         this.aiService = new AIService(this.store, this.configService, this.apiService);
+        this.chatUIManager = new ChatUIManager(this.store, this.aiService, agentsPlugin);
 
         this.settingsPanel = new SettingsPanel({
             configService: this.configService,
@@ -234,7 +233,7 @@ class App {
                 this.store.get('controller').abort();
                 return;
             }
-            this.submitUserMessage(this.ui.messageEl.value, document.querySelector('input[name="user_role"]:checked').value);
+            this.chatUIManager.submitMessage(this.ui.messageEl.value, document.querySelector('input[name="user_role"]:checked').value);
             document.getElementById('user').checked = true;
             this.ui.messageEl.value = '';
             this.ui.messageEl.style.height = 'auto';
@@ -296,71 +295,6 @@ class App {
         });
     }
 
-    /**
-     * Submits a user message.
-     * @param {string} message - The message to submit.
-     * @param {string} userRole - The role of the user.
-     */
-    async submitUserMessage(message, userRole) {
-        log(3, 'App: submitUserMessage called with role', userRole);
-        const currentChatlog = this.chatUIManager.chatlog;
-        if (!currentChatlog) return;
-
-        const editedPos = this.store.get('editingPos');
-        log(4, 'App: editingPos is', editedPos);
-        if (editedPos !== null) {
-            log(4, 'App: Editing message at pos', editedPos);
-            const msg = currentChatlog.getNthMessage(editedPos);
-            if (msg) {
-                msg.value.role = userRole;
-                this.chatUIManager.updateMessageText(msg, message.trim());
-            }
-            this.chatUIManager.resetEditing();
-            document.getElementById('user').checked = true;
-            const editedMsg = currentChatlog.getNthMessage(editedPos);
-            if (editedMsg.value.role !== 'assistant' && editedMsg.answerAlternatives === null && currentChatlog.getFirstMessage() !== editedMsg) {
-                this.chatUIManager.addMessageWithContent({ role: 'assistant', content: null });
-                await this.aiService.generateAIResponse(currentChatlog, this.chatUIManager.chatBox, {});
-            }
-            return;
-        }
-
-        if (!this.store.get('regenerateLastAnswer') && !message) return;
-        // Allow flow to submit messages even if another response is being generated
-        if (this.store.get('receiving') && !agentsPlugin.flowRunning) return;
-
-        if (userRole === 'assistant') {
-            let modifiedContent = message;
-            for (let fn of hooks.beforeUserMessageAdd) {
-                const result = fn(modifiedContent, userRole);
-                if (result === false) return;
-                if (typeof result === 'string') modifiedContent = result;
-            }
-            const newMessage = this.chatUIManager.addMessageWithContent({ role: userRole, content: modifiedContent });
-            hooks.afterMessageAdd.forEach(fn => fn(newMessage));
-            return;
-        }
-
-        if (!this.store.get('regenerateLastAnswer')) {
-            message = message.trim();
-            let modifiedContent = message;
-            for (let fn of hooks.beforeUserMessageAdd) {
-                const result = fn(modifiedContent, userRole);
-                if (result === false) return;
-                if (typeof result === 'string') modifiedContent = result;
-            }
-            const newMessage = this.chatUIManager.addMessageWithContent({ role: userRole, content: modifiedContent });
-            hooks.afterMessageAdd.forEach(fn => fn(newMessage));
-            this.chatUIManager.addMessageWithoutContent();
-        }
-
-        this.store.set('regenerateLastAnswer', false);
-
-        await this.aiService.generateAIResponse(currentChatlog, this.chatUIManager.chatBox, {});
-
-        // Final update to ensure UI is consistent after response generation, especially for flows.
-        this.chatUIManager.chatBox.update();
-    }
 }
 
 export default App;

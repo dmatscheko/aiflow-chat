@@ -98,7 +98,7 @@ export const messageModificationPlugin = {
                         chatUIManager.addMessageWithContent({ role: message.value.role, content: null }, message);
                         messageInput.value = originalContent ? originalContent.trim() : '';
                         messageInput.dispatchEvent(new Event('input', { bubbles: true }));
-                        store.set('editingPos', pos);
+                        chatUIManager.setEditingPos(pos);
                         const roleRadio = document.getElementById(message.value.role);
                         if (roleRadio) roleRadio.checked = true;
                         messageInput.focus();
@@ -120,7 +120,7 @@ export const messageModificationPlugin = {
                     messageInput.dispatchEvent(new Event('input', { bubbles: true }));
 
                     const pos = chatlog.getMessagePos(message);
-                    store.set('editingPos', pos);
+                    chatUIManager.setEditingPos(pos);
 
                     const roleRadio = document.getElementById(message.value.role);
                     if (roleRadio) roleRadio.checked = true;
