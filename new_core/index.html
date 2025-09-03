@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Core Chat</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app-container">
+        <div id="settings-panel">
+            <h2>Settings</h2>
+            <div class="setting">
+                <label for="api-url">API URL</label>
+                <input type="text" id="api-url" placeholder="e.g., https://api.openai.com/">
+            </div>
+            <div class="setting">
+                <label for="api-key">API Key</label>
+                <input type="password" id="api-key" placeholder="Your API Key">
+            </div>
+            <div class="setting">
+                <label for="model-select">Model</label>
+                <select id="model-select"></select>
+                <button id="refresh-models">Refresh</button>
+            </div>
+             <div class="setting">
+                <label for="system-prompt">System Prompt</label>
+                <textarea id="system-prompt" rows="4"></textarea>
+            </div>
+            <div class="setting">
+                <label for="temperature">Temperature</label>
+                <input type="range" id="temperature" min="0" max="2" step="0.1" value="1">
+                <span id="temperature-value">1</span>
+            </div>
+        </div>
+
+        <div id="chat-wrapper">
+            <div id="chat-container">
+                <!-- Chat messages will be rendered here -->
+            </div>
+            <form id="message-form">
+                <textarea id="message-input" placeholder="Type your message..." rows="3"></textarea>
+                <button type="submit">Send</button>
+                <button type="button" id="stop-button" style="display: none;">Stop</button>
+            </form>
+        </div>
+
+        <div id="chat-list-panel">
+            <h2>Chats</h2>
+            <ul id="chat-list">
+                <!-- List of chats will be rendered here -->
+            </ul>
+            <button id="new-chat-button">New Chat</button>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>

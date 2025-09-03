@@ -1,0 +1,191 @@
+:root {
+    --bg-color: #1a1a1a;
+    --text-color: #e0e0e0;
+    --panel-bg-color: #242424;
+    --border-color: #333;
+    --input-bg-color: #3c3c3c;
+    --button-bg-color: #4a4a4a;
+    --button-hover-bg-color: #5a5a5a;
+    --accent-color: #007acc;
+    --message-user-bg: #004a7c;
+    --message-assistant-bg: #333;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#app-container {
+    display: flex;
+    height: 100%;
+}
+
+/* Panels (Settings and Chat List) */
+#settings-panel, #chat-list-panel {
+    width: 250px;
+    background-color: var(--panel-bg-color);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border-color);
+}
+#settings-panel {
+    border-right: 1px solid var(--border-color);
+    border-left: none;
+}
+
+h2 {
+    margin-top: 0;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+}
+
+/* Settings */
+.setting {
+    margin-bottom: 1rem;
+}
+.setting label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+.setting input[type="text"],
+.setting input[type="password"],
+.setting select,
+.setting textarea {
+    width: 100%;
+    background-color: var(--input-bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.5rem;
+    box-sizing: border-box;
+}
+.setting textarea {
+    resize: vertical;
+}
+.setting button {
+    margin-top: 0.5rem;
+}
+
+/* Chat List */
+#chat-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    flex-grow: 1;
+    overflow-y: auto;
+}
+#chat-list li {
+    padding: 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+#chat-list li:hover {
+    background-color: var(--input-bg-color);
+}
+#chat-list li.active {
+    background-color: var(--accent-color);
+}
+#chat-list .delete-chat-button {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    cursor: pointer;
+    opacity: 0.5;
+}
+#chat-list .delete-chat-button:hover {
+    opacity: 1;
+}
+#new-chat-button {
+    margin-top: 1rem;
+}
+
+
+/* Chat Area */
+#chat-wrapper {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+#chat-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.message {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+.message.role-user {
+    background-color: var(--message-user-bg);
+    align-self: flex-end;
+    margin-left: auto;
+}
+.message.role-assistant {
+    background-color: var(--message-assistant-bg);
+    align-self: flex-start;
+}
+.message.role-system {
+    background-color: var(--panel-bg-color);
+    align-self: center;
+    font-style: italic;
+    font-size: 0.9rem;
+    max-width: 100%;
+    text-align: center;
+}
+.message strong {
+    display: block;
+    margin-bottom: 0.5rem;
+    text-transform: capitalize;
+}
+
+/* Message Form */
+#message-form {
+    display: flex;
+    padding: 1rem;
+    border-top: 1px solid var(--border-color);
+    background-color: var(--panel-bg-color);
+}
+#message-input {
+    flex-grow: 1;
+    background-color: var(--input-bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.75rem;
+    resize: none;
+    margin-right: 1rem;
+}
+button {
+    background-color: var(--button-bg-color);
+    color: var(--text-color);
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+button:hover {
+    background-color: var(--button-hover-bg-color);
+}
+#stop-button {
+    background-color: #992222;
+}
+#stop-button:hover {
+    background-color: #bb3333;
+}

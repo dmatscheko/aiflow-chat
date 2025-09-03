@@ -1,0 +1,226 @@
+/**
+ * @fileoverview Defines the data structures for the chat history.
+ * This file is self-contained and has no external dependencies.
+ */
+
+'use strict';
+
+/**
+ * @typedef {'user' | 'assistant' | 'system' | 'tool'} MessageRole
+ */
+
+/**
+ * @typedef {Object} MessageValue
+ * @property {MessageRole} role - The role of the message author.
+ * @property {string | null} content - The content of the message.
+ */
+
+/**
+ * Represents a single message in the chat log tree.
+ * Each message can have a set of alternative answers.
+ * @class
+ */
+class Message {
+    /**
+     * @param {MessageValue} value - The message value, e.g., { role: 'user', content: 'Hello' }.
+     */
+    constructor(value) {
+        /** @type {MessageValue} */
+        this.value = value;
+        /** @type {Alternatives | null} */
+        this.answerAlternatives = null;
+    }
+
+    /**
+     * Gets the currently active answer message from the alternatives.
+     * @returns {Message | null} The active answer message or null if no alternatives exist.
+     */
+    getActiveAnswer() {
+        return this.answerAlternatives ? this.answerAlternatives.getActiveMessage() : null;
+    }
+
+    /**
+     * Serializes the message to a JSON-compatible object.
+     * @returns {Object}
+     */
+    toJSON() {
+        return {
+            value: this.value,
+            answerAlternatives: this.answerAlternatives ? this.answerAlternatives.toJSON() : null,
+        };
+    }
+}
+
+/**
+ * Manages a set of alternative messages at a specific point in the conversation.
+ * This allows for branching and exploring different conversational paths.
+ * @class
+ */
+class Alternatives {
+    constructor() {
+        /** @type {Message[]} */
+        this.messages = [];
+        /** @type {number} */
+        this.activeMessageIndex = -1;
+    }
+
+    /**
+     * Adds a new message to the list of alternatives.
+     * @param {MessageValue} value - The value for the new message.
+     * @returns {Message} The newly created message.
+     */
+    addMessage(value) {
+        const newMessage = new Message(value);
+        this.activeMessageIndex = this.messages.push(newMessage) - 1;
+        return newMessage;
+    }
+
+    /**
+     * Gets the currently active message in this set of alternatives.
+     * @returns {Message | null}
+     */
+    getActiveMessage() {
+        if (this.activeMessageIndex === -1 || this.messages.length === 0) {
+            return null;
+        }
+        return this.messages[this.activeMessageIndex];
+    }
+
+    /**
+     * Serializes the alternatives to a JSON-compatible object.
+     * @returns {Object}
+     */
+    toJSON() {
+        return {
+            messages: this.messages.map(msg => msg.toJSON()),
+            activeMessageIndex: this.activeMessageIndex,
+        };
+    }
+}
+
+/**
+ * Manages the entire chat history as a tree of messages and their alternatives.
+ * @class
+ */
+export class ChatLog {
+    constructor() {
+        /** @type {Alternatives | null} */
+        this.rootAlternatives = null;
+        /** @type {Array<() => void>} */
+        this.subscribers = [];
+    }
+
+    /**
+     * Adds a message to the active conversational path.
+     * @param {MessageValue} value - The value of the message to add.
+     * @returns {Message} The newly added message.
+     */
+    addMessage(value) {
+        const lastMessage = this.getLastMessage();
+        let newMessage;
+        if (!lastMessage) {
+            // This is the first message in the chat.
+            this.rootAlternatives = new Alternatives();
+            newMessage = this.rootAlternatives.addMessage(value);
+        } else {
+            // Add the new message as an answer to the last message.
+            if (!lastMessage.answerAlternatives) {
+                lastMessage.answerAlternatives = new Alternatives();
+            }
+            newMessage = lastMessage.answerAlternatives.addMessage(value);
+        }
+        this.notify();
+        return newMessage;
+    }
+
+    /**
+     * Gets the last message in the active conversational path.
+     * @returns {Message | null}
+     */
+    getLastMessage() {
+        if (!this.rootAlternatives) {
+            return null;
+        }
+        let current = this.rootAlternatives.getActiveMessage();
+        while (current && current.getActiveAnswer()) {
+            current = current.getActiveAnswer();
+        }
+        return current;
+    }
+
+    /**
+     * Returns an array of all message values in the active path.
+     * @returns {MessageValue[]}
+     */
+    getActiveMessageValues() {
+        const result = [];
+        if (!this.rootAlternatives) {
+            return result;
+        }
+        let current = this.rootAlternatives.getActiveMessage();
+        while (current) {
+            result.push(current.value);
+            current = current.getActiveAnswer();
+        }
+        return result;
+    }
+
+    /**
+     * Subscribes a callback function to be called on any change.
+     * @param {() => void} callback
+     */
+    subscribe(callback) {
+        this.subscribers.push(callback);
+    }
+
+    /**
+     * Unsubscribes a callback function.
+     * @param {() => void} callback
+     */
+    unsubscribe(callback) {
+        this.subscribers = this.subscribers.filter(cb => cb !== callback);
+    }
+
+    /**
+     * Notifies all subscribers that the chat log has changed.
+     */
+    notify() {
+        this.subscribers.forEach(cb => cb());
+    }
+
+    /**
+     * Serializes the entire chat log to a JSON-compatible object.
+     * @returns {Object | null}
+     */
+    toJSON() {
+        return this.rootAlternatives ? this.rootAlternatives.toJSON() : null;
+    }
+
+    /**
+     * Creates a ChatLog instance from a serialized JSON object.
+     * @param {Object} jsonData - The data to load from.
+     * @returns {ChatLog}
+     */
+    static fromJSON(jsonData) {
+        const chatLog = new ChatLog();
+        if (!jsonData) {
+            return chatLog;
+        }
+
+        const buildAlternatives = (altData) => {
+            const alternatives = new Alternatives();
+            alternatives.activeMessageIndex = altData.activeMessageIndex;
+            alternatives.messages = altData.messages.map(msgData => {
+                const message = new Message(msgData.value);
+                if (msgData.answerAlternatives) {
+                    message.answerAlternatives = buildAlternatives(msgData.answerAlternatives);
+                }
+                return message;
+            });
+            return alternatives;
+        };
+
+        chatLog.rootAlternatives = buildAlternatives(jsonData);
+        return chatLog;
+    }
+}
