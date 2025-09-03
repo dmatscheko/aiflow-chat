@@ -286,7 +286,7 @@ function renderFlowList() {
         const li = document.createElement('li');
         li.className = 'flow-list-item';
         li.dataset.id = flow.id;
-        li.innerHTML = `<span>${flow.name}</span><div class="buttons"><button class="edit-flow-btn">Edit</button><button class="delete-flow-btn">Delete</button></div>`;
+        li.innerHTML = `<span>${flow.name}</span><div class="buttons"><button class="delete-flow-btn">Delete</button></div>`;
         listEl.appendChild(li);
     });
 }
@@ -473,9 +473,17 @@ const flowsPlugin = {
                 renderFlowList();
                 document.getElementById('add-flow-btn').addEventListener('click', () => { const name = prompt('Enter a name for the new flow:'); if (name) { flowManager.addFlow({ name, steps: [], connections: [] }); renderFlowList(); } });
                 document.getElementById('flow-list').addEventListener('click', (e) => {
-                    const item = e.target.closest('.flow-list-item'); if (!item) return; const id = item.dataset.id;
-                    if (e.target.classList.contains('edit-flow-btn')) appInstance.setView('flow-editor', id);
-                    if (e.target.classList.contains('delete-flow-btn')) { if (confirm('Delete this flow?')) { flowManager.deleteFlow(id); renderFlowList(); } }
+                    const item = e.target.closest('.flow-list-item'); if (!item) return;
+                    const id = item.dataset.id;
+                    if (e.target.classList.contains('delete-flow-btn')) {
+                        e.stopPropagation();
+                        if (confirm('Delete this flow?')) {
+                            flowManager.deleteFlow(id);
+                            renderFlowList();
+                        }
+                    } else {
+                        appInstance.setView('flow-editor', id);
+                    }
                 });
             }
         });
