@@ -13,7 +13,7 @@ import { pluginManager } from './plugin-manager.js';
 // Load plugins
 import './plugins/example-plugin.js';
 import './plugins/agents-plugin.js';
-import './plugins/flow-plugin.js';
+import './plugins/flows-plugin.js';
 
 class App {
     constructor() {

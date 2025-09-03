@@ -1,84 +1,359 @@
 /**
- * @fileoverview Plugin for managing and using Agents.
+ * @fileoverview Plugin for managing and using Agents with advanced settings.
+ * @version 2.0.0
  */
 
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
 
+/**
+ * @typedef {object} AgentModelSettings
+ * @property {string} [apiKey] - Custom API key for the agent.
+ * @property {string} [apiUrl] - Custom API URL for the agent.
+ * @property {string} [model] - The specific model to use for the agent.
+ * @property {number} [temperature] - The temperature setting for the model.
+ * @property {number} [top_p] - The top_p setting for the model.
+ */
+
+/**
+ * @typedef {object} Agent
+ * @property {string} id - The unique identifier for the agent.
+ * @property {string} name - The name of the agent.
+ * @property {string} systemPrompt - The system prompt for the agent.
+ * @property {boolean} useCustomModelSettings - Whether to use custom model settings.
+ * @property {AgentModelSettings} modelSettings - The custom model settings.
+ */
+
+/**
+ * Manages the lifecycle and storage of agents.
+ */
 class AgentManager {
     constructor() {
-        this.agents = this.loadAgents();
-        this.chatAgentMap = this.loadChatAgentMap();
+        /** @type {Agent[]} */
+        this.agents = this._loadAgents();
+        /** @type {Object.<string, string>} */
+        this.chatAgentMap = this._loadChatAgentMap(); // Maps chatId to agentId
     }
 
-    loadAgents() {
-        return JSON.parse(localStorage.getItem('core_agents')) || [];
+    /**
+     * Loads agents from localStorage.
+     * @returns {Agent[]} The loaded agents.
+     * @private
+     */
+    _loadAgents() {
+        try {
+            const agentsJson = localStorage.getItem('core_agents_v2');
+            return agentsJson ? JSON.parse(agentsJson) : [];
+        } catch (e) {
+            console.error('Failed to load agents:', e);
+            return [];
+        }
     }
 
-    saveAgents() {
-        localStorage.setItem('core_agents', JSON.stringify(this.agents));
+    /**
+     * Saves agents to localStorage.
+     * @private
+     */
+    _saveAgents() {
+        localStorage.setItem('core_agents_v2', JSON.stringify(this.agents));
     }
 
-    loadChatAgentMap() {
-        return JSON.parse(localStorage.getItem('core_chat_agent_map')) || {};
+    /**
+     * Loads the chat-to-agent mapping from localStorage.
+     * @returns {Object.<string, string>} The chat-agent map.
+     * @private
+     */
+    _loadChatAgentMap() {
+        try {
+            const mapJson = localStorage.getItem('core_chat_agent_map_v2');
+            return mapJson ? JSON.parse(mapJson) : {};
+        } catch (e) {
+            console.error('Failed to load chat-agent map:', e);
+            return {};
+        }
     }
 
-    saveChatAgentMap() {
-        localStorage.setItem('core_chat_agent_map', JSON.stringify(this.chatAgentMap));
+    /**
+     * Saves the chat-to-agent mapping to localStorage.
+     * @private
+     */
+    _saveChatAgentMap() {
+        localStorage.setItem('core_chat_agent_map_v2', JSON.stringify(this.chatAgentMap));
     }
 
+    /**
+     * Gets an agent by its ID.
+     * @param {string} id - The ID of the agent.
+     * @returns {Agent|undefined} The agent object or undefined if not found.
+     */
     getAgent(id) {
         return this.agents.find(a => a.id === id);
     }
 
+    /**
+     * Adds a new agent.
+     * @param {Omit<Agent, 'id'>} agentData - The data for the new agent.
+     */
     addAgent(agentData) {
-        this.agents.push(agentData);
-        this.saveAgents();
+        const newAgent = { ...agentData, id: `agent-${Date.now()}` };
+        this.agents.push(newAgent);
+        this._saveAgents();
     }
 
+    /**
+     * Updates an existing agent.
+     * @param {Agent} agentData - The updated agent data.
+     */
     updateAgent(agentData) {
         const index = this.agents.findIndex(a => a.id === agentData.id);
         if (index !== -1) {
             this.agents[index] = agentData;
-            this.saveAgents();
+            this._saveAgents();
         }
     }
 
+    /**
+     * Deletes an agent by its ID.
+     * @param {string} id - The ID of the agent to delete.
+     */
     deleteAgent(id) {
         this.agents = this.agents.filter(a => a.id !== id);
-        this.saveAgents();
+        this._saveAgents();
+
+        // Clean up chat-agent map
         for (const chatId in this.chatAgentMap) {
             if (this.chatAgentMap[chatId] === id) {
                 delete this.chatAgentMap[chatId];
             }
         }
-        this.saveChatAgentMap();
+        this._saveChatAgentMap();
     }
 
+    /**
+     * Gets the active agent ID for a given chat.
+     * @param {string} chatId - The ID of the chat.
+     * @returns {string|null} The active agent ID or null.
+     */
     getActiveAgentForChat(chatId) {
         return this.chatAgentMap[chatId] || null;
     }
 
+    /**
+     * Sets the active agent for a given chat.
+     * @param {string} chatId - The ID of the chat.
+     * @param {string|null} agentId - The ID of the agent to set as active, or null to deactivate.
+     */
     setActiveAgentForChat(chatId, agentId) {
         if (agentId) {
             this.chatAgentMap[chatId] = agentId;
         } else {
             delete this.chatAgentMap[chatId];
         }
-        this.saveChatAgentMap();
+        this._saveChatAgentMap();
     }
 }
 
 const agentManager = new AgentManager();
 let appInstance = null;
 
+/**
+ * Renders the list of agents in the "Agents" tab.
+ */
+function renderAgentList() {
+    const agentListEl = document.getElementById('agent-list');
+    if (!agentListEl) return;
+
+    agentListEl.innerHTML = '';
+    agentManager.agents.forEach(agent => {
+        const li = document.createElement('li');
+        li.className = 'agent-list-item';
+        li.dataset.id = agent.id;
+        li.innerHTML = `
+            <span>${agent.name}</span>
+            <div class="agent-buttons">
+                <button class="edit-agent-btn">Edit</button>
+                <button class="delete-agent-btn">Delete</button>
+            </div>
+        `;
+        agentListEl.appendChild(li);
+    });
+
+    // Attach event listeners
+    agentListEl.addEventListener('click', (e) => {
+        const target = /** @type {HTMLElement} */ (e.target);
+        const agentItem = target.closest('.agent-list-item');
+        if (!agentItem) return;
+        const agentId = agentItem.dataset.id;
+
+        if (target.classList.contains('edit-agent-btn')) {
+            appInstance.setView('agent-editor', agentId);
+        }
+        if (target.classList.contains('delete-agent-btn')) {
+            if (confirm(`Are you sure you want to delete the agent "${agentManager.getAgent(agentId)?.name}"?`)) {
+                agentManager.deleteAgent(agentId);
+                renderAgentList();
+                populateAgentSelector();
+            }
+        }
+    });
+}
+
+/**
+ * Renders the agent editor view.
+ * @param {string} [agentId] - The ID of the agent to edit. If null, creates a new agent.
+ * @returns {string} The HTML content for the agent editor.
+ */
+function renderAgentEditor(agentId) {
+    const agent = agentId ? agentManager.getAgent(agentId) : null;
+    const settings = agent?.modelSettings || {};
+
+    return `
+        <div id="agent-editor-view">
+            <h2>${agentId ? 'Edit' : 'Create'} Agent</h2>
+            <form id="agent-editor-form">
+                <input type="hidden" id="agent-id" value="${agent?.id || ''}">
+
+                <div class="form-group">
+                    <label for="agent-name">Name</label>
+                    <input type="text" id="agent-name" required value="${agent?.name || ''}">
+                </div>
+
+                <div class="form-group">
+                    <label for="agent-system-prompt">System Prompt</label>
+                    <textarea id="agent-system-prompt" rows="8">${agent?.systemPrompt || ''}</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="agent-use-custom-settings" ${agent?.useCustomModelSettings ? 'checked' : ''}>
+                        Use Custom Model Settings
+                    </label>
+                </div>
+
+                <fieldset id="agent-model-settings" ${agent?.useCustomModelSettings ? '' : 'disabled'}>
+                    <legend>Model Settings</legend>
+                    <div class="form-group">
+                        <label for="agent-api-url">API URL</label>
+                        <input type="text" id="agent-api-url" placeholder="Default" value="${settings.apiUrl || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label for="agent-model">Model Name</label>
+                        <input type="text" id="agent-model" placeholder="Default" value="${settings.model || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label for="agent-temperature">Temperature</label>
+                        <input type="number" id="agent-temperature" step="0.1" min="0" max="2" placeholder="Default" value="${settings.temperature || ''}">
+                    </div>
+                    <div class="form-group">
+                        <label for="agent-top-p">Top P</label>
+                        <input type="number" id="agent-top-p" step="0.1" min="0" max="1" placeholder="Default" value="${settings.top_p || ''}">
+                    </div>
+                </fieldset>
+
+                <div class="form-actions">
+                    <button type="submit" class="primary-btn">Save Agent</button>
+                    <button type="button" id="cancel-agent-edit">Cancel</button>
+                </div>
+            </form>
+        </div>
+    `;
+}
+
+/**
+ * Attaches event listeners to the agent editor form.
+ */
+function attachAgentFormListeners() {
+    const form = document.getElementById('agent-editor-form');
+    if (!form) return;
+
+    const customSettingsCheckbox = /** @type {HTMLInputElement} */ (document.getElementById('agent-use-custom-settings'));
+    const modelSettingsFieldset = /** @type {HTMLFieldSetElement} */ (document.getElementById('agent-model-settings'));
+
+    customSettingsCheckbox.addEventListener('change', () => {
+        modelSettingsFieldset.disabled = !customSettingsCheckbox.checked;
+    });
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const agentId = /** @type {HTMLInputElement} */ (document.getElementById('agent-id')).value;
+        const agentData = {
+            id: agentId || `agent-${Date.now()}`,
+            name: /** @type {HTMLInputElement} */ (document.getElementById('agent-name')).value,
+            systemPrompt: /** @type {HTMLTextAreaElement} */ (document.getElementById('agent-system-prompt')).value,
+            useCustomModelSettings: customSettingsCheckbox.checked,
+            modelSettings: {
+                apiUrl: /** @type {HTMLInputElement} */ (document.getElementById('agent-api-url')).value || undefined,
+                model: /** @type {HTMLInputElement} */ (document.getElementById('agent-model')).value || undefined,
+                temperature: parseFloat(/** @type {HTMLInputElement} */ (document.getElementById('agent-temperature')).value) || undefined,
+                top_p: parseFloat(/** @type {HTMLInputElement} */ (document.getElementById('agent-top-p')).value) || undefined,
+            },
+        };
+
+        if (agentId) {
+            agentManager.updateAgent(agentData);
+        } else {
+            // It's a new agent, but we need the ID generated by addAgent, so we pass a subset of data
+            const { id, ...newData } = agentData;
+            agentManager.addAgent(newData);
+        }
+        populateAgentSelector();
+        // Return to the list of agents
+        appInstance.showTab('agents');
+    });
+
+    document.getElementById('cancel-agent-edit').addEventListener('click', () => {
+        appInstance.showTab('agents');
+    });
+}
+
+/**
+ * Populates the agent selector dropdown in the chat area.
+ */
+function populateAgentSelector() {
+    const selector = document.getElementById('agent-selector');
+    if (!selector) return;
+
+    const currentChatId = appInstance.activeChatId;
+    const activeAgentId = currentChatId ? agentManager.getActiveAgentForChat(currentChatId) : null;
+
+    selector.innerHTML = '<option value="">Default AI</option>';
+    agentManager.agents.forEach(agent => {
+        const option = document.createElement('option');
+        option.value = agent.id;
+        option.textContent = agent.name;
+        if (agent.id === activeAgentId) {
+            option.selected = true;
+        }
+        selector.appendChild(option);
+    });
+}
+
+/**
+ * The main plugin object for agents.
+ */
 const agentsPlugin = {
+    name: 'Agents',
+
+    /**
+     * Initializes the plugin.
+     * @param {object} app - The main application instance.
+     */
     onAppInit(app) {
         appInstance = app;
         pluginManager.registerView('agent-editor', renderAgentEditor);
+        app.setActiveAgent = (agentId) => {
+            if (app.activeChatId) {
+                agentManager.setActiveAgentForChat(app.activeChatId, agentId || null);
+            }
+        };
     },
 
+    /**
+     * Registers the "Agents" tab.
+     * @param {object[]} tabs - The array of existing tabs.
+     * @returns {object[]} The updated array of tabs.
+     */
     onTabsRegistered(tabs) {
         tabs.push({
             id: 'agents',
@@ -86,183 +361,103 @@ const agentsPlugin = {
             onActivate: () => {
                 const contentEl = document.getElementById('agents-pane');
                 contentEl.innerHTML = `
-                    <h3>Agents</h3>
+                    <div class="pane-header">
+                        <h3>Agents</h3>
+                        <button id="add-agent-btn" class="primary-btn">Add New Agent</button>
+                    </div>
                     <ul id="agent-list"></ul>
-                    <button id="add-agent-btn">Add New Agent</button>
                 `;
                 renderAgentList();
 
                 document.getElementById('add-agent-btn').addEventListener('click', () => {
                     appInstance.setView('agent-editor', null);
                 });
-                document.getElementById('agent-list').addEventListener('click', (e) => {
-                    if (e.target.classList.contains('edit-agent-btn')) {
-                        const agentId = e.target.parentElement.dataset.id;
-                        appInstance.setView('agent-editor', agentId);
-                    }
-                    if (e.target.classList.contains('delete-agent-btn')) {
-                        const agentId = e.target.parentElement.dataset.id;
-                        if (confirm('Are you sure you want to delete this agent?')) {
-                            agentManager.deleteAgent(agentId);
-                            renderAgentList();
-                            populateAgentSelector();
-                        }
-                    }
-                });
             }
         });
         return tabs;
     },
 
+    /**
+     * Renders the agent selector in the chat area.
+     * @param {string} currentHtml - The current HTML of the chat area.
+     * @returns {string} The updated HTML.
+     */
     onChatAreaRender(currentHtml) {
         const agentSelectorHtml = `
             <div id="agent-selector-container">
                 <label for="agent-selector">Active Agent:</label>
                 <select id="agent-selector">
-                    <option value="">None (Default)</option>
+                    <option value="">Default AI</option>
                 </select>
             </div>
         `;
         return currentHtml + agentSelectorHtml;
     },
 
+    /**
+     * Updates the agent selector when the chat is switched.
+     * @param {object} chat - The newly active chat object.
+     */
     onChatSwitched(chat) {
         populateAgentSelector();
-        const agentSelector = document.getElementById('agent-selector');
+        const agentSelector = /** @type {HTMLSelectElement} */ (document.getElementById('agent-selector'));
         if (agentSelector) {
-            const activeAgentId = agentManager.getActiveAgentForChat(chat.id);
-            agentSelector.value = activeAgentId || '';
-
-            // Re-attach listener to avoid duplicates
+            // Use a fresh listener to avoid duplicates
             const newSelector = agentSelector.cloneNode(true);
             agentSelector.parentNode.replaceChild(newSelector, agentSelector);
             newSelector.addEventListener('change', (e) => {
+                const selectedAgentId = /** @type {HTMLSelectElement} */ (e.target).value;
                 if (appInstance.activeChatId) {
-                    agentManager.setActiveAgentForChat(appInstance.activeChatId, e.target.value);
+                    agentManager.setActiveAgentForChat(appInstance.activeChatId, selectedAgentId || null);
                 }
             });
         }
     },
 
+    /**
+     * Attaches listeners when the agent editor view is rendered.
+     * @param {{type: string, id: string}} view - The rendered view object.
+     */
     onViewRendered(view) {
         if (view.type === 'agent-editor') {
             attachAgentFormListeners();
         }
     },
 
+    /**
+     * Modifies the API call payload based on the active agent.
+     * @param {object} payload - The original API call payload.
+     * @param {object} settings - The global settings.
+     * @returns {object} The modified payload.
+     */
     beforeApiCall(payload, settings) {
-        if (!appInstance) return payload;
-        const activeChatId = appInstance.activeView.type === 'chat' ? appInstance.activeView.id : null;
-        if (!activeChatId) return payload;
+        if (!appInstance || !appInstance.activeChatId) return payload;
 
-        const activeAgentId = agentManager.getActiveAgentForChat(activeChatId);
+        const activeAgentId = agentManager.getActiveAgentForChat(appInstance.activeChatId);
+        if (!activeAgentId) return payload;
 
-        if (activeAgentId) {
-            const agent = agentManager.getAgent(activeAgentId);
-            if (agent) {
-                let systemMessage = payload.messages.find(m => m.role === 'system');
-                if (systemMessage) {
-                    systemMessage.content = agent.systemPrompt;
-                } else {
-                    payload.messages.unshift({ role: 'system', content: agent.systemPrompt });
-                }
-            }
+        const agent = agentManager.getAgent(activeAgentId);
+        if (!agent) return payload;
+
+        // Modify system prompt
+        let systemMessage = payload.messages.find(m => m.role === 'system');
+        if (systemMessage) {
+            systemMessage.content = agent.systemPrompt;
+        } else {
+            payload.messages.unshift({ role: 'system', content: agent.systemPrompt });
         }
+
+        // Override model settings if custom settings are enabled
+        if (agent.useCustomModelSettings) {
+            const { apiUrl, model, temperature, top_p } = agent.modelSettings;
+            if (apiUrl) settings.apiUrl = apiUrl;
+            if (model) payload.model = model;
+            if (temperature) payload.temperature = temperature;
+            if (top_p) payload.top_p = top_p;
+        }
+
         return payload;
     }
 };
 
 pluginManager.register(agentsPlugin);
-
-// --- Agent Logic & Renderers ---
-
-function renderAgentList() {
-    const agentList = document.getElementById('agent-list');
-    if (!agentList) return;
-    agentList.innerHTML = '';
-    agentManager.agents.forEach(agent => {
-        const li = document.createElement('li');
-        li.dataset.id = agent.id;
-
-        const span = document.createElement('span');
-        span.textContent = agent.name;
-        li.appendChild(span);
-
-        const editBtn = document.createElement('button');
-        editBtn.textContent = 'Edit';
-        editBtn.classList.add('edit-agent-btn');
-        li.appendChild(editBtn);
-
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = 'Delete';
-        deleteBtn.classList.add('delete-agent-btn');
-        li.appendChild(deleteBtn);
-
-        agentList.appendChild(li);
-    });
-}
-
-function renderAgentEditor(agentId) {
-    const agent = agentId ? agentManager.getAgent(agentId) : null;
-    const name = agent ? agent.name : '';
-    const systemPrompt = agent ? agent.systemPrompt : '';
-    const id = agent ? agent.id : '';
-
-    return `
-        <div id="agent-editor-view">
-            <h2>${agentId ? 'Edit' : 'Create'} Agent</h2>
-            <form id="agent-form">
-                <input type="hidden" id="agent-id" value="${id}">
-                <div class="setting">
-                    <label for="agent-name">Name</label>
-                    <input type="text" id="agent-name" required value="${name}">
-                </div>
-                <div class="setting">
-                    <label for="agent-system-prompt">System Prompt</label>
-                    <textarea id="agent-system-prompt" rows="10">${systemPrompt}</textarea>
-                </div>
-                <button type="submit">Save Agent</button>
-                <button type="button" id="cancel-agent-edit">Cancel</button>
-            </form>
-        </div>
-    `;
-}
-
-function attachAgentFormListeners() {
-    const form = document.getElementById('agent-form');
-    if (!form) return;
-
-    form.addEventListener('submit', (e) => {
-        e.preventDefault();
-        const agentId = document.getElementById('agent-id').value;
-        const agentData = {
-            id: agentId || `agent-${Date.now()}`,
-            name: document.getElementById('agent-name').value,
-            systemPrompt: document.getElementById('agent-system-prompt').value,
-        };
-        if (agentId) {
-            agentManager.updateAgent(agentData);
-        } else {
-            agentManager.addAgent(agentData);
-        }
-        populateAgentSelector();
-        appInstance.setView('chat', appInstance.activeChatId); // Go back to chat view
-    });
-
-    document.getElementById('cancel-agent-edit').addEventListener('click', () => {
-        appInstance.setView('chat', appInstance.activeChatId);
-    });
-}
-
-function populateAgentSelector() {
-    const selector = document.getElementById('agent-selector');
-    if (!selector) return;
-
-    selector.innerHTML = '<option value="">None (Default)</option>';
-    agentManager.agents.forEach(agent => {
-        const option = document.createElement('option');
-        option.value = agent.id;
-        option.textContent = agent.name;
-        selector.appendChild(option);
-    });
-}
