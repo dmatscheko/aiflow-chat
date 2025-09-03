@@ -302,7 +302,6 @@ function renderFlowEditor(flowId) {
                     <button id="add-flow-step-btn" class="primary-btn">Add Step</button>
                     <div id="add-step-dropdown" class="dropdown-content">${dropdownContent}</div>
                 </div>
-                <button id="run-flow-btn">Run Flow</button>
             </div>
             <div id="flow-canvas-wrapper"><div id="flow-canvas">
                 <svg id="flow-svg-layer"></svg>
@@ -442,6 +441,30 @@ function handleCanvasMouseUp(e, flow) {
 const flowsPlugin = {
     name: 'Flows',
     onAppInit(app) { appInstance = app; pluginManager.registerView('flow-editor', renderFlowEditor); },
+    onChatAreaRender(currentHtml) {
+        const flowSelectorHtml = `
+            <div id="flow-runner-container">
+                <label for="flow-selector">Flow:</label>
+                <select id="flow-selector">
+                    <option value="">Select a flow</option>
+                </select>
+                <button id="run-chat-flow-btn">Run</button>
+            </div>
+        `;
+        return currentHtml + flowSelectorHtml;
+    },
+    onChatSwitched(chat) {
+        const selector = document.getElementById('flow-selector');
+        if (!selector) return;
+
+        selector.innerHTML = '<option value="">Select a flow</option>';
+        flowManager.flows.forEach(flow => {
+            const option = document.createElement('option');
+            option.value = flow.id;
+            option.textContent = flow.name;
+            selector.appendChild(option);
+        });
+    },
     onTabsRegistered(tabs) {
         tabs.push({
             id: 'flows', label: 'Flows', onActivate: () => {
@@ -490,8 +513,22 @@ const flowsPlugin = {
                     dropdown.classList.remove('show');
                 }
             });
-            document.getElementById('run-flow-btn').addEventListener('click', () => { activeFlowRunner = new FlowRunner(flow, appInstance); activeFlowRunner.start(); });
             window.addEventListener('click', (e) => { if (!e.target.matches('#add-flow-step-btn')) dropdown.classList.remove('show'); });
+        } else if (view.type === 'chat') {
+            const runBtn = document.getElementById('run-chat-flow-btn');
+            if (runBtn) {
+                runBtn.addEventListener('click', () => {
+                    const selector = document.getElementById('flow-selector');
+                    const flowId = selector.value;
+                    if (flowId) {
+                        const flow = flowManager.getFlow(flowId);
+                        if (flow) {
+                            activeFlowRunner = new FlowRunner(flow, appInstance);
+                            activeFlowRunner.start();
+                        }
+                    }
+                });
+            }
         }
     },
     onResponseComplete(message, chat) { if (activeFlowRunner) activeFlowRunner.continue(); }
