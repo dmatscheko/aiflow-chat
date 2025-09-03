@@ -308,3 +308,24 @@ button:hover {
 #stop-button:hover {
     background-color: #bb3333;
 }
+
+/* Make agent and flow list items clickable */
+#agent-list li, #flow-list li {
+    cursor: pointer;
+}
+
+/* Style delete buttons for consistency */
+.delete-agent-btn, .delete-flow-btn {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    cursor: pointer;
+    opacity: 0.5;
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 0 0.25rem;
+}
+
+.delete-agent-btn:hover, .delete-flow-btn:hover {
+    opacity: 1;
+}

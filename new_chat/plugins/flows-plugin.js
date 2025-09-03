@@ -286,7 +286,7 @@ function renderFlowList() {
         const li = document.createElement('li');
         li.className = 'flow-list-item';
         li.dataset.id = flow.id;
-        li.innerHTML = `<span>${flow.name}</span><div class="buttons"><button class="delete-flow-btn">Delete</button></div>`;
+        li.innerHTML = `<span>${flow.name}</span><button class="delete-flow-btn">X</button>`;
         listEl.appendChild(li);
     });
 }
