@@ -1,0 +1,77 @@
+:root {
+    --bg-color: #202122;
+    --text-color: #efeff0;
+    --accent-bg: #343542;
+    --input-bg: #40424f;
+    --message-user-bg: #383333;
+    --message-assistant-bg: #333338;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+}
+
+#chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+}
+
+#input-container {
+    display: flex;
+    padding: 10px;
+    background-color: var(--accent-bg);
+}
+
+#message-input {
+    flex: 1;
+    resize: none;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    border: 1px solid black;
+    border-radius: 5px;
+    padding: 10px;
+}
+
+#submit-button {
+    margin-left: 10px;
+    padding: 10px 20px;
+    border-radius: 5px;
+    border: none;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+#submit-button:hover {
+    background-color: #50525f;
+}
+
+.message {
+    max-width: 80%;
+    padding: 10px;
+    border-radius: 15px;
+    margin-bottom: 10px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.user {
+    background-color: var(--message-user-bg);
+    align-self: flex-end;
+    border-bottom-right-radius: 0;
+}
+
+.assistant {
+    background-color: var(--message-assistant-bg);
+    align-self: flex-start;
+    border-bottom-left-radius: 0;
+}
