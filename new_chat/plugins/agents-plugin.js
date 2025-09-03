@@ -342,6 +342,7 @@ const agentsPlugin = {
     onAppInit(app) {
         appInstance = app;
         pluginManager.registerView('agent-editor', renderAgentEditor);
+        app.agentManager = agentManager; // Expose agent manager to other plugins
         app.setActiveAgent = (agentId) => {
             if (app.activeChatId) {
                 agentManager.setActiveAgentForChat(app.activeChatId, agentId || null);
