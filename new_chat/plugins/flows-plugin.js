@@ -398,8 +398,16 @@ function handleCanvasMouseDown(e, flow, debouncedUpdate) {
 
 function handleCanvasMouseMove(e, flow, debouncedUpdate) {
     if (dragInfo.active) {
-        dragInfo.target.style.left = `${e.clientX - dragInfo.offsetX}px`;
-        dragInfo.target.style.top = `${e.clientY - dragInfo.offsetY}px`;
+        const newX = e.clientX - dragInfo.offsetX;
+        const newY = e.clientY - dragInfo.offsetY;
+        dragInfo.target.style.left = `${newX}px`;
+        dragInfo.target.style.top = `${newY}px`;
+
+        const step = flow.steps.find(s => s.id === dragInfo.target.dataset.id);
+        if (step) {
+            step.x = newX;
+            step.y = newY;
+        }
         renderFlow(flow);
     } else if (connectionInfo.active) {
         const wrapper = document.getElementById('flow-canvas-wrapper');
