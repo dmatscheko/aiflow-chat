@@ -208,6 +208,26 @@ class App {
         }
     }
 
+    showTab(tabId) {
+        if (!tabId) return;
+
+        const tab = this.tabs.find(t => t.id === tabId);
+        if (!tab) return;
+
+        this.dom.panelTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        this.dom.panelContent.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+
+        const tabBtn = document.getElementById(`tab-btn-${tabId}`);
+        const tabPane = document.getElementById(`${tabId}-pane`);
+
+        if (tabBtn) tabBtn.classList.add('active');
+        if (tabPane) tabPane.classList.add('active');
+
+        if (tab.onActivate) {
+            tab.onActivate();
+        }
+    }
+
     initChatView(chatId) {
         const chat = this.chats.find(c => c.id === chatId);
         if (!chat) return;
@@ -253,16 +273,7 @@ class App {
         this.dom.panelTabs.addEventListener('click', (e) => {
             const tabId = e.target.dataset.tabId;
             if (tabId) {
-                this.dom.panelTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-                this.dom.panelContent.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-
-                e.target.classList.add('active');
-                document.getElementById(`${tabId}-pane`).classList.add('active');
-
-                const tab = this.tabs.find(t => t.id === tabId);
-                if (tab && tab.onActivate) {
-                    tab.onActivate();
-                }
+                this.showTab(tabId);
             }
         });
     }
