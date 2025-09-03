@@ -409,13 +409,29 @@ class App {
         const userInput = this.dom.messageInput.value.trim();
         if (!userInput) return;
 
+        this.dom.messageInput.value = '';
+        this.submitMessage(userInput);
+    },
+
+    async submitMessage(prompt) {
+        const activeChat = this.getActiveChat();
+        if (!activeChat) return null;
+
+        const userMessage = activeChat.log.addMessage({ role: 'user', content: prompt });
+        this.generateAssistantResponse(userMessage);
+        return userMessage;
+    },
+
+    async generateAssistantResponse(userMessage) {
         const activeChat = this.getActiveChat();
         if (!activeChat) return;
 
-        activeChat.log.addMessage({ role: 'user', content: userInput });
-        this.dom.messageInput.value = '';
-
-        const assistantMsg = activeChat.log.addMessage({ role: 'assistant', content: '...' });
+        // Ensure answerAlternatives exists
+        if (!userMessage.answerAlternatives) {
+            userMessage.answerAlternatives = new activeChat.log.rootAlternatives.constructor();
+        }
+        const assistantMsg = userMessage.answerAlternatives.addMessage({ role: 'assistant', content: '...' });
+        activeChat.log.notify();
 
         this.dom.stopButton.style.display = 'block';
         this.abortController = new AbortController();
@@ -430,7 +446,7 @@ class App {
 
             let payload = {
                 model: settings.model,
-                messages: messages.slice(0, -1),
+                messages: messages.slice(0, -1), // Exclude the empty assistant message
                 stream: true,
                 temperature: parseFloat(settings.temperature)
             };

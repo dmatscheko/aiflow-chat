@@ -149,6 +149,36 @@ export class ChatLog {
     }
 
     /**
+     * Truncates the active conversation path starting from a given message.
+     * In practice, this means finding the message just *before* the truncation
+     * point and setting its `answerAlternatives` to null.
+     * @param {number} startIndex - The index in the active message path where truncation should begin.
+     * All messages from this index to the end will be removed.
+     */
+    truncateActivePath(startIndex) {
+        if (!this.rootAlternatives || startIndex <= 0) {
+            // If startIndex is 0, we clear the whole chat.
+            this.rootAlternatives = null;
+            this.notify();
+            return;
+        }
+
+        let i = 0;
+        let current = this.rootAlternatives.getActiveMessage();
+
+        // We need to stop at the message *before* the start index.
+        while (current && i < startIndex - 1) {
+            current = current.getActiveAnswer();
+            i++;
+        }
+
+        if (current) {
+            current.answerAlternatives = null;
+            this.notify();
+        }
+    }
+
+    /**
      * Returns an array of all message values in the active path.
      * @returns {MessageValue[]}
      */
