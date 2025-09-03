@@ -12,6 +12,8 @@ import { pluginManager } from './plugin-manager.js';
 
 // Load plugins
 import './plugins/example-plugin.js';
+import './plugins/agents-plugin.js';
+import './plugins/flow-plugin.js';
 
 class App {
     constructor() {
@@ -20,12 +22,18 @@ class App {
         this.activeChatId = null;
         this.abortController = null;
 
-        // Allow plugins to register themselves
         pluginManager.trigger('onAppInit', this);
 
         this.defineSettings();
+        this.defineTabs();
         this.initDOM();
+
         this.renderSettings();
+        this.renderTabs();
+
+        // Let plugins render chat area controls
+        this.dom.chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '');
+
 
         this.chatUI = new ChatUI(this.dom.chatContainer);
 
@@ -50,17 +58,34 @@ class App {
         this.settings = pluginManager.trigger('onSettingsRegistered', coreSettings);
     }
 
+    defineTabs() {
+        const coreTabs = [
+            {
+                id: 'chats',
+                label: 'Chats',
+                render: () => `
+                    <div id="chat-list-pane" class="tab-pane">
+                        <ul id="chat-list"></ul>
+                        <button id="new-chat-button">New Chat</button>
+                    </div>
+                `
+            }
+        ];
+        this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
+    }
+
     initDOM() {
         this.dom = {
             settingsContainer: document.getElementById('settings-container'),
             // Chat
             chatContainer: document.getElementById('chat-container'),
+            chatAreaControls: document.getElementById('chat-area-controls'),
             messageForm: document.getElementById('message-form'),
             messageInput: document.getElementById('message-input'),
             stopButton: document.getElementById('stop-button'),
-            // Chat List
-            chatList: document.getElementById('chat-list'),
-            newChatButton: document.getElementById('new-chat-button'),
+            // Right Panel
+            panelTabs: document.getElementById('panel-tabs'),
+            panelContent: document.getElementById('panel-content'),
         };
     }
 
@@ -81,7 +106,6 @@ class App {
                 input.rows = 4;
             } else if (setting.type === 'select') {
                 input = document.createElement('select');
-                // Options will be populated later
             } else if (setting.type === 'range') {
                 input = document.createElement('input');
                 input.type = 'range';
@@ -95,7 +119,8 @@ class App {
             }
             else {
                 input = document.createElement('input');
-                input.type = setting.type;
+                input.type = setting.type || 'text';
+                if(setting.placeholder) input.placeholder = setting.placeholder;
             }
 
             input.id = `setting-${setting.id}`;
@@ -112,27 +137,67 @@ class App {
             this.dom.settingsContainer.appendChild(el);
         });
 
-        // Store dynamic element references
         this.dom.settings = {};
         this.settings.forEach(s => {
             this.dom.settings[s.id] = document.getElementById(`setting-${s.id}`);
         });
     }
 
+    renderTabs() {
+        this.dom.panelTabs.innerHTML = '';
+        this.dom.panelContent.innerHTML = '';
+
+        this.tabs.forEach(tab => {
+            const tabBtn = document.createElement('button');
+            tabBtn.id = `tab-btn-${tab.id}`;
+            tabBtn.classList.add('tab-btn');
+            tabBtn.dataset.tabId = tab.id;
+            tabBtn.textContent = tab.label;
+            this.dom.panelTabs.appendChild(tabBtn);
+
+            const tabPane = document.createElement('div');
+            tabPane.id = `${tab.id}-pane`;
+            tabPane.classList.add('tab-pane');
+            tabPane.innerHTML = tab.render();
+            this.dom.panelContent.appendChild(tabPane);
+        });
+
+        // Store dynamic DOM references for chat list
+        this.dom.chatList = document.getElementById('chat-list');
+        this.dom.newChatButton = document.getElementById('new-chat-button');
+
+        // Activate the first tab by default
+        this.dom.panelTabs.querySelector('.tab-btn').classList.add('active');
+        this.dom.panelContent.querySelector('.tab-pane').classList.add('active');
+    }
+
     initEventListeners() {
         // Settings
         this.settings.forEach(setting => {
             const inputEl = this.dom.settings[setting.id];
-            inputEl.addEventListener('change', () => this.saveSettings());
-            if (setting.type === 'range') {
-                const valueSpan = document.getElementById(`setting-${setting.id}-value`);
-                inputEl.addEventListener('input', () => {
-                    valueSpan.textContent = inputEl.value;
-                });
+            if(inputEl) {
+                inputEl.addEventListener('change', () => this.saveSettings());
+                if (setting.type === 'range') {
+                    const valueSpan = document.getElementById(`setting-${setting.id}-value`);
+                    inputEl.addEventListener('input', () => {
+                        if(valueSpan) valueSpan.textContent = inputEl.value;
+                    });
+                }
             }
         });
         document.getElementById('refresh-models').addEventListener('click', () => this.fetchModels());
 
+        // Tabs
+        this.dom.panelTabs.addEventListener('click', (e) => {
+            const tabId = e.target.dataset.tabId;
+            if (tabId) {
+                this.dom.panelTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+                this.dom.panelContent.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+
+                e.target.classList.add('active');
+                document.getElementById(`${tabId}-pane`).classList.add('active');
+            }
+        });
 
         // Chat
         this.dom.messageForm.addEventListener('submit', (e) => {
@@ -149,10 +214,11 @@ class App {
         this.dom.newChatButton.addEventListener('click', () => this.createNewChat());
         this.dom.chatList.addEventListener('click', (e) => {
             const target = e.target;
-            if (target.dataset.id) {
-                this.switchChat(target.dataset.id);
+            if (target.closest('li')) {
+                this.switchChat(target.closest('li').dataset.id);
             }
             if (target.classList.contains('delete-chat-button')) {
+                e.stopPropagation();
                 this.deleteChat(target.parentElement.dataset.id);
             }
         });
@@ -229,6 +295,7 @@ class App {
             this.chatUI.setChatLog(chat.log);
             this.updateActiveChatInList();
             localStorage.setItem('core_active_chat_id', this.activeChatId);
+            pluginManager.trigger('onChatSwitched', chat);
         }
     }
 
@@ -247,11 +314,15 @@ class App {
     }
 
     renderChatList() {
+        if (!this.dom.chatList) return;
         this.dom.chatList.innerHTML = '';
         this.chats.forEach(chat => {
             const li = document.createElement('li');
             li.dataset.id = chat.id;
-            li.textContent = chat.title;
+
+            const span = document.createElement('span');
+            span.textContent = chat.title;
+            li.appendChild(span);
 
             const deleteBtn = document.createElement('button');
             deleteBtn.textContent = 'X';
@@ -264,6 +335,7 @@ class App {
     }
 
     updateActiveChatInList() {
+        if (!this.dom.chatList) return;
         const chatItems = this.dom.chatList.querySelectorAll('li');
         chatItems.forEach(item => {
             item.classList.toggle('active', item.dataset.id === this.activeChatId);
@@ -312,7 +384,6 @@ class App {
         activeChat.log.addMessage({ role: 'user', content: userInput });
         this.dom.messageInput.value = '';
 
-        // Add a placeholder for the assistant's response
         const assistantMsg = activeChat.log.addMessage({ role: 'assistant', content: '...' });
 
         this.dom.stopButton.style.display = 'block';
@@ -322,14 +393,13 @@ class App {
             const settings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
             const messages = activeChat.log.getActiveMessageValues();
 
-            // Add system prompt if it exists
             if (settings.systemPrompt) {
                 messages.unshift({ role: 'system', content: settings.systemPrompt });
             }
 
             let payload = {
                 model: settings.model,
-                messages: messages.slice(0, -1), // Exclude the placeholder
+                messages: messages.slice(0, -1),
                 stream: true,
                 temperature: parseFloat(settings.temperature)
             };
@@ -343,7 +413,7 @@ class App {
                 this.abortController.signal
             );
 
-            assistantMsg.value.content = ''; // Clear placeholder
+            assistantMsg.value.content = '';
             activeChat.log.notify();
 
             const decoder = new TextDecoder();
@@ -362,7 +432,7 @@ class App {
 
                 if (deltas.length > 0) {
                     assistantMsg.value.content += deltas.join('');
-                    activeChat.log.notify(); // Update UI with new content
+                    activeChat.log.notify();
                 }
             }
         } catch (error) {
@@ -375,7 +445,6 @@ class App {
         } finally {
             this.abortController = null;
             this.dom.stopButton.style.display = 'none';
-            // Update chat title
             if(activeChat.title === 'New Chat') {
                 const firstUserMessage = activeChat.log.getActiveMessageValues().find(m => m.role === 'user');
                 if(firstUserMessage) {
@@ -384,11 +453,11 @@ class App {
             }
             this.saveChats();
             this.renderChatList();
+            pluginManager.trigger('onResponseComplete', assistantMsg, activeChat);
         }
     }
 }
 
-// Initialize the application once the DOM is fully loaded.
 document.addEventListener('DOMContentLoaded', () => {
     new App();
 });
