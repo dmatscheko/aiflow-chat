@@ -19,9 +19,10 @@ class App {
     constructor() {
         this.apiService = new ApiService();
         this.chats = [];
-        this.activeChatId = null;
+        this.activeView = { type: 'chat', id: null }; // Default view
         this.abortController = null;
 
+        this.registerCoreViews();
         pluginManager.trigger('onAppInit', this);
 
         this.defineSettings();
@@ -31,20 +32,29 @@ class App {
         this.renderSettings();
         this.renderTabs();
 
-        // Let plugins render chat area controls
-        this.dom.chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '');
-
-
-        this.chatUI = new ChatUI(this.dom.chatContainer);
-
         this.loadSettings();
-        this.loadChats();
+        this.loadChats(); // This will set the initial active chat id
+
+        // Set initial view
+        this.activeView.id = this.activeChatId;
+        this.renderMainView();
 
         this.initEventListeners();
-
-        this.renderChatList();
-        this.switchChat(this.activeChatId);
         this.fetchModels();
+    }
+
+    registerCoreViews() {
+        pluginManager.registerView('chat', (chatId) => {
+            return `
+                <div id="chat-container"></div>
+                <div id="chat-area-controls"></div>
+                <form id="message-form">
+                    <textarea id="message-input" placeholder="Type your message..." rows="3"></textarea>
+                    <button type="submit">Send</button>
+                    <button type="button" id="stop-button" style="display: none;">Stop</button>
+                </form>
+            `;
+        });
     }
 
     defineSettings() {
@@ -63,12 +73,26 @@ class App {
             {
                 id: 'chats',
                 label: 'Chats',
-                render: () => `
-                    <div id="chat-list-pane" class="tab-pane">
+                onActivate: () => {
+                    const contentEl = document.getElementById('chats-pane');
+                    contentEl.innerHTML = `
                         <ul id="chat-list"></ul>
                         <button id="new-chat-button">New Chat</button>
-                    </div>
-                `
+                    `;
+                    this.renderChatList();
+
+                    document.getElementById('new-chat-button').addEventListener('click', () => this.createNewChat());
+                    document.getElementById('chat-list').addEventListener('click', (e) => {
+                        const target = e.target;
+                        if (target.closest('li')) {
+                            this.setView('chat', target.closest('li').dataset.id);
+                        }
+                        if (target.classList.contains('delete-chat-button')) {
+                            e.stopPropagation();
+                            this.deleteChat(target.parentElement.dataset.id);
+                        }
+                    });
+                }
             }
         ];
         this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
@@ -77,13 +101,7 @@ class App {
     initDOM() {
         this.dom = {
             settingsContainer: document.getElementById('settings-container'),
-            // Chat
-            chatContainer: document.getElementById('chat-container'),
-            chatAreaControls: document.getElementById('chat-area-controls'),
-            messageForm: document.getElementById('message-form'),
-            messageInput: document.getElementById('message-input'),
-            stopButton: document.getElementById('stop-button'),
-            // Right Panel
+            mainPanel: document.getElementById('main-panel'),
             panelTabs: document.getElementById('panel-tabs'),
             panelContent: document.getElementById('panel-content'),
         };
@@ -94,7 +112,6 @@ class App {
         this.settings.forEach(setting => {
             const el = document.createElement('div');
             el.classList.add('setting');
-
             const label = document.createElement('label');
             label.setAttribute('for', `setting-${setting.id}`);
             label.textContent = setting.label;
@@ -133,7 +150,6 @@ class App {
                 refreshBtn.textContent = 'Refresh';
                 el.appendChild(refreshBtn);
             }
-
             this.dom.settingsContainer.appendChild(el);
         });
 
@@ -158,21 +174,68 @@ class App {
             const tabPane = document.createElement('div');
             tabPane.id = `${tab.id}-pane`;
             tabPane.classList.add('tab-pane');
-            tabPane.innerHTML = tab.render();
             this.dom.panelContent.appendChild(tabPane);
         });
 
-        // Store dynamic DOM references for chat list
-        this.dom.chatList = document.getElementById('chat-list');
-        this.dom.newChatButton = document.getElementById('new-chat-button');
-
-        // Activate the first tab by default
         this.dom.panelTabs.querySelector('.tab-btn').classList.add('active');
         this.dom.panelContent.querySelector('.tab-pane').classList.add('active');
+        this.tabs[0].onActivate();
+    }
+
+    setView(type, id) {
+        this.activeView = { type, id };
+        console.log('Setting view to', this.activeView);
+        if (type === 'chat') {
+            this.activeChatId = id;
+            localStorage.setItem('core_active_chat_id', this.activeChatId);
+            this.updateActiveChatInList();
+        }
+        this.renderMainView();
+    }
+
+    renderMainView() {
+        const { type, id } = this.activeView;
+        const renderer = pluginManager.getViewRenderer(type);
+
+        if (renderer) {
+            this.dom.mainPanel.innerHTML = renderer(id);
+            if (type === 'chat') {
+                this.initChatView(id);
+            }
+            pluginManager.trigger('onViewRendered', this.activeView);
+        } else {
+            this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
+        }
+    }
+
+    initChatView(chatId) {
+        const chat = this.chats.find(c => c.id === chatId);
+        if (!chat) return;
+
+        this.chatUI = new ChatUI(document.getElementById('chat-container'));
+        this.chatUI.setChatLog(chat.log);
+
+        this.dom.messageForm = document.getElementById('message-form');
+        this.dom.messageInput = document.getElementById('message-input');
+        this.dom.stopButton = document.getElementById('stop-button');
+
+        this.dom.messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleFormSubmit();
+        });
+        this.dom.stopButton.addEventListener('click', () => {
+            if (this.abortController) this.abortController.abort();
+        });
+
+        // Let plugins render chat area controls
+        const chatAreaControls = document.getElementById('chat-area-controls');
+        if(chatAreaControls) {
+            chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '');
+            pluginManager.trigger('onChatSwitched', chat); // Notify plugins that the chat view is ready
+        }
     }
 
     initEventListeners() {
-        // Settings
         this.settings.forEach(setting => {
             const inputEl = this.dom.settings[setting.id];
             if(inputEl) {
@@ -187,7 +250,6 @@ class App {
         });
         document.getElementById('refresh-models').addEventListener('click', () => this.fetchModels());
 
-        // Tabs
         this.dom.panelTabs.addEventListener('click', (e) => {
             const tabId = e.target.dataset.tabId;
             if (tabId) {
@@ -196,35 +258,15 @@ class App {
 
                 e.target.classList.add('active');
                 document.getElementById(`${tabId}-pane`).classList.add('active');
-            }
-        });
 
-        // Chat
-        this.dom.messageForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleFormSubmit();
-        });
-        this.dom.stopButton.addEventListener('click', () => {
-            if (this.abortController) {
-                this.abortController.abort();
-            }
-        });
-
-        // Chat List
-        this.dom.newChatButton.addEventListener('click', () => this.createNewChat());
-        this.dom.chatList.addEventListener('click', (e) => {
-            const target = e.target;
-            if (target.closest('li')) {
-                this.switchChat(target.closest('li').dataset.id);
-            }
-            if (target.classList.contains('delete-chat-button')) {
-                e.stopPropagation();
-                this.deleteChat(target.parentElement.dataset.id);
+                const tab = this.tabs.find(t => t.id === tabId);
+                if (tab && tab.onActivate) {
+                    tab.onActivate();
+                }
             }
         });
     }
 
-    // --- Settings Management ---
     loadSettings() {
         const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
         this.settings.forEach(setting => {
@@ -250,7 +292,6 @@ class App {
         localStorage.setItem('core_chat_settings', JSON.stringify(settingsToSave));
     }
 
-    // --- Chat Management ---
     loadChats() {
         const savedChats = JSON.parse(localStorage.getItem('core_chat_logs'));
         if (savedChats && savedChats.length > 0) {
@@ -261,7 +302,10 @@ class App {
             }));
             this.activeChatId = localStorage.getItem('core_active_chat_id') || this.chats[0].id;
         } else {
-            this.createNewChat();
+            // createNewChat is called in saveChats if chats is empty
+        }
+        if (this.chats.length === 0) {
+             this.createNewChat();
         }
     }
 
@@ -282,31 +326,20 @@ class App {
             log: new ChatLog(),
         };
         this.chats.unshift(newChat);
-        this.activeChatId = newChat.id;
         this.renderChatList();
-        this.switchChat(newChat.id);
+        this.setView('chat', newChat.id);
         this.saveChats();
-    }
-
-    switchChat(chatId) {
-        const chat = this.chats.find(c => c.id === chatId);
-        if (chat) {
-            this.activeChatId = chatId;
-            this.chatUI.setChatLog(chat.log);
-            this.updateActiveChatInList();
-            localStorage.setItem('core_active_chat_id', this.activeChatId);
-            pluginManager.trigger('onChatSwitched', chat);
-        }
     }
 
     deleteChat(chatId) {
         this.chats = this.chats.filter(c => c.id !== chatId);
         if (this.activeChatId === chatId) {
-            this.activeChatId = this.chats.length > 0 ? this.chats[0].id : null;
-            if (this.activeChatId) {
-                this.switchChat(this.activeChatId);
+            const newActiveChat = this.chats.length > 0 ? this.chats[0] : null;
+            if (newActiveChat) {
+                this.setView('chat', newActiveChat.id);
             } else {
                 this.createNewChat();
+                return; // createNewChat calls setView
             }
         }
         this.renderChatList();
@@ -314,8 +347,9 @@ class App {
     }
 
     renderChatList() {
-        if (!this.dom.chatList) return;
-        this.dom.chatList.innerHTML = '';
+        const chatListEl = document.getElementById('chat-list');
+        if (!chatListEl) return;
+        chatListEl.innerHTML = '';
         this.chats.forEach(chat => {
             const li = document.createElement('li');
             li.dataset.id = chat.id;
@@ -329,14 +363,15 @@ class App {
             deleteBtn.classList.add('delete-chat-button');
             li.appendChild(deleteBtn);
 
-            this.dom.chatList.appendChild(li);
+            chatListEl.appendChild(li);
         });
         this.updateActiveChatInList();
     }
 
     updateActiveChatInList() {
-        if (!this.dom.chatList) return;
-        const chatItems = this.dom.chatList.querySelectorAll('li');
+        const chatListEl = document.getElementById('chat-list');
+        if (!chatListEl) return;
+        const chatItems = chatListEl.querySelectorAll('li');
         chatItems.forEach(item => {
             item.classList.toggle('active', item.dataset.id === this.activeChatId);
         });
@@ -346,14 +381,10 @@ class App {
         return this.chats.find(c => c.id === this.activeChatId);
     }
 
-    // --- Core Logic ---
     async fetchModels() {
         const apiUrl = this.dom.settings.apiUrl.value;
         const apiKey = this.dom.settings.apiKey.value;
-        if (!apiUrl) {
-            alert('Please enter an API URL.');
-            return;
-        }
+        if (!apiUrl) return;
         try {
             const models = await this.apiService.getModels(apiUrl, apiKey);
             const modelSelect = this.dom.settings.model;

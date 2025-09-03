@@ -7,6 +7,25 @@
 class PluginManager {
     constructor() {
         this.hooks = {};
+        this.viewRenderers = {};
+    }
+
+    /**
+     * Registers a view renderer for a specific view type.
+     * @param {string} viewType - The name of the view type (e.g., 'agent-editor').
+     * @param {Function} renderer - A function that takes an ID and returns an HTML string for the view.
+     */
+    registerView(viewType, renderer) {
+        this.viewRenderers[viewType] = renderer;
+    }
+
+    /**
+     * Gets the renderer function for a given view type.
+     * @param {string} viewType - The name of the view type.
+     * @returns {Function|null} The renderer function or null if not found.
+     */
+    getViewRenderer(viewType) {
+        return this.viewRenderers[viewType] || null;
     }
 
     /**

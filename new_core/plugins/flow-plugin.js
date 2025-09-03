@@ -67,37 +67,40 @@ let appInstance = null;
 const flowPlugin = {
     onAppInit(app) {
         appInstance = app;
+        pluginManager.registerView('flow-editor', renderFlowEditor);
     },
 
     onTabsRegistered(tabs) {
         tabs.push({
             id: 'flows',
             label: 'Flows',
-            render: () => `
-                <div id="flows-pane" class="tab-pane">
-                    <div id="flow-list-container">
-                        <h3>Flows</h3>
-                        <ul id="flow-list"></ul>
-                        <button id="add-flow-btn">Add New Flow</button>
-                    </div>
-                    <div id="flow-form-container" style="display: none;">
-                        <h3>Flow Editor</h3>
-                        <form id="flow-form">
-                            <input type="hidden" id="flow-id">
-                            <div class="setting">
-                                <label for="flow-name">Name</label>
-                                <input type="text" id="flow-name" required>
-                            </div>
-                            <div class="setting">
-                                <label for="flow-prompts">Prompts (one per line)</label>
-                                <textarea id="flow-prompts" rows="10"></textarea>
-                            </div>
-                            <button type="submit">Save Flow</button>
-                            <button type="button" id="cancel-flow-edit">Cancel</button>
-                        </form>
-                    </div>
-                </div>
-            `
+            onActivate: () => {
+                const contentEl = document.getElementById('flows-pane');
+                contentEl.innerHTML = `
+                    <h3>Flows</h3>
+                    <ul id="flow-list"></ul>
+                    <button id="add-flow-btn">Add New Flow</button>
+                `;
+                renderFlowList();
+
+                document.getElementById('add-flow-btn').addEventListener('click', () => {
+                    appInstance.setView('flow-editor', null);
+                });
+                document.getElementById('flow-list').addEventListener('click', (e) => {
+                    if (e.target.classList.contains('edit-flow-btn')) {
+                        const flowId = e.target.parentElement.dataset.id;
+                        appInstance.setView('flow-editor', flowId);
+                    }
+                    if (e.target.classList.contains('delete-flow-btn')) {
+                        const flowId = e.target.parentElement.dataset.id;
+                        if (confirm('Are you sure you want to delete this flow?')) {
+                            flowManager.deleteFlow(flowId);
+                            renderFlowList();
+                            populateFlowSelector();
+                        }
+                    }
+                });
+            }
         });
         return tabs;
     },
@@ -116,6 +119,36 @@ const flowPlugin = {
         return currentHtml + flowSelectorHtml;
     },
 
+    onChatSwitched(chat) {
+        populateFlowSelector();
+        const runBtn = document.getElementById('run-flow-btn');
+        const stopBtn = document.getElementById('stop-flow-btn');
+        const runningFlow = flowManager.getRunningFlow();
+        if (runningFlow && runningFlow.chatId === chat.id) {
+            runBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+        } else {
+            runBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+        }
+    },
+
+    onViewRendered(view) {
+        if (view.type === 'flow-editor') {
+            attachFlowFormListeners();
+        } else if (view.type === 'chat') {
+            // Re-attach listeners for chat controls
+            const runBtn = document.getElementById('run-flow-btn');
+            const stopBtn = document.getElementById('stop-flow-btn');
+            if (runBtn) {
+                runBtn.addEventListener('click', handleRunFlowClick);
+            }
+            if (stopBtn) {
+                stopBtn.addEventListener('click', handleStopFlowClick);
+            }
+        }
+    },
+
     onResponseComplete(assistantMsg, chat) {
         const runningFlow = flowManager.getRunningFlow();
         if (!runningFlow || runningFlow.chatId !== chat.id) {
@@ -131,13 +164,11 @@ const flowPlugin = {
         if (runningFlow.nextPromptIndex < flow.prompts.length) {
             const nextPrompt = flow.prompts[runningFlow.nextPromptIndex];
             flowManager.advanceFlow();
-            // Use a timeout to avoid race conditions with other event listeners
             setTimeout(() => {
                 appInstance.dom.messageInput.value = nextPrompt;
                 appInstance.handleFormSubmit();
             }, 100);
         } else {
-            // Flow finished
             flowManager.stopFlow();
             document.getElementById('run-flow-btn').style.display = 'inline-block';
             document.getElementById('stop-flow-btn').style.display = 'none';
@@ -147,7 +178,7 @@ const flowPlugin = {
 
 pluginManager.register(flowPlugin);
 
-// --- Flow Logic ---
+// --- Flow Logic & Renderers ---
 
 function renderFlowList() {
     const flowList = document.getElementById('flow-list');
@@ -155,8 +186,11 @@ function renderFlowList() {
     flowList.innerHTML = '';
     flowManager.flows.forEach(flow => {
         const li = document.createElement('li');
-        li.textContent = flow.name;
         li.dataset.id = flow.id;
+
+        const span = document.createElement('span');
+        span.textContent = flow.name;
+        li.appendChild(span);
 
         const editBtn = document.createElement('button');
         editBtn.textContent = 'Edit';
@@ -172,26 +206,78 @@ function renderFlowList() {
     });
 }
 
-function showFlowForm(flow = null) {
-    const formContainer = document.getElementById('flow-form-container');
-    const flowIdInput = document.getElementById('flow-id');
-    const flowNameInput = document.getElementById('flow-name');
-    const flowPromptsInput = document.getElementById('flow-prompts');
+function renderFlowEditor(flowId) {
+    const flow = flowId ? flowManager.getFlow(flowId) : null;
+    const name = flow ? flow.name : '';
+    const prompts = flow ? flow.prompts.join('\n') : '';
+    const id = flow ? flow.id : '';
 
-    if (flow) {
-        flowIdInput.value = flow.id;
-        flowNameInput.value = flow.name;
-        flowPromptsInput.value = flow.prompts.join('\n');
-    } else {
-        flowIdInput.value = '';
-        flowNameInput.value = '';
-        flowPromptsInput.value = '';
-    }
-    formContainer.style.display = 'block';
+    return `
+        <div id="flow-editor-view">
+            <h2>${flowId ? 'Edit' : 'Create'} Flow</h2>
+            <form id="flow-form">
+                <input type="hidden" id="flow-id" value="${id}">
+                <div class="setting">
+                    <label for="flow-name">Name</label>
+                    <input type="text" id="flow-name" required value="${name}">
+                </div>
+                <div class="setting">
+                    <label for="flow-prompts">Prompts (one per line)</label>
+                    <textarea id="flow-prompts" rows="15">${prompts}</textarea>
+                </div>
+                <button type="submit">Save Flow</button>
+                <button type="button" id="cancel-flow-edit">Cancel</button>
+            </form>
+        </div>
+    `;
 }
 
-function hideFlowForm() {
-    document.getElementById('flow-form-container').style.display = 'none';
+function attachFlowFormListeners() {
+    const form = document.getElementById('flow-form');
+    if (!form) return;
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const flowId = document.getElementById('flow-id').value;
+        const flowData = {
+            id: flowId || `flow-${Date.now()}`,
+            name: document.getElementById('flow-name').value,
+            prompts: document.getElementById('flow-prompts').value.split('\n').filter(p => p.trim() !== ''),
+        };
+        if (flowId) {
+            flowManager.updateFlow(flowData);
+        } else {
+            flowManager.addFlow(flowData);
+        }
+        populateFlowSelector();
+        appInstance.setView('chat', appInstance.activeChatId);
+    });
+
+    document.getElementById('cancel-flow-edit').addEventListener('click', () => {
+        appInstance.setView('chat', appInstance.activeChatId);
+    });
+}
+
+function handleRunFlowClick() {
+    const selector = document.getElementById('flow-selector');
+    const flowId = selector.value;
+    if (flowId && appInstance) {
+        const flow = flowManager.getFlow(flowId);
+        if (flow && flow.prompts.length > 0) {
+            flowManager.startFlow(flowId, appInstance.activeChatId);
+            appInstance.dom.messageInput.value = flow.prompts[0];
+            appInstance.handleFormSubmit();
+            flowManager.advanceFlow();
+            document.getElementById('run-flow-btn').style.display = 'none';
+            document.getElementById('stop-flow-btn').style.display = 'inline-block';
+        }
+    }
+}
+
+function handleStopFlowClick() {
+    flowManager.stopFlow();
+    document.getElementById('stop-flow-btn').style.display = 'none';
+    document.getElementById('run-flow-btn').style.display = 'inline-block';
 }
 
 function populateFlowSelector() {
@@ -206,72 +292,3 @@ function populateFlowSelector() {
         selector.appendChild(option);
     });
 }
-
-document.addEventListener('DOMContentLoaded', () => {
-    document.body.addEventListener('click', e => {
-        if (e.target.id === 'tab-btn-flows') {
-            renderFlowList();
-        }
-        if (e.target.id === 'add-flow-btn') {
-            showFlowForm();
-        }
-        if (e.target.id === 'cancel-flow-edit') {
-            hideFlowForm();
-        }
-        if (e.target.classList.contains('edit-flow-btn')) {
-            const flowId = e.target.parentElement.dataset.id;
-            const flow = flowManager.getFlow(flowId);
-            showFlowForm(flow);
-        }
-        if (e.target.classList.contains('delete-flow-btn')) {
-            const flowId = e.target.parentElement.dataset.id;
-            if (confirm('Are you sure you want to delete this flow?')) {
-                flowManager.deleteFlow(flowId);
-                renderFlowList();
-                populateFlowSelector();
-            }
-        }
-        if (e.target.id === 'run-flow-btn') {
-            const selector = document.getElementById('flow-selector');
-            const flowId = selector.value;
-            if (flowId && appInstance) {
-                const flow = flowManager.getFlow(flowId);
-                if (flow && flow.prompts.length > 0) {
-                    flowManager.startFlow(flowId, appInstance.activeChatId);
-                    appInstance.dom.messageInput.value = flow.prompts[0];
-                    appInstance.handleFormSubmit();
-                    flowManager.advanceFlow();
-                    e.target.style.display = 'none';
-                    document.getElementById('stop-flow-btn').style.display = 'inline-block';
-                }
-            }
-        }
-        if (e.target.id === 'stop-flow-btn') {
-            flowManager.stopFlow();
-            e.target.style.display = 'none';
-            document.getElementById('run-flow-btn').style.display = 'inline-block';
-        }
-    });
-
-    document.body.addEventListener('submit', e => {
-        if (e.target.id === 'flow-form') {
-            e.preventDefault();
-            const flowId = document.getElementById('flow-id').value;
-            const flowData = {
-                id: flowId || `flow-${Date.now()}`,
-                name: document.getElementById('flow-name').value,
-                prompts: document.getElementById('flow-prompts').value.split('\n').filter(p => p.trim() !== ''),
-            };
-            if (flowId) {
-                flowManager.updateFlow(flowData);
-            } else {
-                flowManager.addFlow(flowData);
-            }
-            renderFlowList();
-            populateFlowSelector();
-            hideFlowForm();
-        }
-    });
-
-    populateFlowSelector();
-});
