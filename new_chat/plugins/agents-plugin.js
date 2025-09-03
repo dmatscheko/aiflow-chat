@@ -6,6 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
+import { debounce } from '../utils.js';
 
 /**
  * @typedef {object} AgentModelSettings
@@ -233,18 +234,6 @@ function renderAgentEditor(agentId) {
             </form>
         </div>
     `;
-}
-
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
 }
 
 /**

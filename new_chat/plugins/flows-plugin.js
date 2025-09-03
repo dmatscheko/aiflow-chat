@@ -6,6 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
+import { debounce } from '../utils.js';
 
 let appInstance = null;
 
@@ -378,7 +379,7 @@ function resetInteractions() {
     document.getElementById('flow-canvas-wrapper').style.cursor = 'grab';
 }
 
-function handleCanvasMouseDown(e, flow) {
+function handleCanvasMouseDown(e, flow, debouncedUpdate) {
     const target = e.target;
     if (target.classList.contains('connector') && target.dataset.type === 'out') {
         connectionInfo = { active: true, fromNode: target.closest('.flow-step-card'), fromConnector: target, tempLine: document.createElementNS('http://www.w3.org/2000/svg', 'line') };
@@ -395,7 +396,7 @@ function handleCanvasMouseDown(e, flow) {
     }
 }
 
-function handleCanvasMouseMove(e, flow) {
+function handleCanvasMouseMove(e, flow, debouncedUpdate) {
     if (dragInfo.active) {
         dragInfo.target.style.left = `${e.clientX - dragInfo.offsetX}px`;
         dragInfo.target.style.top = `${e.clientY - dragInfo.offsetY}px`;
@@ -418,10 +419,14 @@ function handleCanvasMouseMove(e, flow) {
     }
 }
 
-function handleCanvasMouseUp(e, flow) {
+function handleCanvasMouseUp(e, flow, debouncedUpdate) {
     if (dragInfo.active) {
         const step = flow.steps.find(s => s.id === dragInfo.target.dataset.id);
-        if (step) { step.x = dragInfo.target.offsetLeft; step.y = dragInfo.target.offsetTop; flowManager.updateFlow(flow); }
+        if (step) {
+            step.x = dragInfo.target.offsetLeft;
+            step.y = dragInfo.target.offsetTop;
+            debouncedUpdate();
+        }
     } else if (connectionInfo.active) {
         const toConnector = e.target.closest('.connector');
         if (toConnector && toConnector.dataset.type === 'in') {
@@ -429,7 +434,7 @@ function handleCanvasMouseUp(e, flow) {
             const fromNode = connectionInfo.fromNode;
             if (fromNode.dataset.id !== toNode.dataset.id) {
                 flow.connections.push({ from: fromNode.dataset.id, to: toNode.dataset.id, outputName: connectionInfo.fromConnector.dataset.outputName });
-                flowManager.updateFlow(flow);
+                debouncedUpdate();
                 renderFlow(flow);
             }
         }
@@ -492,14 +497,20 @@ const flowsPlugin = {
     onViewRendered(view) {
         if (view.type === 'flow-editor') {
             const flow = flowManager.getFlow(view.id); if (!flow) return;
+
+            const debouncedUpdate = debounce(() => flowManager.updateFlow(flow), 500);
+
             renderFlow(flow);
             const canvas = document.getElementById('flow-canvas');
-            canvas.addEventListener('mousedown', (e) => handleCanvasMouseDown(e, flow));
-            canvas.addEventListener('mousemove', (e) => handleCanvasMouseMove(e, flow));
-            canvas.addEventListener('mouseup', (e) => handleCanvasMouseUp(e, flow));
+            canvas.addEventListener('mousedown', (e) => handleCanvasMouseDown(e, flow, debouncedUpdate));
+            canvas.addEventListener('mousemove', (e) => handleCanvasMouseMove(e, flow, debouncedUpdate));
+            canvas.addEventListener('mouseup', (e) => handleCanvasMouseUp(e, flow, debouncedUpdate));
             canvas.addEventListener('change', (e) => {
                 const step = flow.steps.find(s => s.id === e.target.dataset.id);
-                if (step && stepTypes[step.type]?.onUpdate) { stepTypes[step.type].onUpdate(step, e.target); flowManager.updateFlow(flow); }
+                if (step && stepTypes[step.type]?.onUpdate) {
+                    stepTypes[step.type].onUpdate(step, e.target);
+                    debouncedUpdate();
+                }
             });
             canvas.addEventListener('click', (e) => {
                  if (e.target.classList.contains('delete-flow-step-btn')) {
