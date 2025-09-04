@@ -91,9 +91,8 @@ export class ChatUI {
         const roleEl = document.createElement('strong');
         let roleText = message.value.role;
 
-        const agentId = message.value.agent;
-        if (agentId && this.agentManager) {
-            const agent = this.agentManager.getAgent(agentId);
+        if (message.value.agent && this.agentManager) {
+            const agent = this.agentManager.getAgent(message.value.agent);
             if (agent) {
                 roleText += ` (${agent.name})`;
             }

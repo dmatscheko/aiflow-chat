@@ -419,14 +419,7 @@ const agentsPlugin = {
         if (view.type === 'agent-editor') {
             attachAgentFormListeners();
         }
-    },
-
-    /**
-     * Modifies the API call payload based on the active agent.
-     * @param {object} payload - The original API call payload.
-     * @param {object} settings - The global settings.
-     * @returns {object} The modified payload.
-     */
+    }
 };
 
 pluginManager.register(agentsPlugin);

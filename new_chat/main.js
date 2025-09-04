@@ -431,15 +431,15 @@ class App {
         const activeChat = this.getActiveChat();
         if (!activeChat) return;
 
-        // Determine the agent to use: the override, the chat's active agent, or null.
-        const finalAgentId = agentId || this.agentManager.getActiveAgentForChat(activeChat.id);
-
         if (!isContinuation) {
             const userInput = this.dom.messageInput.value.trim();
             if (!userInput) return;
-            activeChat.log.addMessage({ role: 'user', content: userInput, agent: finalAgentId });
+            activeChat.log.addMessage({ role: 'user', content: userInput });
             this.dom.messageInput.value = '';
         }
+
+        // Determine the agent to use: the override, the chat's active agent, or null.
+        const finalAgentId = agentId || this.agentManager.getActiveAgentForChat(activeChat.id);
 
         // Add a placeholder message with the same agent context.
         const assistantMsg = activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });

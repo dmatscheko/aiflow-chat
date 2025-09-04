@@ -22,7 +22,7 @@
       "run",
       "../_mcp_servers/filesystem_read-mcp/filesystem_read-mcp.py",
       "--",
-      "./_mcp_filesystem/read_write"
+      "../_mcp_filesystem/read_write"
     ]
   },
   "filesystem-write": {
