@@ -427,19 +427,22 @@ class App {
     }
 
     async handleFormSubmit(options = {}) {
-        const { isContinuation = false } = options;
+        const { isContinuation = false, agentId = null } = options;
         const activeChat = this.getActiveChat();
         if (!activeChat) return;
+
+        // Determine the agent to use: the override, the chat's active agent, or null.
+        const finalAgentId = agentId || this.agentManager.getActiveAgentForChat(activeChat.id);
 
         if (!isContinuation) {
             const userInput = this.dom.messageInput.value.trim();
             if (!userInput) return;
-            activeChat.log.addMessage({ role: 'user', content: userInput });
+            activeChat.log.addMessage({ role: 'user', content: userInput, agent: finalAgentId });
             this.dom.messageInput.value = '';
         }
 
-        // Add a placeholder message with null content to signify it's pending.
-        const assistantMsg = activeChat.log.addMessage({ role: 'assistant', content: null });
+        // Add a placeholder message with the same agent context.
+        const assistantMsg = activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
 
         // Schedule the response processor to find and process the new placeholder.
         responseProcessor.scheduleProcessing(this);

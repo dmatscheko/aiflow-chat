@@ -319,11 +319,6 @@ const agentsPlugin = {
         appInstance = app;
         pluginManager.registerView('agent-editor', renderAgentEditor);
         app.agentManager = agentManager; // Expose agent manager to other plugins
-        app.setActiveAgent = (agentId) => {
-            if (app.activeChatId) {
-                agentManager.setActiveAgentForChat(app.activeChatId, agentId || null);
-            }
-        };
     },
 
     /**
@@ -432,34 +427,6 @@ const agentsPlugin = {
      * @param {object} settings - The global settings.
      * @returns {object} The modified payload.
      */
-    beforeApiCall(payload, settings) {
-        if (!appInstance || !appInstance.activeChatId) return payload;
-
-        const activeAgentId = agentManager.getActiveAgentForChat(appInstance.activeChatId);
-        if (!activeAgentId) return payload;
-
-        const agent = agentManager.getAgent(activeAgentId);
-        if (!agent) return payload;
-
-        // Modify system prompt
-        let systemMessage = payload.messages.find(m => m.role === 'system');
-        if (systemMessage) {
-            systemMessage.content = agent.systemPrompt;
-        } else {
-            payload.messages.unshift({ role: 'system', content: agent.systemPrompt });
-        }
-
-        // Override model settings if custom settings are enabled
-        if (agent.useCustomModelSettings) {
-            const { apiUrl, model, temperature, top_p } = agent.modelSettings;
-            if (apiUrl) settings.apiUrl = apiUrl;
-            if (model) payload.model = model;
-            if (temperature) payload.temperature = temperature;
-            if (top_p) payload.top_p = top_p;
-        }
-
-        return payload;
-    }
 };
 
 pluginManager.register(agentsPlugin);

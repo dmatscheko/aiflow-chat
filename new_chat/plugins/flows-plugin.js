@@ -66,9 +66,8 @@ defineStep('simple-prompt', {
     onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
     execute: (step, context) => {
         if (!step.data.prompt) return context.stopFlow('Simple Prompt step is not configured.');
-        context.app.setActiveAgent(step.data.agentId);
         context.app.dom.messageInput.value = step.data.prompt;
-        context.app.handleFormSubmit();
+        context.app.handleFormSubmit({ agentId: step.data.agentId });
     },
 });
 
@@ -89,9 +88,8 @@ defineStep('multi-prompt', {
     execute: (step, context) => {
         console.log("Executing Multi-Prompt (not fully implemented, runs once)");
         if (!step.data.prompt) return context.stopFlow('Multi Prompt step is not configured.');
-        context.app.setActiveAgent(step.data.agentId);
         context.app.dom.messageInput.value = step.data.prompt;
-        context.app.handleFormSubmit();
+        context.app.handleFormSubmit({ agentId: step.data.agentId });
     },
 });
 

@@ -90,7 +90,7 @@ class ResponseProcessor {
         app.abortController = new AbortController();
 
         try {
-            const settings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
+            let settings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
             // Get the history leading up to the pending message.
             const messages = chat.log.getHistoryBeforeMessage(assistantMsg);
             if (!messages) {
@@ -100,23 +100,42 @@ class ResponseProcessor {
                 return;
             }
 
-            if (settings.systemPrompt) {
-                messages.unshift({ role: 'system', content: settings.systemPrompt });
+            // --- Agent-specific settings override ---
+            const agentId = assistantMsg.value.agent;
+            const agent = agentId ? app.agentManager.getAgent(agentId) : null;
+
+            let systemPrompt = settings.systemPrompt;
+            let finalApiUrl = settings.apiUrl;
+            let finalApiKey = settings.apiKey;
+
+            if (agent) {
+                systemPrompt = agent.systemPrompt;
+                if (agent.useCustomModelSettings) {
+                    settings = { ...settings, ...agent.modelSettings };
+                    if(agent.modelSettings.apiUrl) finalApiUrl = agent.modelSettings.apiUrl;
+                    if(agent.modelSettings.apiKey) finalApiKey = agent.modelSettings.apiKey;
+                }
             }
+
+            if (systemPrompt) {
+                messages.unshift({ role: 'system', content: systemPrompt });
+            }
+            // --- End of agent override ---
 
             let payload = {
                 model: settings.model,
                 messages: messages,
                 stream: true,
-                temperature: parseFloat(settings.temperature)
+                temperature: parseFloat(settings.temperature),
+                top_p: settings.top_p ? parseFloat(settings.top_p) : undefined,
             };
 
             payload = pluginManager.trigger('beforeApiCall', payload, settings);
 
             const reader = await app.apiService.streamChat(
                 payload,
-                settings.apiUrl,
-                settings.apiKey,
+                finalApiUrl,
+                finalApiKey,
                 app.abortController.signal
             );
 

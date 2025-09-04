@@ -13,6 +13,7 @@
  * @typedef {Object} MessageValue
  * @property {MessageRole} role - The role of the message author.
  * @property {string | null} content - The content of the message.
+ * @property {string | null} [agent] - The ID of the agent used for this message.
  */
 
 /**
