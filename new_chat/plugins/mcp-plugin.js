@@ -87,30 +87,15 @@ const mcpPlugin = {
             return payload;
         }
 
-        // Determine the effective tool settings
-        let effectiveToolSettings;
-        if (agent && agent.useCustomToolSettings) {
-            effectiveToolSettings = agent.toolSettings;
-        } else {
-            effectiveToolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: true, allowed: [] };
-        }
+        const dynamicToolsSection = generateToolsSection(agent);
 
-        // Filter the tools based on the settings
-        const allowedTools = effectiveToolSettings.allowAll
-            ? tools
-            : tools.filter(tool => effectiveToolSettings.allowed.includes(tool.name));
-
-        if (allowedTools.length === 0) {
-            return payload; // No tools to advertise
-        }
-
-        const dynamicToolsSection = generateToolsSection(allowedTools);
-
-        const systemPrompt = payload.messages.find(m => m.role === 'system');
-        if (systemPrompt) {
-            // Avoid duplicating the section if it's already there
-            if (!systemPrompt.content.includes(toolsHeader)) {
-                 systemPrompt.content += '\n\n' + toolsHeader + dynamicToolsSection;
+        if (dynamicToolsSection) {
+            const systemPrompt = payload.messages.find(m => m.role === 'system');
+            if (systemPrompt) {
+                // Avoid duplicating the section if it's already there
+                if (!systemPrompt.content.includes(toolsHeader)) {
+                    systemPrompt.content += '\n\n' + toolsHeader + dynamicToolsSection;
+                }
             }
         }
         return payload;
@@ -216,13 +201,30 @@ function initializeMcp() {
 }
 
 /**
- * Generates the tools Markdown section from a list of tools.
- * @param {Object[]} toolList - The list of tools.
- * @returns {string} The Markdown section.
+ * Generates the tools Markdown section based on the current settings.
+ * @param {import('./agents-plugin.js').Agent|null} agent - The active agent, if any.
+ * @returns {string} The Markdown section, or an empty string if no tools are allowed.
  */
-function generateToolsSection(toolList) {
+function generateToolsSection(agent) {
+    // Determine the effective tool settings
+    let effectiveToolSettings;
+    if (agent && agent.useCustomToolSettings) {
+        effectiveToolSettings = agent.toolSettings;
+    } else {
+        effectiveToolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: true, allowed: [] };
+    }
+
+    // Filter the tools based on the settings
+    const allowedTools = effectiveToolSettings.allowAll
+        ? tools
+        : tools.filter(tool => effectiveToolSettings.allowed.includes(tool.name));
+
+    if (allowedTools.length === 0) {
+        return '';
+    }
+
     const sections = [];
-    toolList.forEach((tool, idx) => {
+    allowedTools.forEach((tool, idx) => {
         const desc = tool.description || 'No description provided.';
         const action = tool.name;
         const displayName = action.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
