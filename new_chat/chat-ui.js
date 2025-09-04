@@ -5,6 +5,8 @@
 
 'use strict';
 
+import { pluginManager } from './plugin-manager.js';
+
 /**
  * @typedef {import('./chat-data.js').ChatLog} ChatLog
  * @typedef {import('./chat-data.js').Message} Message
@@ -88,6 +90,9 @@ export class ChatUI {
 
         const contentEl = document.createElement('div');
         contentEl.textContent = message.value.content || '';
+
+        // Allow plugins to modify the content element (e.g., for rich formatting)
+        pluginManager.trigger('onFormatMessageContent', contentEl, message);
 
         el.appendChild(roleEl);
         el.appendChild(contentEl);

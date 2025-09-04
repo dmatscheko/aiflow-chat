@@ -14,6 +14,7 @@ import { pluginManager } from './plugin-manager.js';
 import './plugins/example-plugin.js';
 import './plugins/agents-plugin.js';
 import './plugins/flows-plugin.js';
+import './plugins/mcp-plugin.js';
 
 class App {
     constructor() {
