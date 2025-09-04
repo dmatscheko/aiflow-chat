@@ -311,28 +311,76 @@ function renderFlowEditor(flowId) {
         </div>`;
 }
 
+function updateConnections(flow) {
+    const nodeContainer = document.getElementById('flow-node-container');
+    const svgLayer = document.getElementById('flow-svg-layer');
+    if (!nodeContainer || !svgLayer) return;
+
+    // Clear only the lines, not the whole SVG, to keep the marker defs
+    svgLayer.querySelectorAll('line').forEach(l => l.remove());
+
+    flow.connections.forEach(conn => {
+        const fromNode = nodeContainer.querySelector(`[data-id="${conn.from}"]`);
+        const toNode = nodeContainer.querySelector(`[data-id="${conn.to}"]`);
+        if (!fromNode || !toNode) return;
+
+        const outConn = fromNode.querySelector(`.connector.bottom[data-output-name="${conn.outputName || 'default'}"]`);
+        const inConn = toNode.querySelector('.connector.top');
+        if (!outConn || !inConn) return;
+
+        const x1 = fromNode.offsetLeft + outConn.offsetLeft + outConn.offsetWidth / 2;
+        const y1 = fromNode.offsetTop + outConn.offsetTop + outConn.offsetHeight / 2;
+        const x2 = toNode.offsetLeft + inConn.offsetLeft + inConn.offsetWidth / 2;
+        const y2 = toNode.offsetTop + inConn.offsetTop + inConn.offsetHeight / 2;
+
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
+        line.setAttribute('stroke', 'var(--text-color)');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('marker-end', 'url(#arrowhead)');
+        svgLayer.appendChild(line);
+    });
+}
+
 function renderFlow(flow) {
     const nodeContainer = document.getElementById('flow-node-container');
     const svgLayer = document.getElementById('flow-svg-layer');
     if (!nodeContainer || !svgLayer) return;
 
     nodeContainer.innerHTML = '';
-    svgLayer.innerHTML = '';
+    svgLayer.innerHTML = ''; // Clear everything initially
 
+    // Add SVG marker definitions
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-    marker.setAttribute('id', 'arrowhead'); marker.setAttribute('viewBox', '0 0 10 10'); marker.setAttribute('refX', '15'); marker.setAttribute('refY', '5'); marker.setAttribute('markerWidth', '6'); marker.setAttribute('markerHeight', '6'); marker.setAttribute('orient', 'auto-start-reverse');
+    marker.setAttribute('id', 'arrowhead');
+    marker.setAttribute('viewBox', '0 0 10 10');
+    marker.setAttribute('refX', '15');
+    marker.setAttribute('refY', '5');
+    marker.setAttribute('markerWidth', '6');
+    marker.setAttribute('markerHeight', '6');
+    marker.setAttribute('orient', 'auto-start-reverse');
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z'); path.setAttribute('fill', 'var(--text-color)');
-    marker.appendChild(path); defs.appendChild(marker); svgLayer.appendChild(defs);
+    path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+    path.setAttribute('fill', 'var(--text-color)');
+    marker.appendChild(path);
+    defs.appendChild(marker);
+    svgLayer.appendChild(defs);
 
     const agentOptions = appInstance.agentManager.agents.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 
+    // Render step nodes
     flow.steps.forEach(step => {
         const stepDef = stepTypes[step.type];
         if (!stepDef) return;
         const node = document.createElement('div');
-        node.className = 'flow-step-card'; node.dataset.id = step.id; node.style.left = `${step.x}px`; node.style.top = `${step.y}px`;
+        node.className = 'flow-step-card';
+        node.dataset.id = step.id;
+        node.style.left = `${step.x}px`;
+        node.style.top = `${step.y}px`;
         const selectedAgentOptions = appInstance.agentManager.agents.map(a => `<option value="${a.id}" ${step.data.agentId === a.id ? 'selected' : ''}>${a.name}</option>`).join('');
 
         let outputConnectors = `<div class="connector-group"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="default"></div></div>`;
@@ -351,22 +399,8 @@ function renderFlow(flow) {
         nodeContainer.appendChild(node);
     });
 
-    flow.connections.forEach(conn => {
-        const fromNode = nodeContainer.querySelector(`[data-id="${conn.from}"]`);
-        const toNode = nodeContainer.querySelector(`[data-id="${conn.to}"]`);
-        if (!fromNode || !toNode) return;
-        const outConn = fromNode.querySelector(`.connector.bottom[data-output-name="${conn.outputName || 'default'}"]`);
-        const inConn = toNode.querySelector('.connector.top');
-        if (!outConn || !inConn) return;
-        const x1 = fromNode.offsetLeft + outConn.offsetLeft + outConn.offsetWidth / 2;
-        const y1 = fromNode.offsetTop + outConn.offsetTop + outConn.offsetHeight / 2;
-        const x2 = toNode.offsetLeft + inConn.offsetLeft + inConn.offsetWidth / 2;
-        const y2 = toNode.offsetTop + inConn.offsetTop + inConn.offsetHeight / 2;
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', x1); line.setAttribute('y1', y1); line.setAttribute('x2', x2); line.setAttribute('y2', y2);
-        line.setAttribute('stroke', 'var(--text-color)'); line.setAttribute('stroke-width', '2'); line.setAttribute('marker-end', 'url(#arrowhead)');
-        svgLayer.appendChild(line);
-    });
+    // Draw connections using the new function
+    updateConnections(flow);
 }
 
 
@@ -402,13 +436,7 @@ function handleCanvasMouseMove(e, flow, debouncedUpdate) {
         const newY = e.clientY - dragInfo.offsetY;
         dragInfo.target.style.left = `${newX}px`;
         dragInfo.target.style.top = `${newY}px`;
-
-        const step = flow.steps.find(s => s.id === dragInfo.target.dataset.id);
-        if (step) {
-            step.x = newX;
-            step.y = newY;
-        }
-        renderFlow(flow);
+        updateConnections(flow); // Only update connections, no full re-render
     } else if (connectionInfo.active) {
         const wrapper = document.getElementById('flow-canvas-wrapper');
         const rect = wrapper.getBoundingClientRect();
