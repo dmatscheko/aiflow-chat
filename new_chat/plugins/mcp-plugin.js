@@ -5,6 +5,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
+import { processToolCalls as genericProcessToolCalls } from '../tool-processor.js';
 import { ChatLog } from '../chat-data.js';
 
 // --- State Variables ---
@@ -92,7 +93,14 @@ const mcpPlugin = {
     async onResponseComplete(message, activeChat) {
         if (!mcpUrl) return;
         console.log("MCP: Checking for tool calls in message...", message.value.content);
-        await processToolCalls(message, activeChat.log);
+        await genericProcessToolCalls(
+            message,
+            activeChat.log,
+            tools,
+            filterMcpCalls,
+            executeMcpCall,
+            () => appInstance.handleFormSubmit()
+        );
     },
 
     /**
@@ -351,38 +359,7 @@ async function mcpJsonRpc(method, params = {}, retry = false) {
 }
 
 
-// --- Tool Call Processing Functions (adapted from old_chat) ---
-
-/**
- * Parses tool calls from the assistant's message content.
- * @param {string} content - The message content.
- * @returns {Array<Object>} A list of parsed tool calls.
- */
-function parseToolCalls(content) {
-    const calls = [];
-    // This regex handles both self-closing tags <dma:tool_call ... /> and tags with content <dma:tool_call>...</dma:tool_call>
-    const toolCallRegex = /<dma:tool_call\s+name="([^"]+)"(?:\s*\/>|>([\s\S]*?)<\/dma:tool_call>)/g;
-    const paramRegex = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
-
-    let match;
-    while ((match = toolCallRegex.exec(content)) !== null) {
-        const name = match[1];
-        // match[2] will be the inner content for non-self-closing tags, or undefined for self-closing ones.
-        const innerContent = match[2] || '';
-        const params = {};
-
-        let paramMatch;
-        while ((paramMatch = paramRegex.exec(innerContent)) !== null) {
-            const paramName = paramMatch[1];
-            // Decode the escaped slash for </dma:tool_call> and </parameter>
-            const paramValue = paramMatch[2].replace(/<\\\/dma:tool_call>/g, '</dma:tool_call>').replace(/<\\\/parameter>/g, '</parameter>');
-            params[paramName] = paramValue.trim();
-        }
-
-        calls.push({ id: `call_${Date.now()}_${calls.length}`, name, params });
-    }
-    return calls;
-}
+// --- Tool Call Processing Functions ---
 
 /**
  * In this context, any non-agent call is considered an MCP call.
@@ -392,7 +369,6 @@ function parseToolCalls(content) {
 function filterMcpCalls(call) {
     return !call.name.endsWith('_agent');
 }
-
 
 /**
  * Executes a single MCP tool call.
@@ -421,49 +397,10 @@ async function executeMcpCall(call, message) {
         } else {
             content = result.content ? JSON.stringify(result.content, null, 2) : '{}';
         }
-        return { id: call.id, content, error };
+        return { name: call.name, tool_call_id: call.id, content, error };
     } catch (err) {
         console.error('MCP: Tool execution error', err);
-        return { id: call.id, content: null, error: err.message || 'Unknown error' };
-    }
-}
-
-
-/**
- * Processes tool calls found in a message, executes them, and continues the conversation.
- * @param {Message} message - The message containing tool calls.
- * @param {ChatLog} chatLog - The chat log to add results to.
- */
-async function processToolCalls(message, chatLog) {
-    const content = message.value.content;
-    const allCalls = parseToolCalls(content);
-    if (allCalls.length === 0) return;
-
-    // Filter for MCP calls that this plugin should handle.
-    const mcpCalls = allCalls.filter(filterMcpCalls);
-    if (mcpCalls.length === 0) return;
-
-    // Visually disable the original message content that contains tool calls.
-    message.value.content = `Using tools: ${mcpCalls.map(c => c.name).join(', ')}...`;
-    chatLog.notify();
-
-    const promises = mcpCalls.map(call => executeMcpCall(call, message));
-    const results = await Promise.all(promises);
-
-    // Add tool results to the chat log.
-    results.forEach(result => {
-        chatLog.addMessage({
-            role: 'tool',
-            content: result.content || result.error,
-            tool_call_id: result.id,
-            isError: !!result.error
-        });
-    });
-
-    // If there were successful tool calls, trigger a new API call to get the assistant's response.
-    if (results.some(r => !r.error)) {
-        console.log("MCP: Tool calls executed, continuing conversation.");
-        appInstance.handleFormSubmit(); // Re-trigger the form submission logic
+        return { name: call.name, tool_call_id: call.id, content: null, error: err.message || 'Unknown error' };
     }
 }
 
