@@ -99,7 +99,8 @@ const mcpPlugin = {
             tools,
             filterMcpCalls,
             executeMcpCall,
-            () => appInstance.handleFormSubmit()
+            () => appInstance.handleFormSubmit({ isContinuation: true }),
+            () => appInstance.saveChats()
         );
     },
 

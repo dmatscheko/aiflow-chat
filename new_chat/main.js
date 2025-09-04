@@ -418,15 +418,17 @@ class App {
         }
     }
 
-    async handleFormSubmit() {
-        const userInput = this.dom.messageInput.value.trim();
-        if (!userInput) return;
-
+    async handleFormSubmit(options = {}) {
+        const { isContinuation = false } = options;
         const activeChat = this.getActiveChat();
         if (!activeChat) return;
 
-        activeChat.log.addMessage({ role: 'user', content: userInput });
-        this.dom.messageInput.value = '';
+        if (!isContinuation) {
+            const userInput = this.dom.messageInput.value.trim();
+            if (!userInput) return;
+            activeChat.log.addMessage({ role: 'user', content: userInput });
+            this.dom.messageInput.value = '';
+        }
 
         const assistantMsg = activeChat.log.addMessage({ role: 'assistant', content: '...' });
 

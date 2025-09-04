@@ -15,18 +15,23 @@
  * Parses tool calls from the assistant's message content.
  * @param {string} content - The message content.
  * @param {Array<object>} [tools=[]] - A list of available tools with their schemas.
- * @returns {Array<Object>} The parsed tool calls.
+ * @returns {{toolCalls: Array<Object>, positions: Array<Object>, isSelfClosings: Array<boolean>}} The parsed tool calls, their positions, and self-closing flags.
  */
 function parseToolCalls(content, tools = []) {
     const toolCalls = [];
+    const positions = [];
+    const isSelfClosings = [];
     // This regex handles both self-closing tags and tags with content.
     const functionCallRegex = /<dma:tool_call\s+([^>]+?)\/>|<dma:tool_call\s+([^>]*?)>([\s\S]*?)<\/dma:tool_call\s*>/gi;
     const nameRegex = /name="([^"]*)"/;
     const paramsRegex = /<parameter\s+name="([^"]*)">([\s\S]*?)<\/parameter>/g;
 
-    if (!content) return [];
+    if (!content) return { toolCalls, positions, isSelfClosings };
 
     for (const match of content.matchAll(functionCallRegex)) {
+        const startIndex = match.index;
+        const endIndex = startIndex + match[0].length;
+
         const [, selfAttrs, openAttrs, innerContent] = match;
         const isSelfClosing = innerContent === undefined;
         const attributes = isSelfClosing ? selfAttrs : openAttrs;
@@ -63,11 +68,13 @@ function parseToolCalls(content, tools = []) {
                 params[paramName] = value;
             }
         }
-
-        toolCalls.push({ id: `call_${Date.now()}_${toolCalls.length}`, name, params });
+        const call = { id: `call_${Date.now()}_${toolCalls.length}`, name, params };
+        toolCalls.push(call);
+        positions.push({ start: startIndex, end: endIndex });
+        isSelfClosings.push(isSelfClosing);
     }
 
-    return toolCalls;
+    return { toolCalls, positions, isSelfClosings };
 }
 
 
@@ -79,17 +86,38 @@ function parseToolCalls(content, tools = []) {
  * @param {Function} filterCallback - A function to filter which tool calls to process.
  * @param {Function} executeCallback - An async function to execute a tool call and return the result.
  * @param {Function} continueCallback - A callback to continue the conversation.
+ * @param {Function} [saveCallback=null] - An optional callback to save the chat state.
  */
-async function processToolCalls(message, chatLog, tools, filterCallback, executeCallback, continueCallback) {
-    const content = message.value.content;
-    const allCalls = parseToolCalls(content, tools);
-    if (allCalls.length === 0) return;
+async function processToolCalls(message, chatLog, tools, filterCallback, executeCallback, continueCallback, saveCallback = null) {
+    const { toolCalls, positions, isSelfClosings } = parseToolCalls(message.value.content, tools);
+    if (toolCalls.length === 0) return;
 
-    const applicableCalls = allCalls.filter(filterCallback);
+    const applicableCalls = toolCalls.filter(filterCallback);
     if (applicableCalls.length === 0) return;
 
     const promises = applicableCalls.map(call => executeCallback(call, message));
     const results = await Promise.all(promises);
+
+    // Inject tool_call_id into the original message content
+    let content = message.value.content;
+    for (let i = positions.length - 1; i >= 0; i--) {
+        const call = toolCalls[i];
+        if (!applicableCalls.find(ac => ac.id === call.id)) continue;
+
+        const pos = positions[i];
+        const gtIndex = content.indexOf('>', pos.start);
+        let startTag = content.slice(pos.start, gtIndex + 1);
+
+        startTag = startTag.replace(/\s+tool_call_id\s*=\s*["'][^"']*["']/g, '');
+        const insert = ` tool_call_id="${call.id}"`;
+        const endSlice = isSelfClosings[i] ? -2 : -1;
+        const endTag = isSelfClosings[i] ? '/>' : '>';
+        startTag = startTag.slice(0, endSlice) + insert + endTag;
+        content = content.slice(0, pos.start) + startTag + content.slice(gtIndex + 1);
+    }
+    message.value.content = content;
+    message.cache = null; // Invalidate cache to force re-render
+    chatLog.notify(); // Notify UI to re-render the message
 
     let toolContents = '';
     results.forEach((tr) => {
@@ -101,6 +129,9 @@ async function processToolCalls(message, chatLog, tools, filterCallback, execute
 
     if (toolContents) {
         chatLog.addMessage({ role: 'tool', content: toolContents });
+        if (saveCallback) {
+            saveCallback();
+        }
     }
 
     // If there were successful tool calls, trigger a new API call to get the assistant's response.
