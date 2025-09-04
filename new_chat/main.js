@@ -9,7 +9,7 @@ import { ChatLog } from './chat-data.js';
 import { ApiService } from './api-service.js';
 import { ChatUI } from './chat-ui.js';
 import { pluginManager } from './plugin-manager.js';
-import { debounce } from './utils.js';
+import { debounce, createSettingsUI, createToolSettingsUI } from './utils.js';
 import { responseProcessor } from './response-processor.js';
 
 // Load plugins
@@ -114,50 +114,34 @@ class App {
 
     renderSettings() {
         this.dom.settingsContainer.innerHTML = '';
-        this.settings.forEach(setting => {
-            const el = document.createElement('div');
-            el.classList.add('setting');
-            const label = document.createElement('label');
-            label.setAttribute('for', `setting-${setting.id}`);
-            label.textContent = setting.label;
-            el.appendChild(label);
 
-            let input;
-            if (setting.type === 'textarea') {
-                input = document.createElement('textarea');
-                input.rows = 4;
-            } else if (setting.type === 'select') {
-                input = document.createElement('select');
-            } else if (setting.type === 'range') {
-                input = document.createElement('input');
-                input.type = 'range';
-                input.min = setting.min;
-                input.max = setting.max;
-                input.step = setting.step;
-                const valueSpan = document.createElement('span');
-                valueSpan.id = `setting-${setting.id}-value`;
-                valueSpan.textContent = setting.default;
-                el.appendChild(valueSpan);
+        // --- Render standard model and plugin settings ---
+        const currentSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
+        const settingsFragment = createSettingsUI(this.settings, currentSettings, 'setting-');
+        this.dom.settingsContainer.appendChild(settingsFragment);
+
+        // Add the refresh models button manually as it's a special case
+        const modelSettingEl = this.dom.settingsContainer.querySelector('#setting-model').parentElement;
+        if (modelSettingEl) {
+            const refreshBtn = document.createElement('button');
+            refreshBtn.id = 'refresh-models';
+            refreshBtn.textContent = 'Refresh';
+            modelSettingEl.appendChild(refreshBtn);
+        }
+
+        // --- Render Tool Settings ---
+        if (this.mcp && this.mcp.getTools) {
+            const tools = this.mcp.getTools();
+            if (tools.length > 0) {
+                const currentToolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: false, allowed: [] };
+                const toolSettingsUI = createToolSettingsUI(tools, currentToolSettings, (newSettings) => {
+                    localStorage.setItem('core_tool_settings', JSON.stringify(newSettings));
+                });
+                this.dom.settingsContainer.appendChild(toolSettingsUI);
             }
-            else {
-                input = document.createElement('input');
-                input.type = setting.type || 'text';
-                if(setting.placeholder) input.placeholder = setting.placeholder;
-            }
+        }
 
-            input.id = `setting-${setting.id}`;
-            input.value = setting.default;
-            el.appendChild(input);
-
-            if (setting.id === 'model') {
-                const refreshBtn = document.createElement('button');
-                refreshBtn.id = 'refresh-models';
-                refreshBtn.textContent = 'Refresh';
-                el.appendChild(refreshBtn);
-            }
-            this.dom.settingsContainer.appendChild(el);
-        });
-
+        // Cache the DOM elements for settings
         this.dom.settings = {};
         this.settings.forEach(s => {
             this.dom.settings[s.id] = document.getElementById(`setting-${s.id}`);

@@ -19,6 +19,14 @@ let appInstance = null;
 
 
 const mcpPlugin = {
+    name: 'MCP',
+
+    /**
+     * Get the list of available tools.
+     * @returns {object[]} The list of tools.
+     */
+    getTools: () => tools,
+
     /**
      * Hook to register settings.
      * @param {Array<Object>} settings - The original settings array.
@@ -41,6 +49,11 @@ const mcpPlugin = {
      */
     onAppInit(app) {
         appInstance = app;
+        // Expose the plugin's API to the app instance
+        app.mcp = {
+            getTools: this.getTools
+        };
+
         const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
         mcpUrl = savedSettings.mcpServer || '';
         if (mcpUrl) {
@@ -377,6 +390,30 @@ function filterMcpCalls(call) {
  * @returns {Promise<Object>} A promise that resolves to a tool result object.
  */
 async function executeMcpCall(call, message) {
+    // Determine the effective tool settings
+    const agentId = message.value.agent;
+    const agent = agentId ? appInstance.agentManager.getAgent(agentId) : null;
+    let effectiveToolSettings;
+
+    if (agent && agent.useCustomToolSettings) {
+        effectiveToolSettings = agent.toolSettings;
+    } else {
+        effectiveToolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: false, allowed: [] };
+    }
+
+    // Check if the tool is allowed
+    const isAllowed = effectiveToolSettings.allowAll || effectiveToolSettings.allowed.includes(call.name);
+
+    if (!isAllowed) {
+        console.warn(`MCP: Tool call "${call.name}" blocked by settings.`);
+        return {
+            name: call.name,
+            tool_call_id: call.id,
+            content: null,
+            error: `Tool "${call.name}" is not enabled in the current settings.`,
+        };
+    }
+
     console.log('MCP: Executing tool', call.name, 'with params', call.params);
     try {
         const result = await mcpJsonRpc('tools/call', { name: call.name, arguments: call.params });
