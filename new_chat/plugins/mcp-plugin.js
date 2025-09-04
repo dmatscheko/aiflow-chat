@@ -274,11 +274,47 @@ async function sendMcpRequest(method, params = {}, isInit = false, isNotificatio
         if (isNotification) {
             return null;
         }
-        const data = await resp.json();
-        if (data.error) {
-            throw new Error(data.error.message || 'MCP call failed');
+
+        const contentType = resp.headers.get('Content-Type') || '';
+        if (contentType.includes('application/json')) {
+            const data = await resp.json();
+            if (data.error) {
+                throw new Error(data.error.message || 'MCP call failed');
+            }
+            return data.result;
+        } else if (contentType.includes('text/event-stream')) {
+            const reader = resp.body.getReader();
+            let buffer = '';
+            let result = null;
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += new TextDecoder().decode(value);
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // Last incomplete line
+                for (const line of lines) {
+                    if (line.startsWith('event: message')) {
+                        // Next line should be data:
+                    } else if (line.startsWith('data: ')) {
+                        const dataStr = line.slice(6);
+                        try {
+                            const partial = JSON.parse(dataStr);
+                            if (partial.jsonrpc) {
+                                result = partial.result; // Assume last message has full result
+                            }
+                        } catch (e) {
+                             // Ignore partial JSON
+                             console.warn("MCP: Could not parse event-stream data chunk as JSON.", dataStr);
+                        }
+                    }
+                }
+            }
+            if (result) return result;
+            throw new Error('Invalid SSE response: No valid JSON-RPC result found in stream.');
+        } else {
+            throw new Error(`Unexpected Content-Type: ${contentType}`);
         }
-        return data.result;
+
     } catch (error) {
         clearTimeout(timeoutId);
         if (error.name === 'AbortError') {
