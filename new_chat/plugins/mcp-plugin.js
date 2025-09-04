@@ -7,6 +7,7 @@
 import { pluginManager } from '../plugin-manager.js';
 import { processToolCalls as genericProcessToolCalls } from '../tool-processor.js';
 import { ChatLog } from '../chat-data.js';
+import { createMcpSettings } from '../settings-ui.js';
 
 // --- State Variables ---
 let mcpUrl = null;
@@ -19,6 +20,24 @@ let appInstance = null;
 
 
 const mcpPlugin = {
+    /**
+     * Hook to register additional model settings.
+     * @param {Array<Object>} modelSettings - The original model settings.
+     * @returns {Array<Object>} The modified model settings.
+     */
+    onModelSettingsRegistered(modelSettings) {
+        modelSettings.push({
+            id: 'top_p',
+            label: 'Top P',
+            type: 'range',
+            default: '1',
+            min: 0,
+            max: 1,
+            step: 0.1
+        });
+        return modelSettings;
+    },
+
     /**
      * Hook to register settings.
      * @param {Array<Object>} settings - The original settings array.
@@ -41,26 +60,38 @@ const mcpPlugin = {
      */
     onAppInit(app) {
         appInstance = app;
+        // Register a helper function so other plugins can get the tool list
+        pluginManager.registerHelper('mcp', 'getTools', () => tools);
+
         const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
         mcpUrl = savedSettings.mcpServer || '';
+
+        const handleMcpUrlChange = () => {
+            const newMcpUrl = document.getElementById('setting-mcpServer')?.value || '';
+            if (newMcpUrl !== mcpUrl) {
+                mcpUrl = newMcpUrl;
+                console.log('MCP: URL changed, re-initializing...', mcpUrl);
+                isInitialized = false;
+                initializeMcp();
+            }
+        };
+
         if (mcpUrl) {
             console.log('MCP: URL found, initializing...', mcpUrl);
-            initializeMcp();
+            initializeMcp(); // This will also render settings on success
         } else {
             console.log('MCP: No URL, skipping initialization.');
         }
 
-        // Re-initialize if the setting changes
-        document.addEventListener('change', (e) => {
-            if (e.target.id === 'setting-mcpServer') {
-                mcpUrl = e.target.value;
-                if (mcpUrl) {
-                    console.log('MCP: URL changed, re-initializing...', mcpUrl);
-                    isInitialized = false; // Reset initialization state
-                    initializeMcp();
+        // Listen for changes on the settings container
+        const settingsContainer = document.getElementById('settings-panel');
+        if (settingsContainer) {
+            settingsContainer.addEventListener('change', (e) => {
+                if (e.target.id === 'setting-mcpServer') {
+                    handleMcpUrlChange();
                 }
-            }
-        });
+            });
+        }
     },
 
     /**
@@ -69,17 +100,42 @@ const mcpPlugin = {
      * @param {Object} allSettings - All current settings from local storage.
      * @returns {Object} The modified payload.
      */
-    beforeApiCall(payload, allSettings) {
-        if (!mcpUrl || !cachedToolsSection) {
-            return payload;
+    beforeApiCall(payload, allSettings, agent) {
+        if (!mcpUrl) return payload;
+
+        let enabledTools = tools;
+
+        // If an agent is used and has custom MCP settings, filter the tools
+        if (agent && agent.useCustomMcpSettings) {
+            const agentMcpSettings = agent.mcpSettings || { allTools: true, enabledTools: {} };
+            if (!agentMcpSettings.allTools) {
+                enabledTools = tools.filter(tool => agentMcpSettings.enabledTools[tool.name]);
+            }
+        } else {
+            // Use global MCP settings if no agent is involved or agent uses defaults
+            const mainAllTools = document.getElementById('setting-mcp-all-tools')?.checked ?? true;
+            if (!mainAllTools) {
+                const enabledToolNames = new Set();
+                document.querySelectorAll('#main-mcp-settings .mcp-tool-list input:checked').forEach(cb => {
+                    enabledToolNames.add(cb.dataset.toolName);
+                });
+                enabledTools = tools.filter(tool => enabledToolNames.has(tool.name));
+            }
         }
 
+
+        if (enabledTools.length === 0) {
+            return payload; // No tools to offer
+        }
+
+        const toolSection = generateToolsSection(enabledTools);
         const systemPrompt = payload.messages.find(m => m.role === 'system');
+
         if (systemPrompt) {
-            console.log('MCP: Adding tools section to system prompt.');
-            // Avoid duplicating the section if it's already there
+            console.log(`MCP: Adding ${enabledTools.length} tools to system prompt.`);
+            // Simple check to avoid duplicating the header
             if (!systemPrompt.content.includes(toolsHeader)) {
-                 systemPrompt.content += '\n\n' + toolsHeader + cachedToolsSection;
+                systemPrompt.content += '\n\n' + toolsHeader + toolSection;
             }
         }
         return payload;
@@ -168,18 +224,35 @@ IMPORTANT: Write files only if explicitely instructed to do so.
  * Initializes the MCP connection, fetches tools.
  */
 function initializeMcp() {
-    if (!mcpUrl) return;
+    const mcpSettingsContainer = document.getElementById('main-mcp-settings');
+    if (!mcpSettingsContainer) return;
+    mcpSettingsContainer.innerHTML = ''; // Clear previous settings
+
+    if (!mcpUrl) {
+        tools = [];
+        cachedToolsSection = '';
+        return;
+    }
+
     mcpSessionId = localStorage.getItem(`mcpSession_${mcpUrl}`) || null;
     console.log('MCP: Pre-fetching tools from', mcpUrl);
+
     mcpJsonRpc('tools/list').then(response => {
         tools = Array.isArray(response.tools) ? response.tools : [];
         cachedToolsSection = generateToolsSection(tools);
         console.log('MCP: Tools section cached successfully.');
+
+        // Render the MCP settings UI
+        const mcpFragment = createMcpSettings(tools);
+        mcpSettingsContainer.appendChild(mcpFragment);
+
     }).catch(error => {
         console.error('MCP: Failed to pre-fetch tools', error);
+        tools = [];
         cachedToolsSection = '';
-        // Optionally, notify the user in the UI
-        alert(`Failed to connect to MCP server at ${mcpUrl}. Please check the URL and server status.\n\n${error.message}`);
+        mcpSettingsContainer.innerHTML = `<p class="error">Failed to connect to MCP server.</p>`;
+        // Optionally, notify the user via a more robust system than alert
+        // alert(`Failed to connect to MCP server at ${mcpUrl}. Please check the URL and server status.\n\n${error.message}`);
     });
 }
 

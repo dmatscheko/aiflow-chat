@@ -11,6 +11,7 @@ import { ChatUI } from './chat-ui.js';
 import { pluginManager } from './plugin-manager.js';
 import { debounce } from './utils.js';
 import { responseProcessor } from './response-processor.js';
+import { createSettingsContainer, createSettingElement, createModelSettings, createMcpSettings } from './settings-ui.js';
 
 // Load plugins
 import './plugins/example-plugin.js';
@@ -63,14 +64,23 @@ class App {
     }
 
     defineSettings() {
-        const coreSettings = [
+        this.appSettings = [
             { id: 'apiUrl', label: 'API URL', type: 'text', default: 'https://api.openai.com/' },
             { id: 'apiKey', label: 'API Key', type: 'password', default: '' },
+        ];
+
+        this.modelSettings = [
             { id: 'model', label: 'Model', type: 'select', options: [] },
             { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.' },
             { id: 'temperature', label: 'Temperature', type: 'range', default: '1', min: 0, max: 2, step: 0.1 },
         ];
-        this.settings = pluginManager.trigger('onSettingsRegistered', coreSettings);
+
+        // Allow plugins to add more model settings
+        this.modelSettings = pluginManager.trigger('onModelSettingsRegistered', this.modelSettings);
+
+        // Combine all settings for saving/loading and UI rendering
+        this.settings = [...this.appSettings, ...this.modelSettings];
+        this.settings = pluginManager.trigger('onSettingsRegistered', this.settings);
     }
 
     defineTabs() {
@@ -114,53 +124,43 @@ class App {
 
     renderSettings() {
         this.dom.settingsContainer.innerHTML = '';
-        this.settings.forEach(setting => {
-            const el = document.createElement('div');
-            el.classList.add('setting');
-            const label = document.createElement('label');
-            label.setAttribute('for', `setting-${setting.id}`);
-            label.textContent = setting.label;
-            el.appendChild(label);
 
-            let input;
-            if (setting.type === 'textarea') {
-                input = document.createElement('textarea');
-                input.rows = 4;
-            } else if (setting.type === 'select') {
-                input = document.createElement('select');
-            } else if (setting.type === 'range') {
-                input = document.createElement('input');
-                input.type = 'range';
-                input.min = setting.min;
-                input.max = setting.max;
-                input.step = setting.step;
-                const valueSpan = document.createElement('span');
-                valueSpan.id = `setting-${setting.id}-value`;
-                valueSpan.textContent = setting.default;
-                el.appendChild(valueSpan);
-            }
-            else {
-                input = document.createElement('input');
-                input.type = setting.type || 'text';
-                if(setting.placeholder) input.placeholder = setting.placeholder;
-            }
-
-            input.id = `setting-${setting.id}`;
-            input.value = setting.default;
-            el.appendChild(input);
-
-            if (setting.id === 'model') {
-                const refreshBtn = document.createElement('button');
-                refreshBtn.id = 'refresh-models';
-                refreshBtn.textContent = 'Refresh';
-                el.appendChild(refreshBtn);
-            }
-            this.dom.settingsContainer.appendChild(el);
+        // --- General App Settings ---
+        const appSettingsContainer = createSettingsContainer('API Settings');
+        this.appSettings.forEach(setting => {
+            appSettingsContainer.appendChild(createSettingElement(setting));
         });
+        // Add plugin-registered settings that are not model settings
+        const otherSettings = this.settings.filter(s =>
+            !this.appSettings.some(as => as.id === s.id) &&
+            !this.modelSettings.some(ms => ms.id === s.id)
+        );
+        otherSettings.forEach(setting => {
+            appSettingsContainer.appendChild(createSettingElement(setting));
+        });
+        this.dom.settingsContainer.appendChild(appSettingsContainer);
 
+
+        // --- Model Settings ---
+        const modelSettingsContainer = createSettingsContainer('Default Model Settings');
+        const modelSettingsFragment = createModelSettings(this.modelSettings);
+        modelSettingsContainer.appendChild(modelSettingsFragment);
+        this.dom.settingsContainer.appendChild(modelSettingsContainer);
+
+        // --- MCP Settings ---
+        const mcpContainer = document.createElement('div');
+        mcpContainer.id = 'main-mcp-settings';
+        this.dom.settingsContainer.appendChild(mcpContainer);
+        // MCP plugin will render its settings here.
+
+
+        // Store references to all input elements
         this.dom.settings = {};
         this.settings.forEach(s => {
-            this.dom.settings[s.id] = document.getElementById(`setting-${s.id}`);
+            const el = document.getElementById(`setting-${s.id}`);
+            if (el) {
+                this.dom.settings[s.id] = el;
+            }
         });
     }
 

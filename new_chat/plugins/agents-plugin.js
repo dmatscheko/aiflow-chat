@@ -7,6 +7,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { debounce } from '../utils.js';
+import { createModelSettings, createMcpSettings, createSettingElement } from '../settings-ui.js';
 
 /**
  * @typedef {object} AgentModelSettings
@@ -18,12 +19,20 @@ import { debounce } from '../utils.js';
  */
 
 /**
+ * @typedef {object} AgentMcpSettings
+ * @property {boolean} allTools - Whether to enable all tools.
+ * @property {Object.<string, boolean>} enabledTools - A map of tool names to their enabled state.
+ */
+
+/**
  * @typedef {object} Agent
  * @property {string} id - The unique identifier for the agent.
  * @property {string} name - The name of the agent.
  * @property {string} systemPrompt - The system prompt for the agent.
  * @property {boolean} useCustomModelSettings - Whether to use custom model settings.
  * @property {AgentModelSettings} modelSettings - The custom model settings.
+ * @property {boolean} useCustomMcpSettings - Whether to use custom MCP settings.
+ * @property {AgentMcpSettings} mcpSettings - The custom MCP settings.
  */
 
 /**
@@ -186,54 +195,80 @@ function renderAgentList() {
  */
 function renderAgentEditor(agentId) {
     const agent = agentId ? agentManager.getAgent(agentId) : null;
-    const settings = agent?.modelSettings || {};
+    const view = document.createElement('div');
+    view.id = 'agent-editor-view';
 
-    return `
-        <div id="agent-editor-view">
-            <h2>${agentId ? 'Edit' : 'Create'} Agent</h2>
-            <form id="agent-editor-form">
-                <input type="hidden" id="agent-id" value="${agent?.id || ''}">
-
-                <div class="form-group">
-                    <label for="agent-name">Name</label>
-                    <input type="text" id="agent-name" required value="${agent?.name || ''}">
-                </div>
-
-                <div class="form-group">
-                    <label for="agent-system-prompt">System Prompt</label>
-                    <textarea id="agent-system-prompt" rows="8">${agent?.systemPrompt || ''}</textarea>
-                </div>
-
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="agent-use-custom-settings" ${agent?.useCustomModelSettings ? 'checked' : ''}>
-                        Use Custom Model Settings
-                    </label>
-                </div>
-
-                <fieldset id="agent-model-settings" ${agent?.useCustomModelSettings ? '' : 'disabled'}>
-                    <legend>Model Settings</legend>
-                    <div class="form-group">
-                        <label for="agent-api-url">API URL</label>
-                        <input type="text" id="agent-api-url" placeholder="Default" value="${settings.apiUrl || ''}">
-                    </div>
-                    <div class="form-group">
-                        <label for="agent-model">Model Name</label>
-                        <input type="text" id="agent-model" placeholder="Default" value="${settings.model || ''}">
-                    </div>
-                    <div class="form-group">
-                        <label for="agent-temperature">Temperature</label>
-                        <input type="number" id="agent-temperature" step="0.1" min="0" max="2" placeholder="Default" value="${settings.temperature || ''}">
-                    </div>
-                    <div class="form-group">
-                        <label for="agent-top-p">Top P</label>
-                        <input type="number" id="agent-top-p" step="0.1" min="0" max="1" placeholder="Default" value="${settings.top_p || ''}">
-                    </div>
-                </fieldset>
-
-            </form>
-        </div>
+    view.innerHTML = `
+        <h2>${agentId ? 'Edit' : 'Create'} Agent</h2>
+        <form id="agent-editor-form">
+            <input type="hidden" id="agent-id" value="${agent?.id || ''}">
+            <div class="form-group">
+                <label for="agent-name">Name</label>
+                <input type="text" id="agent-name" required value="${agent?.name || ''}">
+            </div>
+        </form>
     `;
+
+    const form = view.querySelector('#agent-editor-form');
+
+    // --- System Prompt ---
+    const systemPromptContainer = document.createElement('div');
+    systemPromptContainer.className = 'form-group';
+    const systemPrompt = createSettingElement({
+        id: 'systemPrompt',
+        label: 'System Prompt',
+        type: 'textarea',
+        rows: 8,
+        default: agent?.systemPrompt || ''
+    }, 'agent-');
+    systemPromptContainer.appendChild(systemPrompt);
+    form.appendChild(systemPromptContainer);
+
+
+    // --- Custom Model Settings ---
+    const useCustomModelSettings = createSettingElement({
+        id: 'use-custom-settings',
+        label: 'Use Custom Model Settings',
+        type: 'checkbox',
+        default: agent?.useCustomModelSettings || false
+    }, 'agent-');
+    form.appendChild(useCustomModelSettings);
+
+    const modelSettingsFieldset = document.createElement('fieldset');
+    modelSettingsFieldset.id = 'agent-model-settings';
+    modelSettingsFieldset.disabled = !agent?.useCustomModelSettings;
+    const modelLegend = document.createElement('legend');
+    modelLegend.textContent = 'Model Settings';
+    modelSettingsFieldset.appendChild(modelLegend);
+
+    const modelSettingsContent = createModelSettings(appInstance.modelSettings, 'agent-');
+    modelSettingsFieldset.appendChild(modelSettingsContent);
+    form.appendChild(modelSettingsFieldset);
+
+
+    // --- Custom MCP Settings ---
+    const useCustomMcpSettings = createSettingElement({
+        id: 'use-custom-mcp-settings',
+        label: 'Use Custom MCP Settings',
+        type: 'checkbox',
+        default: agent?.useCustomMcpSettings || false
+    }, 'agent-');
+    form.appendChild(useCustomMcpSettings);
+
+    const mcpSettingsFieldset = document.createElement('fieldset');
+    mcpSettingsFieldset.id = 'agent-mcp-settings';
+    mcpSettingsFieldset.disabled = !agent?.useCustomMcpSettings;
+
+    // The createMcpSettings function returns a fragment with a fieldset,
+    // so we get the content and append it here.
+    const mcpTools = pluginManager.getHelper('mcp', 'getTools')?.() || [];
+    if (mcpTools.length > 0) {
+        const mcpSettingsContent = createMcpSettings(mcpTools, 'agent-');
+        mcpSettingsFieldset.appendChild(mcpSettingsContent);
+        form.appendChild(mcpSettingsFieldset);
+    }
+
+    return view.outerHTML;
 }
 
 /**
@@ -243,44 +278,71 @@ function attachAgentFormListeners() {
     const form = document.getElementById('agent-editor-form');
     if (!form) return;
 
+    const getSettingValue = (id, type) => {
+        const el = form.querySelector(`#setting-agent-${id}`);
+        if (!el) return undefined;
+        switch (type) {
+            case 'checkbox': return el.checked;
+            case 'number': return parseFloat(el.value) || undefined;
+            case 'range': return parseFloat(el.value) || undefined;
+            default: return el.value || undefined;
+        }
+    };
+
     const saveAgent = () => {
         const agentId = form.querySelector('#agent-id').value;
+        if (!agentId) return; // Don't auto-save for new, unsaved agents
+
+        const modelSettings = {};
+        appInstance.modelSettings.forEach(s => {
+            modelSettings[s.id] = getSettingValue(s.id, s.type);
+        });
+
+        const mcpSettings = {
+            allTools: getSettingValue('mcp-all-tools', 'checkbox'),
+            enabledTools: {}
+        };
+        form.querySelectorAll('.mcp-tool-list input[type="checkbox"]').forEach(cb => {
+            mcpSettings.enabledTools[cb.dataset.toolName] = cb.checked;
+        });
+
         const agentData = {
             id: agentId,
             name: form.querySelector('#agent-name').value,
-            systemPrompt: form.querySelector('#agent-system-prompt').value,
-            useCustomModelSettings: form.querySelector('#agent-use-custom-settings').checked,
-            modelSettings: {
-                apiUrl: form.querySelector('#agent-api-url').value || undefined,
-                model: form.querySelector('#agent-model').value || undefined,
-                temperature: parseFloat(form.querySelector('#agent-temperature').value) || undefined,
-                top_p: parseFloat(form.querySelector('#agent-top-p').value) || undefined,
-            },
+            systemPrompt: getSettingValue('systemPrompt', 'textarea'),
+            useCustomModelSettings: getSettingValue('use-custom-settings', 'checkbox'),
+            modelSettings: modelSettings,
+            useCustomMcpSettings: getSettingValue('use-custom-mcp-settings', 'checkbox'),
+            mcpSettings: mcpSettings,
         };
 
-        if (agentId) {
-            agentManager.updateAgent(agentData);
-            // Also update the name in the list in real-time
-            const agentListItem = document.querySelector(`.agent-list-item[data-id="${agentId}"] span`);
-            if (agentListItem) {
-                agentListItem.textContent = agentData.name;
-            }
+        agentManager.updateAgent(agentData);
+        const agentListItem = document.querySelector(`.agent-list-item[data-id="${agentId}"] span`);
+        if (agentListItem) {
+            agentListItem.textContent = agentData.name;
         }
-        // Auto-saving doesn't handle creating new agents, only editing existing ones.
-        // A new agent is created with default values and then can be edited.
     };
 
     const debouncedSave = debounce(saveAgent, 500);
-
     form.addEventListener('input', debouncedSave);
-    form.addEventListener('change', debouncedSave); // For checkboxes
+    form.addEventListener('change', debouncedSave);
 
-    const customSettingsCheckbox = form.querySelector('#agent-use-custom-settings');
+    // Toggle fieldsets
+    const customModelCheckbox = form.querySelector('#setting-agent-use-custom-settings');
     const modelSettingsFieldset = form.querySelector('#agent-model-settings');
-    customSettingsCheckbox.addEventListener('change', () => {
-        modelSettingsFieldset.disabled = !customSettingsCheckbox.checked;
-        // The main change listener will pick this up and save.
-    });
+    if (customModelCheckbox && modelSettingsFieldset) {
+        customModelCheckbox.addEventListener('change', () => {
+            modelSettingsFieldset.disabled = !customModelCheckbox.checked;
+        });
+    }
+
+    const customMcpCheckbox = form.querySelector('#setting-agent-use-custom-mcp-settings');
+    const mcpSettingsFieldset = form.querySelector('#agent-mcp-settings');
+    if (customMcpCheckbox && mcpSettingsFieldset) {
+        customMcpCheckbox.addEventListener('change', () => {
+            mcpSettingsFieldset.disabled = !customMcpCheckbox.checked;
+        });
+    }
 }
 
 /**
@@ -347,6 +409,8 @@ const agentsPlugin = {
                         systemPrompt: 'You are a helpful assistant.',
                         useCustomModelSettings: false,
                         modelSettings: {},
+                        useCustomMcpSettings: false,
+                        mcpSettings: { allTools: true, enabledTools: {} }
                     };
                     const addedAgent = agentManager.addAgent(newAgent);
                     renderAgentList();

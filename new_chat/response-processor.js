@@ -130,7 +130,7 @@ class ResponseProcessor {
                 top_p: settings.top_p ? parseFloat(settings.top_p) : undefined,
             };
 
-            payload = pluginManager.trigger('beforeApiCall', payload, settings);
+            payload = pluginManager.trigger('beforeApiCall', payload, settings, agent);
 
             const reader = await app.apiService.streamChat(
                 payload,
