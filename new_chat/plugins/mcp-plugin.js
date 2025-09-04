@@ -94,13 +94,12 @@ const mcpPlugin = {
         if (!mcpUrl) return;
         console.log("MCP: Checking for tool calls in message...", message.value.content);
         await genericProcessToolCalls(
+            appInstance,
             message,
             activeChat.log,
             tools,
             filterMcpCalls,
-            executeMcpCall,
-            () => appInstance.handleFormSubmit({ isContinuation: true }),
-            () => appInstance.saveChats()
+            executeMcpCall
         );
     },
 

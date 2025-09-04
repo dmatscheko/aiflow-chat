@@ -9,6 +9,8 @@ import { ChatLog } from './chat-data.js';
 import { ApiService } from './api-service.js';
 import { ChatUI } from './chat-ui.js';
 import { pluginManager } from './plugin-manager.js';
+import { debounce } from './utils.js';
+import { responseQueueManager } from './response-queue.js';
 
 // Load plugins
 import './plugins/example-plugin.js';
@@ -35,6 +37,7 @@ class App {
         this.renderTabs();
 
         this.loadSettings();
+        this.debouncedSave = debounce(() => this.saveChats(), 500);
         this.loadChats(); // This will set the initial active chat id
 
         // Set initial view
@@ -308,11 +311,15 @@ class App {
     loadChats() {
         const savedChats = JSON.parse(localStorage.getItem('core_chat_logs'));
         if (savedChats && savedChats.length > 0) {
-            this.chats = savedChats.map(chatData => ({
-                id: chatData.id,
-                title: chatData.title,
-                log: ChatLog.fromJSON(chatData.log),
-            }));
+            this.chats = savedChats.map(chatData => {
+                const chat = {
+                    id: chatData.id,
+                    title: chatData.title,
+                    log: ChatLog.fromJSON(chatData.log),
+                };
+                chat.log.subscribe(this.debouncedSave);
+                return chat;
+            });
             this.activeChatId = localStorage.getItem('core_active_chat_id') || this.chats[0].id;
         } else {
             // createNewChat is called in saveChats if chats is empty
@@ -338,10 +345,11 @@ class App {
             title: 'New Chat',
             log: new ChatLog(),
         };
+        newChat.log.subscribe(this.debouncedSave);
         this.chats.unshift(newChat);
         this.renderChatList();
         this.setView('chat', newChat.id);
-        this.saveChats();
+        this.saveChats(); // Save immediately to create the entry
     }
 
     deleteChat(chatId) {
@@ -430,77 +438,11 @@ class App {
             this.dom.messageInput.value = '';
         }
 
-        const assistantMsg = activeChat.log.addMessage({ role: 'assistant', content: '...' });
+        // Add a placeholder message with null content to signify it's pending.
+        activeChat.log.addMessage({ role: 'assistant', content: null });
 
-        this.dom.stopButton.style.display = 'block';
-        this.abortController = new AbortController();
-
-        try {
-            const settings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-            const messages = activeChat.log.getActiveMessageValues();
-
-            if (settings.systemPrompt) {
-                messages.unshift({ role: 'system', content: settings.systemPrompt });
-            }
-
-            let payload = {
-                model: settings.model,
-                messages: messages.slice(0, -1),
-                stream: true,
-                temperature: parseFloat(settings.temperature)
-            };
-
-            payload = pluginManager.trigger('beforeApiCall', payload, settings);
-
-            const reader = await this.apiService.streamChat(
-                payload,
-                settings.apiUrl,
-                settings.apiKey,
-                this.abortController.signal
-            );
-
-            assistantMsg.value.content = '';
-            activeChat.log.notify();
-
-            const decoder = new TextDecoder();
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n');
-                const deltas = lines
-                    .map(line => line.replace(/^data: /, '').trim())
-                    .filter(line => line !== '' && line !== '[DONE]')
-                    .map(line => JSON.parse(line))
-                    .map(json => json.choices[0].delta.content)
-                    .filter(content => content);
-
-                if (deltas.length > 0) {
-                    assistantMsg.value.content += deltas.join('');
-                    activeChat.log.notify();
-                }
-            }
-        } catch (error) {
-            if (error.name !== 'AbortError') {
-                assistantMsg.value.content = `Error: ${error.message}`;
-            } else {
-                 assistantMsg.value.content += '\n\n[Aborted by user]';
-            }
-            activeChat.log.notify();
-        } finally {
-            this.abortController = null;
-            this.dom.stopButton.style.display = 'none';
-            if(activeChat.title === 'New Chat') {
-                const firstUserMessage = activeChat.log.getActiveMessageValues().find(m => m.role === 'user');
-                if(firstUserMessage) {
-                    activeChat.title = firstUserMessage.content.substring(0, 20) + '...';
-                }
-            }
-            this.saveChats();
-            this.renderChatList();
-            pluginManager.trigger('onResponseComplete', assistantMsg, activeChat);
-        }
+        // The app instance `this` is the context the queue needs to operate.
+        responseQueueManager.enqueue(this);
     }
 }
 

@@ -4,9 +4,12 @@
 
 'use strict';
 
+import { responseQueueManager } from './response-queue.js';
+
 /**
  * @typedef {import('./chat-data.js').Message} Message
  * @typedef {import('./chat-data.js').ChatLog} ChatLog
+ * @typedef {import('./main.js').App} App
  */
 
 // --- Tool Call Processing Functions (adapted from mcp-plugin.js) ---
@@ -80,15 +83,14 @@ function parseToolCalls(content, tools = []) {
 
 /**
  * Processes tool calls found in a message, executes them, and continues the conversation.
+ * @param {App} app - The main application instance.
  * @param {Message} message - The message containing tool calls.
  * @param {ChatLog} chatLog - The chat log to add results to.
  * @param {Array<object>} tools - A list of available tools with their schemas.
  * @param {Function} filterCallback - A function to filter which tool calls to process.
  * @param {Function} executeCallback - An async function to execute a tool call and return the result.
- * @param {Function} continueCallback - A callback to continue the conversation.
- * @param {Function} [saveCallback=null] - An optional callback to save the chat state.
  */
-async function processToolCalls(message, chatLog, tools, filterCallback, executeCallback, continueCallback, saveCallback = null) {
+async function processToolCalls(app, message, chatLog, tools, filterCallback, executeCallback) {
     const { toolCalls, positions, isSelfClosings } = parseToolCalls(message.value.content, tools);
     if (toolCalls.length === 0) return;
 
@@ -129,14 +131,9 @@ async function processToolCalls(message, chatLog, tools, filterCallback, execute
 
     if (toolContents) {
         chatLog.addMessage({ role: 'tool', content: toolContents });
-        if (saveCallback) {
-            saveCallback();
-        }
-    }
-
-    if (continueCallback) {
-        // Trigger a new API call to get the assistant's response.
-        continueCallback();
+        // After adding tool results, queue up the next step for the AI.
+        chatLog.addMessage({ role: 'assistant', content: null });
+        responseQueueManager.enqueue(app);
     }
 }
 

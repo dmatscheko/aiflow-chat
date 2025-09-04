@@ -7,6 +7,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { debounce } from '../utils.js';
+import { responseQueueManager } from '../response-queue.js';
 
 let appInstance = null;
 
@@ -269,10 +270,27 @@ class FlowRunner {
     }
     continue() {
         if (!this.isRunning || !this.currentStepId) return;
-        const stepDef = stepTypes[this.flow.steps.find(s => s.id === this.currentStepId)?.type];
-        if (stepDef?.execute?.toString().includes('handleFormSubmit')) {
-            const nextStep = this.getNextStep(this.currentStepId);
-            if (nextStep) this.executeStep(nextStep); else this.stop('Flow execution complete.');
+
+        const proceed = () => {
+            const stepDef = stepTypes[this.flow.steps.find(s => s.id === this.currentStepId)?.type];
+            // The check for handleFormSubmit ensures we only auto-advance after steps that trigger an AI response.
+            if (stepDef?.execute?.toString().includes('handleFormSubmit')) {
+                const nextStep = this.getNextStep(this.currentStepId);
+                if (nextStep) {
+                    this.executeStep(nextStep);
+                } else {
+                    this.stop('Flow execution complete.');
+                }
+            }
+        };
+
+        // Wait for the AI response queue to be fully processed before continuing the flow.
+        if (responseQueueManager.isProcessing) {
+            console.log('Flows: AI queue is busy, waiting for completion...');
+            responseQueueManager.subscribeToCompletion(proceed);
+        } else {
+            console.log('Flows: AI queue is clear, proceeding immediately.');
+            proceed();
         }
     }
 }
