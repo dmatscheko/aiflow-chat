@@ -441,8 +441,8 @@ class App {
         // Add a placeholder message with null content to signify it's pending.
         activeChat.log.addMessage({ role: 'assistant', content: null });
 
-        // The app instance `this` is the context the queue needs to operate.
-        responseQueueManager.enqueue(this);
+        // Enqueue the task with the specific app and chat context.
+        responseQueueManager.enqueue({ app: this, chat: activeChat });
     }
 }
 

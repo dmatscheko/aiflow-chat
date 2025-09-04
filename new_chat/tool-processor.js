@@ -84,13 +84,13 @@ function parseToolCalls(content, tools = []) {
 /**
  * Processes tool calls found in a message, executes them, and continues the conversation.
  * @param {App} app - The main application instance.
+ * @param {object} chat - The chat object this message belongs to.
  * @param {Message} message - The message containing tool calls.
- * @param {ChatLog} chatLog - The chat log to add results to.
  * @param {Array<object>} tools - A list of available tools with their schemas.
  * @param {Function} filterCallback - A function to filter which tool calls to process.
  * @param {Function} executeCallback - An async function to execute a tool call and return the result.
  */
-async function processToolCalls(app, message, chatLog, tools, filterCallback, executeCallback) {
+async function processToolCalls(app, chat, message, tools, filterCallback, executeCallback) {
     const { toolCalls, positions, isSelfClosings } = parseToolCalls(message.value.content, tools);
     if (toolCalls.length === 0) return;
 
@@ -130,10 +130,10 @@ async function processToolCalls(app, message, chatLog, tools, filterCallback, ex
     });
 
     if (toolContents) {
-        chatLog.addMessage({ role: 'tool', content: toolContents });
+        chat.log.addMessage({ role: 'tool', content: toolContents });
         // After adding tool results, queue up the next step for the AI.
-        chatLog.addMessage({ role: 'assistant', content: null });
-        responseQueueManager.enqueue(app);
+        chat.log.addMessage({ role: 'assistant', content: null });
+        responseQueueManager.enqueue({ app, chat });
     }
 }
 

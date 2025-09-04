@@ -95,8 +95,8 @@ const mcpPlugin = {
         console.log("MCP: Checking for tool calls in message...", message.value.content);
         await genericProcessToolCalls(
             appInstance,
+            activeChat,
             message,
-            activeChat.log,
             tools,
             filterMcpCalls,
             executeMcpCall

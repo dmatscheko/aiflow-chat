@@ -10,7 +10,7 @@ import { pluginManager } from './plugin-manager.js';
 
 class ResponseQueueManager {
     constructor() {
-        /** @type {Array<import('./main.js').App>} */
+        /** @type {Array<{app: import('./main.js').App, chat: object}>} */
         this.queue = [];
         this.isProcessing = false;
         this.completionSubscribers = [];
@@ -18,10 +18,10 @@ class ResponseQueueManager {
 
     /**
      * Adds a message to the processing queue.
-     * @param {import('./main.js').App} app - The main application instance.
+     * @param {{app: import('./main.js').App, chat: object}} task - The task to enqueue.
      */
-    enqueue(app) {
-        this.queue.push(app);
+    enqueue(task) {
+        this.queue.push(task);
         if (!this.isProcessing) {
             this.processQueue();
         }
@@ -51,11 +51,11 @@ class ResponseQueueManager {
         this.isProcessing = true;
 
         while (this.queue.length > 0) {
-            const app = this.queue.shift();
-            const activeChat = app.getActiveChat();
-            if (!activeChat) continue;
+            const task = this.queue.shift();
+            const { app, chat } = task;
+            if (!chat) continue;
 
-            const assistantMsg = activeChat.log.getLastMessage();
+            const assistantMsg = chat.log.getLastMessage();
             if (assistantMsg?.value.role !== 'assistant' || assistantMsg.value.content !== null) {
                 // We only process messages that are placeholders for a response.
                 // This might happen if a message was added without using the queue.
@@ -68,7 +68,7 @@ class ResponseQueueManager {
 
             try {
                 const settings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-                const messages = activeChat.log.getActiveMessageValues();
+                const messages = chat.log.getActiveMessageValues();
 
                 if (settings.systemPrompt) {
                     messages.unshift({ role: 'system', content: settings.systemPrompt });
@@ -91,7 +91,7 @@ class ResponseQueueManager {
                 );
 
                 assistantMsg.value.content = ''; // Make it empty string to start filling
-                activeChat.log.notify();
+                chat.log.notify();
 
                 const decoder = new TextDecoder();
                 while (true) {
@@ -117,7 +117,7 @@ class ResponseQueueManager {
 
                     if (deltas.length > 0) {
                         assistantMsg.value.content += deltas.join('');
-                        activeChat.log.notify();
+                        chat.log.notify();
                     }
                 }
             } catch (error) {
@@ -126,19 +126,19 @@ class ResponseQueueManager {
                 } else {
                     assistantMsg.value.content += '\n\n[Aborted by user]';
                 }
-                activeChat.log.notify();
+                chat.log.notify();
             } finally {
                 app.abortController = null;
                 app.dom.stopButton.style.display = 'none';
-                if (activeChat.title === 'New Chat') {
-                    const firstUserMessage = activeChat.log.getActiveMessageValues().find(m => m.role === 'user');
+                if (chat.title === 'New Chat') {
+                    const firstUserMessage = chat.log.getActiveMessageValues().find(m => m.role === 'user');
                     if (firstUserMessage) {
-                        activeChat.title = firstUserMessage.content.substring(0, 20) + '...';
+                        chat.title = firstUserMessage.content.substring(0, 20) + '...';
                         app.saveChats(); // Save title change
                     }
                 }
                 app.renderChatList();
-                pluginManager.trigger('onResponseComplete', assistantMsg, activeChat);
+                pluginManager.trigger('onResponseComplete', assistantMsg, chat);
             }
         }
 
