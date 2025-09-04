@@ -80,19 +80,38 @@ const mcpPlugin = {
      * Hook to modify the API payload before sending.
      * @param {Object} payload - The original API payload.
      * @param {Object} allSettings - All current settings from local storage.
+     * @param {import('./agents-plugin.js').Agent|null} agent - The active agent, if any.
      * @returns {Object} The modified payload.
      */
-    beforeApiCall(payload, allSettings) {
-        if (!mcpUrl || !cachedToolsSection) {
+    beforeApiCall(payload, allSettings, agent) {
+        if (!mcpUrl || tools.length === 0) {
             return payload;
         }
 
+        // Determine the effective tool settings
+        let effectiveToolSettings;
+        if (agent && agent.useCustomToolSettings) {
+            effectiveToolSettings = agent.toolSettings;
+        } else {
+            effectiveToolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: true, allowed: [] };
+        }
+
+        // Filter the tools based on the settings
+        const allowedTools = effectiveToolSettings.allowAll
+            ? tools
+            : tools.filter(tool => effectiveToolSettings.allowed.includes(tool.name));
+
+        if (allowedTools.length === 0) {
+            return payload; // No tools to advertise
+        }
+
+        const dynamicToolsSection = generateToolsSection(allowedTools);
+
         const systemPrompt = payload.messages.find(m => m.role === 'system');
         if (systemPrompt) {
-            console.log('MCP: Adding tools section to system prompt.');
             // Avoid duplicating the section if it's already there
             if (!systemPrompt.content.includes(toolsHeader)) {
-                 systemPrompt.content += '\n\n' + toolsHeader + cachedToolsSection;
+                 systemPrompt.content += '\n\n' + toolsHeader + dynamicToolsSection;
             }
         }
         return payload;
