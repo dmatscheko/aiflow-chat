@@ -237,7 +237,7 @@ class App {
         const chat = this.chats.find(c => c.id === chatId);
         if (!chat) return;
 
-        this.chatUI = new ChatUI(document.getElementById('chat-container'));
+        this.chatUI = new ChatUI(document.getElementById('chat-container'), this.agentManager);
         this.chatUI.setChatLog(chat.log);
 
         this.dom.messageForm = document.getElementById('message-form');

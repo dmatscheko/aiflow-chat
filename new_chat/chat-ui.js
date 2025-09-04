@@ -19,13 +19,16 @@ import { pluginManager } from './plugin-manager.js';
 export class ChatUI {
     /**
      * @param {HTMLElement} container - The DOM element to render the chat messages into.
+     * @param {import('./plugins/agents-plugin.js').AgentManager} agentManager - The agent manager instance.
      */
-    constructor(container) {
+    constructor(container, agentManager) {
         if (!container) {
             throw new Error('ChatUI container element is required.');
         }
         /** @type {HTMLElement} */
         this.container = container;
+        /** @type {import('./plugins/agents-plugin.js').AgentManager} */
+        this.agentManager = agentManager;
         /** @type {ChatLog | null} */
         this.chatLog = null;
         /** @type {() => void} */
@@ -86,7 +89,16 @@ export class ChatUI {
         el.classList.add('message', `role-${message.value.role}`);
 
         const roleEl = document.createElement('strong');
-        roleEl.textContent = message.value.role;
+        let roleText = message.value.role;
+
+        const agentId = message.value.agent;
+        if (agentId && this.agentManager) {
+            const agent = this.agentManager.getAgent(agentId);
+            if (agent) {
+                roleText += ` (${agent.name})`;
+            }
+        }
+        roleEl.textContent = roleText;
 
         const contentEl = document.createElement('div');
         contentEl.textContent = message.value.content || '';
