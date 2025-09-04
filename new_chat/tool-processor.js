@@ -119,7 +119,7 @@ async function processToolCalls(app, chat, message, tools, filterCallback, execu
     }
     message.value.content = content;
     message.cache = null; // Invalidate cache to force re-render
-    chatLog.notify(); // Notify UI to re-render the message
+    chat.log.notify(); // Notify UI to re-render the message
 
     let toolContents = '';
     results.forEach((tr) => {
