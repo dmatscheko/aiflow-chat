@@ -188,6 +188,9 @@ function initializeMcp() {
         tools = Array.isArray(response.tools) ? response.tools : [];
         cachedToolsSection = generateToolsSection(tools);
         console.log('MCP: Tools section cached successfully.');
+        if (appInstance) {
+            appInstance.renderSettings();
+        }
     }).catch(error => {
         console.error('MCP: Failed to pre-fetch tools', error);
         cachedToolsSection = '';
