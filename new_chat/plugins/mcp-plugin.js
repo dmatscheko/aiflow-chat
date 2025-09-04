@@ -51,7 +51,7 @@ const mcpPlugin = {
         appInstance = app;
         // Expose the plugin's API to the app instance
         app.mcp = {
-            getTools: this.getTools
+            getTools: mcpPlugin.getTools
         };
 
         const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
