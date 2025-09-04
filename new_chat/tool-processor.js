@@ -4,7 +4,7 @@
 
 'use strict';
 
-import { responseQueueManager } from './response-queue.js';
+import { responseProcessor } from './response-processor.js';
 
 /**
  * @typedef {import('./chat-data.js').Message} Message
@@ -133,7 +133,7 @@ async function processToolCalls(app, chat, message, tools, filterCallback, execu
         chat.log.addMessage({ role: 'tool', content: toolContents });
         // After adding tool results, queue up the next step for the AI.
         chat.log.addMessage({ role: 'assistant', content: null });
-        responseQueueManager.enqueue({ app, chat });
+        responseProcessor.scheduleProcessing(app);
     }
 }
 

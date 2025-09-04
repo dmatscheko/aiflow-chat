@@ -7,7 +7,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { debounce } from '../utils.js';
-import { responseQueueManager } from '../response-queue.js';
+import { responseProcessor } from '../response-processor.js';
 
 let appInstance = null;
 
@@ -284,12 +284,12 @@ class FlowRunner {
             }
         };
 
-        // Wait for the AI response queue to be fully processed before continuing the flow.
-        if (responseQueueManager.isProcessing) {
-            console.log('Flows: AI queue is busy, waiting for completion...');
-            responseQueueManager.subscribeToCompletion(proceed);
+        // Wait for the AI response processor to be fully processed before continuing the flow.
+        if (responseProcessor.isProcessing) {
+            console.log('Flows: AI processor is busy, waiting for completion...');
+            responseProcessor.subscribeToCompletion(proceed);
         } else {
-            console.log('Flows: AI queue is clear, proceeding immediately.');
+            console.log('Flows: AI processor is clear, proceeding immediately.');
             proceed();
         }
     }

@@ -10,7 +10,7 @@ import { ApiService } from './api-service.js';
 import { ChatUI } from './chat-ui.js';
 import { pluginManager } from './plugin-manager.js';
 import { debounce } from './utils.js';
-import { responseQueueManager } from './response-queue.js';
+import { responseProcessor } from './response-processor.js';
 
 // Load plugins
 import './plugins/example-plugin.js';
@@ -439,10 +439,10 @@ class App {
         }
 
         // Add a placeholder message with null content to signify it's pending.
-        activeChat.log.addMessage({ role: 'assistant', content: null });
+        const assistantMsg = activeChat.log.addMessage({ role: 'assistant', content: null });
 
-        // Enqueue the task with the specific app and chat context.
-        responseQueueManager.enqueue({ app: this, chat: activeChat });
+        // Schedule the response processor to find and process the new placeholder.
+        responseProcessor.scheduleProcessing(this);
     }
 }
 

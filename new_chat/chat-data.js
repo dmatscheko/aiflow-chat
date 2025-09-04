@@ -166,6 +166,67 @@ export class ChatLog {
     }
 
     /**
+     * Finds the first pending assistant message in the log.
+     * A pending message is one with a role of 'assistant' and content of null.
+     * @returns {Message | null}
+     */
+    findNextPendingMessage() {
+        if (!this.rootAlternatives) {
+            return null;
+        }
+
+        // Helper function to perform a depth-first search.
+        const findInAlternatives = (alternatives) => {
+            for (const message of alternatives.messages) {
+                // Check the current message
+                if (message.value.role === 'assistant' && message.value.content === null) {
+                    return message;
+                }
+                // Recurse into the answers of the current message
+                if (message.answerAlternatives) {
+                    const found = findInAlternatives(message.answerAlternatives);
+                    if (found) {
+                        return found;
+                    }
+                }
+            }
+            return null;
+        };
+
+        return findInAlternatives(this.rootAlternatives);
+    }
+
+    /**
+     * Gets the history of message values leading up to a specific message.
+     * @param {Message} targetMessage - The message to get the history for.
+     * @returns {MessageValue[] | null} An array of message values, or null if the message isn't found.
+     */
+    getHistoryBeforeMessage(targetMessage) {
+        if (!this.rootAlternatives) {
+            return null;
+        }
+
+        const findPath = (alternatives, path) => {
+            for (const message of alternatives.messages) {
+                const currentPath = [...path, message.value];
+                if (message === targetMessage) {
+                    // Exclude the target message itself from the history.
+                    return currentPath.slice(0, -1);
+                }
+                if (message.answerAlternatives) {
+                    const result = findPath(message.answerAlternatives, currentPath);
+                    if (result) {
+                        return result;
+                    }
+                }
+            }
+            return null;
+        };
+
+        return findPath(this.rootAlternatives, []);
+    }
+
+    /**
      * Subscribes a callback function to be called on any change.
      * @param {() => void} callback
      */
