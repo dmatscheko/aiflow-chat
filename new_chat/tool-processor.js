@@ -134,12 +134,9 @@ async function processToolCalls(message, chatLog, tools, filterCallback, execute
         }
     }
 
-    // If there were successful tool calls, trigger a new API call to get the assistant's response.
-    if (results.some(r => !r.error)) {
-        console.log("Tool processor: Tool calls executed, continuing conversation.");
-        if (continueCallback) {
-            continueCallback();
-        }
+    if (continueCallback) {
+        // Trigger a new API call to get the assistant's response.
+        continueCallback();
     }
 }
 
