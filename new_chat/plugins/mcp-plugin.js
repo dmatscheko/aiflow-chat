@@ -12,7 +12,6 @@ import { ChatLog } from '../chat-data.js';
 let mcpUrl = null;
 let mcpSessionId = null;
 let tools = [];
-let cachedToolsSection = '';
 let isInitialized = false;
 let initPromise = null;
 let appInstance = null;
@@ -205,14 +204,12 @@ function initializeMcp() {
     console.log('MCP: Pre-fetching tools from', mcpUrl);
     mcpJsonRpc('tools/list').then(response => {
         tools = Array.isArray(response.tools) ? response.tools : [];
-        cachedToolsSection = generateToolsSection(tools);
-        console.log('MCP: Tools section cached successfully.');
+        console.log('MCP: Tools fetched successfully.');
         if (appInstance) {
             appInstance.renderSettings();
         }
     }).catch(error => {
         console.error('MCP: Failed to pre-fetch tools', error);
-        cachedToolsSection = '';
         // Optionally, notify the user in the UI
         alert(`Failed to connect to MCP server at ${mcpUrl}. Please check the URL and server status.\n\n${error.message}`);
     });
