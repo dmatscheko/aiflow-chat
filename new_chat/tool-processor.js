@@ -88,10 +88,6 @@ async function processToolCalls(message, chatLog, tools, filterCallback, execute
     const applicableCalls = allCalls.filter(filterCallback);
     if (applicableCalls.length === 0) return;
 
-    // Visually disable the original message content that contains tool calls.
-    message.value.content = `Using tools: ${applicableCalls.map(c => c.name).join(', ')}...`;
-    chatLog.notify();
-
     const promises = applicableCalls.map(call => executeCallback(call, message));
     const results = await Promise.all(promises);
 
