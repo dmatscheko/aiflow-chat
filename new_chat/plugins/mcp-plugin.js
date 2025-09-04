@@ -149,7 +149,7 @@ example_arg_value2
 </dma:tool_call>
 Do not escape any of the tool call arguments. The arguments will be parsed as normal text. There is one exception: If you need to write </dma:tool_call> or </parameter> as value inside a <parameter>, write it like <\/dma:tool_call> or <\/parameter>.
 
-You can use multiple tools in one message, but either use tools or write an answer in a message. Use tools only if you need them.
+You can use multiple tools in one message. After a tool call, you will always get the tool response and with this another turn to continue your answer. Use tools only if you need them.
 
 IMPORTANT: Write files only if explicitely instructed to do so.
 
