@@ -360,13 +360,15 @@ async function mcpJsonRpc(method, params = {}, retry = false) {
  */
 function parseToolCalls(content) {
     const calls = [];
-    const toolCallRegex = /<dma:tool_call\s+name="([^"]+)">([\s\S]*?)<\/dma:tool_call>/g;
+    // This regex handles both self-closing tags <dma:tool_call ... /> and tags with content <dma:tool_call>...</dma:tool_call>
+    const toolCallRegex = /<dma:tool_call\s+name="([^"]+)"(?:\s*\/>|>([\s\S]*?)<\/dma:tool_call>)/g;
     const paramRegex = /<parameter\s+name="([^"]+)">([\s\S]*?)<\/parameter>/g;
 
     let match;
     while ((match = toolCallRegex.exec(content)) !== null) {
         const name = match[1];
-        const innerContent = match[2];
+        // match[2] will be the inner content for non-self-closing tags, or undefined for self-closing ones.
+        const innerContent = match[2] || '';
         const params = {};
 
         let paramMatch;
