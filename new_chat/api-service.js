@@ -6,15 +6,21 @@
 'use strict';
 
 /**
+ * @typedef {object} ApiModel
+ * @property {string} id - The unique identifier of the model.
+ */
+
+/**
  * Handles all interactions with an OpenAI-compatible API.
  * @class
  */
 export class ApiService {
     /**
      * Fetches the list of available models from the API.
-     * @param {string} apiUrl - The base URL of the API (e.g., https://api.openai.com/).
+     * @param {string} apiUrl - The base URL of the API (e.g., "https://api.openai.com/").
      * @param {string} apiKey - The user's API key.
-     * @returns {Promise<Array<Object>>} A promise that resolves to an array of model objects.
+     * @returns {Promise<ApiModel[]>} A promise that resolves to an array of model objects, sorted by ID.
+     * @throws {Error} If the API request fails.
      */
     async getModels(apiUrl, apiKey) {
         // The models endpoint is usually at /v1/models
@@ -37,12 +43,13 @@ export class ApiService {
     }
 
     /**
-     * Streams the chat completions response from the API.
-     * @param {Object} payload - The payload to send to the API (e.g., { model, messages, stream: true }).
+     * Initiates a streaming chat completions request to the API.
+     * @param {object} payload - The payload to send to the API (e.g., { model, messages, stream: true }).
      * @param {string} apiUrl - The base URL of the API.
      * @param {string} apiKey - The user's API key.
      * @param {AbortSignal} abortSignal - The abort signal to cancel the request.
-     * @returns {Promise<ReadableStreamDefaultReader<Uint8Array>>} A promise that resolves to a stream reader.
+     * @returns {Promise<ReadableStreamDefaultReader<Uint8Array>>} A promise that resolves to a `ReadableStreamDefaultReader` for consuming the response stream.
+     * @throws {Error} If the API request fails, the response body is null, or the request is aborted.
      */
     async streamChat(payload, apiUrl, apiKey, abortSignal) {
         // The chat completions endpoint is usually at /v1/chat/completions

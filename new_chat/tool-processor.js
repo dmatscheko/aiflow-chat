@@ -8,17 +8,43 @@ import { responseProcessor } from './response-processor.js';
 
 /**
  * @typedef {import('./chat-data.js').Message} Message
- * @typedef {import('./chat-data.js').ChatLog} ChatLog
  * @typedef {import('./main.js').App} App
+ * @typedef {import('./main.js').Chat} Chat
+ */
+
+/**
+ * @typedef {object} ToolCall
+ * @property {string} id - A unique identifier for the tool call.
+ * @property {string} name - The name of the tool being called.
+ * @property {object} params - The parameters for the tool call.
+ */
+
+/**
+ * @typedef {object} ToolCallPosition
+ * @property {number} start - The starting index of the tool call in the content.
+ * @property {number} end - The ending index of the tool call in the content.
+ */
+
+/**
+ * @typedef {object} ParsedToolCalls
+ * @property {ToolCall[]} toolCalls - The parsed tool calls.
+ * @property {ToolCallPosition[]} positions - The positions of the tool calls in the content.
+ * @property {boolean[]} isSelfClosings - Flags indicating if a tool call was self-closing.
+ */
+
+/**
+ * @typedef {object} ToolSchema
+ * @property {string} name - The name of the tool.
+ * @property {object} [inputSchema] - The JSON schema for the tool's input.
  */
 
 // --- Tool Call Processing Functions (adapted from mcp-plugin.js) ---
 
 /**
- * Parses tool calls from the assistant's message content.
- * @param {string} content - The message content.
- * @param {Array<object>} [tools=[]] - A list of available tools with their schemas.
- * @returns {{toolCalls: Array<Object>, positions: Array<Object>, isSelfClosings: Array<boolean>}} The parsed tool calls, their positions, and self-closing flags.
+ * Parses tool calls from an assistant's message content.
+ * @param {string | null} content - The message content to parse.
+ * @param {ToolSchema[]} [tools=[]] - A list of available tools with their schemas, used for type coercion.
+ * @returns {ParsedToolCalls} The parsed tool calls, their positions, and self-closing flags.
  */
 function parseToolCalls(content, tools = []) {
     const toolCalls = [];
@@ -82,13 +108,36 @@ function parseToolCalls(content, tools = []) {
 
 
 /**
- * Processes tool calls found in a message, executes them, and continues the conversation.
+ * @callback ToolFilterCallback
+ * @param {ToolCall} call - The tool call to check.
+ * @returns {boolean} Whether the tool call should be processed.
+ */
+
+/**
+ * @typedef {object} ToolResult
+ * @property {string} name - The name of the tool that was called.
+ * @property {string} tool_call_id - The ID of the tool call this is a result for.
+ * @property {string | null} content - The stringified result of the tool execution.
+ * @property {string | null} error - A string describing an error, if one occurred.
+ */
+
+/**
+ * @callback ToolExecuteCallback
+ * @param {ToolCall} call - The tool call to execute.
+ * @param {Message} message - The message containing the tool call.
+ * @returns {Promise<ToolResult>} A promise that resolves to the result of the tool execution.
+ */
+
+/**
+ * A generic function to process tool calls found in a message.
+ * It parses, filters, executes, and then formats the results into a new
+ * 'tool' role message, and then queues up the next assistant turn.
  * @param {App} app - The main application instance.
- * @param {object} chat - The chat object this message belongs to.
+ * @param {Chat} chat - The chat object this message belongs to.
  * @param {Message} message - The message containing tool calls.
- * @param {Array<object>} tools - A list of available tools with their schemas.
- * @param {Function} filterCallback - A function to filter which tool calls to process.
- * @param {Function} executeCallback - An async function to execute a tool call and return the result.
+ * @param {ToolSchema[]} tools - A list of available tools with their schemas.
+ * @param {ToolFilterCallback} filterCallback - A function to filter which tool calls to process.
+ * @param {ToolExecuteCallback} executeCallback - An async function to execute a tool call and return the result.
  */
 async function processToolCalls(app, chat, message, tools, filterCallback, executeCallback) {
     const { toolCalls, positions, isSelfClosings } = parseToolCalls(message.value.content, tools);

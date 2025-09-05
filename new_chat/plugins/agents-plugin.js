@@ -9,21 +9,20 @@ import { pluginManager } from '../plugin-manager.js';
 import { debounce, createSettingsUI, createToolSettingsUI } from '../utils.js';
 
 /**
+ * @typedef {import('../utils.js').ToolSettings} AgentToolSettings
+ */
+
+/**
  * @typedef {object} AgentModelSettings
- * @property {string} [apiKey] - Custom API key for the agent.
- * @property {string} [apiUrl] - Custom API URL for the agent.
- * @property {string} [model] - The specific model to use for the agent.
- * @property {number} [temperature] - The temperature setting for the model.
- * @property {number} [top_p] - The top_p setting for the model.
+ * @property {string} [apiKey] - Custom API key for the agent. Overrides global setting.
+ * @property {string} [apiUrl] - Custom API URL for the agent. Overrides global setting.
+ * @property {string} [model] - The specific model to use for the agent. Overrides global setting.
+ * @property {number} [temperature] - The temperature setting for the model. Overrides global setting.
+ * @property {number} [top_p] - The top_p setting for the model. Overrides global setting.
  */
 
 /**
- * @typedef {object} AgentToolSettings
- * @property {boolean} allowAll - Whether to allow all tools.
- * @property {string[]} allowed - A list of allowed tool names.
- */
-
-/**
+ * Represents a configurable Agent with its own personality and settings.
  * @typedef {object} Agent
  * @property {string} id - The unique identifier for the agent.
  * @property {string} name - The name of the agent.
@@ -35,14 +34,22 @@ import { debounce, createSettingsUI, createToolSettingsUI } from '../utils.js';
  */
 
 /**
- * Manages the lifecycle and storage of agents.
+ * Manages the lifecycle and storage of agents, including their persistence
+ * in localStorage and their association with specific chats.
+ * @class
  */
 class AgentManager {
     constructor() {
-        /** @type {Agent[]} */
+        /**
+         * The list of all available agents.
+         * @type {Agent[]}
+         */
         this.agents = this._loadAgents();
-        /** @type {Object.<string, string>} */
-        this.chatAgentMap = this._loadChatAgentMap(); // Maps chatId to agentId
+        /**
+         * A map where keys are chat IDs and values are the ID of the active agent for that chat.
+         * @type {Object.<string, string>}
+         */
+        this.chatAgentMap = this._loadChatAgentMap();
     }
 
     /**
@@ -101,8 +108,9 @@ class AgentManager {
     }
 
     /**
-     * Adds a new agent.
-     * @param {Omit<Agent, 'id'>} agentData - The data for the new agent.
+     * Adds a new agent to the list and saves it.
+     * @param {Omit<Agent, 'id'>} agentData - The data for the new agent, without the 'id' property.
+     * @returns {Agent} The newly created agent, including its generated ID.
      */
     addAgent(agentData) {
         const newAgent = { ...agentData, id: `agent-${Date.now()}` };
@@ -165,10 +173,15 @@ class AgentManager {
 }
 
 const agentManager = new AgentManager();
+/**
+ * A reference to the main App instance.
+ * @type {import('../main.js').App | null}
+ */
 let appInstance = null;
 
 /**
- * Renders the list of agents in the "Agents" tab.
+ * Renders the list of agents in the "Agents" tab panel.
+ * @private
  */
 function renderAgentList() {
     const agentListEl = document.getElementById('agent-list');
@@ -188,9 +201,11 @@ function renderAgentList() {
 }
 
 /**
- * Renders the agent editor view.
- * @param {string} [agentId] - The ID of the agent to edit. If null, creates a new agent.
+ * Renders the agent editor view as an HTML string.
+ * This function is registered as a view renderer with the PluginManager.
+ * @param {string} [agentId] - The ID of the agent to edit. If not provided, renders a creation form.
  * @returns {string} The HTML content for the agent editor.
+ * @private
  */
 function renderAgentEditor(agentId) {
     const agent = agentId ? agentManager.getAgent(agentId) : null;
@@ -267,7 +282,9 @@ function renderAgentEditor(agentId) {
 }
 
 /**
- * Attaches event listeners to the agent editor form for auto-saving.
+ * Attaches event listeners to the agent editor form for auto-saving changes.
+ * This function is called when the agent editor view is rendered.
+ * @private
  */
 function attachAgentFormListeners() {
     const form = document.getElementById('agent-editor-form');
@@ -344,7 +361,9 @@ function attachAgentFormListeners() {
 }
 
 /**
- * Populates the agent selector dropdown in the chat area.
+ * Populates the agent selector dropdown in the chat area with the available agents
+ * and selects the one currently active for the chat.
+ * @private
  */
 function populateAgentSelector() {
     const selector = document.getElementById('agent-selector');
@@ -366,14 +385,22 @@ function populateAgentSelector() {
 }
 
 /**
+ * @typedef {import('../main.js').App} App
+ * @typedef {import('../main.js').Tab} Tab
+ * @typedef {import('../main.js').Chat} Chat
+ * @typedef {import('../main.js').View} View
+ */
+
+/**
  * The main plugin object for agents.
+ * @type {import('../plugin-manager.js').Plugin}
  */
 const agentsPlugin = {
     name: 'Agents',
 
     /**
-     * Initializes the plugin.
-     * @param {object} app - The main application instance.
+     * Initializes the plugin, registers views, and exposes the agent manager.
+     * @param {App} app - The main application instance.
      */
     onAppInit(app) {
         appInstance = app;
@@ -382,9 +409,9 @@ const agentsPlugin = {
     },
 
     /**
-     * Registers the "Agents" tab.
-     * @param {object[]} tabs - The array of existing tabs.
-     * @returns {object[]} The updated array of tabs.
+     * Registers the "Agents" tab in the right-hand panel.
+     * @param {Tab[]} tabs - The array of existing tabs.
+     * @returns {Tab[]} The updated array of tabs.
      */
     onTabsRegistered(tabs) {
         tabs.push({
@@ -435,8 +462,8 @@ const agentsPlugin = {
     },
 
     /**
-     * Renders the agent selector in the chat area.
-     * @param {string} currentHtml - The current HTML of the chat area.
+     * Renders the agent selector dropdown in the chat area controls.
+     * @param {string} currentHtml - The current HTML of the chat controls area.
      * @returns {string} The updated HTML.
      */
     onChatAreaRender(currentHtml) {
@@ -452,8 +479,8 @@ const agentsPlugin = {
     },
 
     /**
-     * Updates the agent selector when the chat is switched.
-     * @param {object} chat - The newly active chat object.
+     * Updates the agent selector when the active chat is switched.
+     * @param {Chat} chat - The newly active chat object.
      */
     onChatSwitched(chat) {
         populateAgentSelector();
@@ -473,7 +500,7 @@ const agentsPlugin = {
 
     /**
      * Attaches listeners when the agent editor view is rendered.
-     * @param {{type: string, id: string}} view - The rendered view object.
+     * @param {View} view - The rendered view object.
      */
     onViewRendered(view) {
         if (view.type === 'agent-editor') {

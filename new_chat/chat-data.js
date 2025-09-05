@@ -10,25 +10,42 @@
  */
 
 /**
- * @typedef {Object} MessageValue
+ * @typedef {object} MessageValue
  * @property {MessageRole} role - The role of the message author.
  * @property {string | null} content - The content of the message.
- * @property {string | null} [agent] - The ID of the agent used for this message.
+ * @property {string} [agent] - The ID of the agent used for this message.
+ * @property {object} [metadata] - Optional metadata, e.g., for sources.
+ */
+
+/**
+ * @typedef {object} SerializedMessage
+ * @property {MessageValue} value - The value of the message.
+ * @property {SerializedAlternatives | null} answerAlternatives - The serialized answer alternatives.
+ */
+
+/**
+ * @typedef {object} SerializedAlternatives
+ * @property {SerializedMessage[]} messages - The serialized messages.
+ * @property {number} activeMessageIndex - The index of the active message.
  */
 
 /**
  * Represents a single message in the chat log tree.
- * Each message can have a set of alternative answers.
+ * Each message is a node that contains its value and can have a child set of
+ * alternative answers, forming a tree structure.
  * @class
  */
 class Message {
     /**
-     * @param {MessageValue} value - The message value, e.g., { role: 'user', content: 'Hello' }.
+     * @param {MessageValue} value - The message value, e.g., `{ role: 'user', content: 'Hello' }`.
      */
     constructor(value) {
         /** @type {MessageValue} */
         this.value = value;
-        /** @type {Alternatives | null} */
+        /**
+         * The set of alternative messages that are answers to this message.
+         * @type {Alternatives | null}
+         */
         this.answerAlternatives = null;
     }
 
@@ -42,7 +59,7 @@ class Message {
 
     /**
      * Serializes the message to a JSON-compatible object.
-     * @returns {Object}
+     * @returns {SerializedMessage} A serializable representation of the message.
      */
     toJSON() {
         return {
@@ -66,9 +83,9 @@ class Alternatives {
     }
 
     /**
-     * Adds a new message to the list of alternatives.
+     * Adds a new message to the list of alternatives and sets it as the active one.
      * @param {MessageValue} value - The value for the new message.
-     * @returns {Message} The newly created message.
+     * @returns {Message} The newly created message instance.
      */
     addMessage(value) {
         const newMessage = new Message(value);
@@ -78,7 +95,7 @@ class Alternatives {
 
     /**
      * Gets the currently active message in this set of alternatives.
-     * @returns {Message | null}
+     * @returns {Message | null} The active message, or null if there are no messages.
      */
     getActiveMessage() {
         if (this.activeMessageIndex === -1 || this.messages.length === 0) {
@@ -89,7 +106,7 @@ class Alternatives {
 
     /**
      * Serializes the alternatives to a JSON-compatible object.
-     * @returns {Object}
+     * @returns {SerializedAlternatives} A serializable representation of the alternatives.
      */
     toJSON() {
         return {
@@ -105,16 +122,24 @@ class Alternatives {
  */
 export class ChatLog {
     constructor() {
-        /** @type {Alternatives | null} */
+        /**
+         * The root of the message tree.
+         * @type {Alternatives | null}
+         */
         this.rootAlternatives = null;
-        /** @type {Array<() => void>} */
+        /**
+         * A list of callback functions to be called on any change.
+         * @type {Array<() => void>}
+         */
         this.subscribers = [];
     }
 
     /**
      * Adds a message to the active conversational path.
+     * If it's the first message, it creates the root. Otherwise, it adds it as an
+     * answer to the last message in the active path.
      * @param {MessageValue} value - The value of the message to add.
-     * @returns {Message} The newly added message.
+     * @returns {Message} The newly added message instance.
      */
     addMessage(value) {
         const lastMessage = this.getLastMessage();
@@ -252,7 +277,7 @@ export class ChatLog {
 
     /**
      * Serializes the entire chat log to a JSON-compatible object.
-     * @returns {Object | null}
+     * @returns {SerializedAlternatives | null} A serializable representation of the root alternatives, or null if the log is empty.
      */
     toJSON() {
         return this.rootAlternatives ? this.rootAlternatives.toJSON() : null;
@@ -260,8 +285,8 @@ export class ChatLog {
 
     /**
      * Creates a ChatLog instance from a serialized JSON object.
-     * @param {Object} jsonData - The data to load from.
-     * @returns {ChatLog}
+     * @param {SerializedAlternatives | null} jsonData - The data to load from.
+     * @returns {ChatLog} A new ChatLog instance populated with the provided data.
      */
     static fromJSON(jsonData) {
         const chatLog = new ChatLog();

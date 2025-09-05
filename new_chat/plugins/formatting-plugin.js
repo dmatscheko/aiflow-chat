@@ -6,6 +6,22 @@
 
 import { pluginManager } from '../plugin-manager.js';
 
+/**
+ * @typedef {import('../chat-data.js').Message} Message
+ */
+
+/**
+ * A plugin that formats tool calls and responses into collapsible `<details>` elements.
+ * It uses a two-pass system:
+ * 1. `onFormatMessageContent`: Runs before Markdown processing. It finds tool-related
+ *    XML tags and wraps them in unique placeholders and a ` ```html ` code block.
+ *    This ensures the XML is treated as literal text by the Markdown parser.
+ * 2. `onPostFormatMessageContent`: Runs after Markdown processing. It finds the
+ *    HTML generated from the placeholders and replaces it with the final `<details>`
+ *    element structure.
+ *
+ * @type {import('../plugin-manager.js').Plugin}
+ */
 const formattingPlugin = {
     name: 'detailsWrapper',
     hooks: {

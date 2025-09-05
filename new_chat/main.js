@@ -19,12 +19,78 @@ import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
 import './plugins/formatting-plugin.js';
 
+/**
+ * @typedef {object} Chat
+ * @property {string} id - The unique identifier for the chat.
+ * @property {string} title - The title of the chat.
+ * @property {ChatLog} log - The ChatLog instance for the chat.
+ */
+
+/**
+ * @typedef {object} Setting
+ * @property {string} id - The unique identifier for the setting.
+ * @property {string} label - The display label for the setting.
+ * @property {string} type - The input type (e.g., 'text', 'select').
+ * @property {any} default - The default value for the setting.
+ * @property {any[]} [options] - Options for 'select' type settings.
+ */
+
+/**
+ * @typedef {object} Tab
+ * @property {string} id - The unique identifier for the tab.
+ * @property {string} label - The display label for the tab.
+ * @property {() => void} onActivate - A function to call when the tab is activated.
+ */
+
+/**
+ * @typedef {object} View
+ * @property {string} type - The type of the view (e.g., 'chat', 'editor').
+ * @property {string | null} id - The unique identifier for the content of the view (e.g., a chat ID).
+ */
+
+/**
+ * The main application class.
+ * Orchestrates all components of the chat application.
+ * @class
+ */
 class App {
     constructor() {
+        /** @type {ApiService} */
         this.apiService = new ApiService();
+        /** @type {Chat[]} */
         this.chats = [];
+        /** @type {View} */
         this.activeView = { type: 'chat', id: null }; // Default view
+        /** @type {AbortController | null} */
         this.abortController = null;
+        /** @type {string | null} */
+        this.activeChatId = null;
+        /** @type {ChatUI | null} */
+        this.chatUI = null;
+        /**
+         * A debounced version of the saveChats method.
+         * @type {() => void}
+         */
+        this.debouncedSave = debounce(() => this.saveChats(), 500);
+
+        /**
+         * A map of cached DOM elements.
+         * @type {Object.<string, HTMLElement>}
+         */
+        this.dom = {};
+
+        /**
+         * The application settings definition.
+         * @type {Setting[]}
+         */
+        this.settings = [];
+
+        /**
+         * The application tabs definition.
+         * @type {Tab[]}
+         */
+        this.tabs = [];
+
 
         this.registerCoreViews();
         pluginManager.trigger('onAppInit', this);
@@ -37,7 +103,6 @@ class App {
         this.renderTabs();
 
         this.loadSettings();
-        this.debouncedSave = debounce(() => this.saveChats(), 500);
         this.loadChats(); // This will set the initial active chat id
 
         // Set initial view
@@ -48,6 +113,11 @@ class App {
         this.fetchModels();
     }
 
+    /**
+     * Registers the core views provided by the application.
+     * Plugins can register additional views.
+     * @private
+     */
     registerCoreViews() {
         pluginManager.registerView('chat', (chatId) => {
             return `
@@ -62,6 +132,11 @@ class App {
         });
     }
 
+    /**
+     * Defines the core application settings.
+     * Plugins can modify this list via the 'onSettingsRegistered' hook.
+     * @private
+     */
     defineSettings() {
         const coreSettings = [
             { id: 'apiUrl', label: 'API URL', type: 'text', default: 'https://api.openai.com/' },
@@ -73,6 +148,11 @@ class App {
         this.settings = pluginManager.trigger('onSettingsRegistered', coreSettings);
     }
 
+    /**
+     * Defines the core application tabs for the right-hand panel.
+     * Plugins can modify this list via the 'onTabsRegistered' hook.
+     * @private
+     */
     defineTabs() {
         const coreTabs = [
             {
@@ -103,6 +183,10 @@ class App {
         this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
     }
 
+    /**
+     * Caches references to key DOM elements.
+     * @private
+     */
     initDOM() {
         this.dom = {
             settingsContainer: document.getElementById('settings-container'),
@@ -112,6 +196,10 @@ class App {
         };
     }
 
+    /**
+     * Renders the settings UI in the left panel based on the `this.settings` definition.
+     * @private
+     */
     renderSettings() {
         this.dom.settingsContainer.innerHTML = '';
 
@@ -148,6 +236,10 @@ class App {
         });
     }
 
+    /**
+     * Renders the tab buttons and panes in the right panel.
+     * @private
+     */
     renderTabs() {
         this.dom.panelTabs.innerHTML = '';
         this.dom.panelContent.innerHTML = '';
@@ -171,6 +263,11 @@ class App {
         this.tabs[0].onActivate();
     }
 
+    /**
+     * Sets the active view for the main panel.
+     * @param {string} type - The type of view to display.
+     * @param {string} id - The ID of the content for the view (e.g., chat ID).
+     */
     setView(type, id) {
         this.activeView = { type, id };
         console.log('Setting view to', this.activeView);
@@ -182,6 +279,10 @@ class App {
         this.renderMainView();
     }
 
+    /**
+     * Renders the content of the main panel based on the current `activeView`.
+     * @private
+     */
     renderMainView() {
         const { type, id } = this.activeView;
         const renderer = pluginManager.getViewRenderer(type);
@@ -197,6 +298,11 @@ class App {
         }
     }
 
+    /**
+     * Activates a specific tab in the right-hand panel.
+     * @param {string} tabId - The ID of the tab to show.
+     * @private
+     */
     showTab(tabId) {
         if (!tabId) return;
 
@@ -217,6 +323,11 @@ class App {
         }
     }
 
+    /**
+     * Initializes the chat view components and event listeners for a given chat.
+     * @param {string} chatId - The ID of the chat to initialize the view for.
+     * @private
+     */
     initChatView(chatId) {
         const chat = this.chats.find(c => c.id === chatId);
         if (!chat) return;
@@ -244,6 +355,10 @@ class App {
         }
     }
 
+    /**
+     * Initializes global event listeners for settings and panel tabs.
+     * @private
+     */
     initEventListeners() {
         this.settings.forEach(setting => {
             const inputEl = this.dom.settings[setting.id];
@@ -267,6 +382,10 @@ class App {
         });
     }
 
+    /**
+     * Loads settings from localStorage and applies them to the UI.
+     * @private
+     */
     loadSettings() {
         const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
         this.settings.forEach(setting => {
@@ -281,6 +400,10 @@ class App {
         });
     }
 
+    /**
+     * Saves the current settings from the UI to localStorage.
+     * @private
+     */
     saveSettings() {
         const settingsToSave = {};
         this.settings.forEach(setting => {
@@ -292,6 +415,11 @@ class App {
         localStorage.setItem('core_chat_settings', JSON.stringify(settingsToSave));
     }
 
+    /**
+     * Loads chat history from localStorage.
+     * If no chats are found, creates a new one.
+     * @private
+     */
     loadChats() {
         const savedChats = JSON.parse(localStorage.getItem('core_chat_logs'));
         if (savedChats && savedChats.length > 0) {
@@ -313,6 +441,10 @@ class App {
         }
     }
 
+    /**
+     * Saves all chats and the active chat ID to localStorage.
+     * @private
+     */
     saveChats() {
         const chatsToSave = this.chats.map(chat => ({
             id: chat.id,
@@ -323,6 +455,10 @@ class App {
         localStorage.setItem('core_active_chat_id', this.activeChatId);
     }
 
+    /**
+     * Creates a new, empty chat, adds it to the list, and makes it active.
+     * @private
+     */
     createNewChat() {
         const newChat = {
             id: `chat-${Date.now()}`,
@@ -336,6 +472,11 @@ class App {
         this.saveChats(); // Save immediately to create the entry
     }
 
+    /**
+     * Deletes a chat and updates the view to a different chat.
+     * @param {string} chatId - The ID of the chat to delete.
+     * @private
+     */
     deleteChat(chatId) {
         this.chats = this.chats.filter(c => c.id !== chatId);
         if (this.activeChatId === chatId) {
@@ -351,6 +492,10 @@ class App {
         this.saveChats();
     }
 
+    /**
+     * Renders the list of chats in the 'Chats' tab.
+     * @private
+     */
     renderChatList() {
         const chatListEl = document.getElementById('chat-list');
         if (!chatListEl) return;
@@ -373,6 +518,10 @@ class App {
         this.updateActiveChatInList();
     }
 
+    /**
+     * Toggles the 'active' class on the current chat in the list.
+     * @private
+     */
     updateActiveChatInList() {
         const chatListEl = document.getElementById('chat-list');
         if (!chatListEl) return;
@@ -382,10 +531,18 @@ class App {
         });
     }
 
+    /**
+     * Gets the full chat object for the currently active chat.
+     * @returns {Chat | undefined} The active chat object.
+     */
     getActiveChat() {
         return this.chats.find(c => c.id === this.activeChatId);
     }
 
+    /**
+     * Fetches the list of available models from the API and populates the model dropdown.
+     * @private
+     */
     async fetchModels() {
         const apiUrl = this.dom.settings.apiUrl.value;
         const apiKey = this.dom.settings.apiKey.value;
@@ -410,6 +567,14 @@ class App {
         }
     }
 
+    /**
+     * Handles the submission of the message form.
+     * Adds the user message to the log and schedules the response processor.
+     * @param {object} [options={}] - Options for the submission.
+     * @param {boolean} [options.isContinuation=false] - Whether this is a continuation of a previous turn.
+     * @param {string|null} [options.agentId=null] - The ID of an agent to force for this turn.
+     * @private
+     */
     async handleFormSubmit(options = {}) {
         const { isContinuation = false, agentId = null } = options;
         const activeChat = this.getActiveChat();

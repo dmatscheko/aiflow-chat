@@ -4,25 +4,57 @@
 
 'use strict';
 
+/**
+ * @callback ViewRenderer
+ * @param {string} [id] - The ID of the item to render in the view.
+ * @returns {string} The HTML string for the view.
+ */
+
+/**
+ * A mapping of hook names to callback functions.
+ * @typedef {Object.<string, Function>} Plugin
+ */
+
+/**
+ * Manages the registration and execution of plugins.
+ * Plugins can register callbacks for various hooks, which are triggered at
+ * specific points in the application lifecycle. This allows for extending
+ * and modifying the application's behavior without changing the core code.
+ * It also manages registration of custom "views" for the main panel.
+ * @class
+ */
 class PluginManager {
     constructor() {
+        /**
+         * A map where keys are hook names and values are arrays of callbacks.
+         * @private
+         * @type {Object.<string, Function[]>}
+         */
         this.hooks = {};
+        /**
+         * A map where keys are view types and values are renderer functions.
+         * @private
+         * @type {Object.<string, ViewRenderer>}
+         */
         this.viewRenderers = {};
     }
 
     /**
      * Registers a view renderer for a specific view type.
      * @param {string} viewType - The name of the view type (e.g., 'agent-editor').
-     * @param {Function} renderer - A function that takes an ID and returns an HTML string for the view.
+     * @param {ViewRenderer} renderer - A function that takes an optional ID and returns an HTML string for the view.
      */
     registerView(viewType, renderer) {
+        if (this.viewRenderers[viewType]) {
+            console.warn(`PluginManager: A view renderer for "${viewType}" is already registered. It will be overwritten.`);
+        }
         this.viewRenderers[viewType] = renderer;
     }
 
     /**
      * Gets the renderer function for a given view type.
      * @param {string} viewType - The name of the view type.
-     * @returns {Function|null} The renderer function or null if not found.
+     * @returns {ViewRenderer|null} The renderer function or null if not found.
      */
     getViewRenderer(viewType) {
         return this.viewRenderers[viewType] || null;
@@ -30,10 +62,10 @@ class PluginManager {
 
     /**
      * Registers a plugin, allowing it to add callbacks to various hooks.
-     * @param {Object} plugin - The plugin object. The keys are hook names and values are the callback functions.
+     * @param {Plugin} plugin - The plugin object. The keys are hook names (e.g., 'onAppInit') and values are the callback functions.
      * @example
      * pluginManager.register({
-     *   onAppInit: () => console.log('App is initializing!'),
+     *   onAppInit: (app) => console.log('App is initializing!'),
      *   onSettingsRegistered: (settings) => {
      *     settings.push({ id: 'my-plugin-setting', ... });
      *     return settings;
@@ -52,10 +84,13 @@ class PluginManager {
     }
 
     /**
-     * Triggers a specific hook, executing all registered callbacks.
+     * Triggers a specific hook, executing all registered callbacks in sequence.
+     * For hooks that are designed to modify data (e.g., a settings array),
+     * the return value of each callback is passed as the first argument to the next.
      * @param {string} hookName - The name of the hook to trigger.
-     * @param {...*} args - Arguments to pass to the hook's callbacks.
-     * @returns {*} The result of the hook. For hooks that modify data, this will be the modified data.
+     * @param {...any} args - Arguments to pass to the hook's callbacks.
+     * @returns {any} The result from the last callback in the chain, or the original
+     * first argument if no callbacks were registered or if they returned undefined.
      */
     trigger(hookName, ...args) {
         const callbacks = this.hooks[hookName];

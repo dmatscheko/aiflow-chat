@@ -9,22 +9,31 @@ import { pluginManager } from '../plugin-manager.js';
 import { debounce } from '../utils.js';
 import { responseProcessor } from '../response-processor.js';
 
+/**
+ * @typedef {import('../main.js').App} App
+ * @typedef {import('../main.js').Chat} Chat
+ */
+
+/**
+ * A reference to the main App instance.
+ * @type {App | null}
+ */
 let appInstance = null;
 
 /**
  * @typedef {object} FlowStep
  * @property {string} id - The unique identifier for the step.
- * @property {string} type - The type of the step.
+ * @property {string} type - The type of the step (e.g., 'simple-prompt').
  * @property {number} x - The x-coordinate on the canvas.
  * @property {number} y - The y-coordinate on the canvas.
- * @property {Object.<string, any>} data - The specific data for the step, including agentId.
+ * @property {Object.<string, any>} data - The specific data for the step, including `agentId`.
  */
 
 /**
  * @typedef {object} FlowConnection
- * @property {string} from - The ID of the source step.
- * @property {string} to - The ID of the target step.
- * @property {string} outputName - The name of the output connector on the source step.
+ * @property {string} from - The ID of the source step (`FlowStep.id`).
+ * @property {string} to - The ID of the target step (`FlowStep.id`).
+ * @property {string} outputName - The name of the output connector on the source step (e.g., 'default', 'pass', 'fail').
  */
 
 /**
@@ -35,12 +44,47 @@ let appInstance = null;
  * @property {FlowConnection[]} connections - An array of connections between steps.
  */
 
+/**
+ * Context object passed to a FlowStep's execute method.
+ * @typedef {object} FlowExecutionContext
+ * @property {App} app - The main application instance.
+ * @property {(fromStepId: string, outputName?: string) => FlowStep | undefined} getNextStep - Function to get the next step in the flow.
+ * @property {(step: FlowStep) => void} executeStep - Function to execute a specific step.
+ * @property {(message?: string) => void} stopFlow - Function to stop the current flow execution.
+ */
+
+/**
+ * Defines the behavior and appearance of a type of flow step.
+ * @typedef {object} FlowStepDefinition
+ * @property {string} label - The display name for the step type.
+ * @property {() => object} getDefaults - A function that returns the default data for a new step.
+ * @property {(step: FlowStep, agentOptions: string) => string} render - A function that returns the HTML for the step's body.
+ * @property {(step: FlowStep, target: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) => void} onUpdate - A function to handle input changes within the step.
+ * @property {(step: FlowStep, context: FlowExecutionContext) => void} execute - The function that runs the step's logic.
+ */
+
+/**
+ * A map of all registered flow step types.
+ * @type {Object.<string, FlowStepDefinition & {type: string}>}
+ */
 const stepTypes = {};
 
+/**
+ * Registers a new type of flow step.
+ * @param {string} type - The unique identifier for the step type.
+ * @param {FlowStepDefinition} definition - The definition of the step's behavior.
+ */
 function defineStep(type, definition) {
     stepTypes[type] = { ...definition, type };
 }
 
+/**
+ * Generates the HTML for an agent selection dropdown.
+ * @param {FlowStep} step - The flow step this dropdown is for.
+ * @param {string} agentOptions - The pre-rendered HTML string of `<option>` elements for the agents.
+ * @returns {string} The HTML string for the dropdown.
+ * @private
+ */
 function getAgentsDropdown(step, agentOptions) {
     return `
         <label>Agent:</label>
@@ -227,20 +271,53 @@ defineStep('conditional-stop', {
 
 
 // --- Flow Manager ---
+/**
+ * Manages the CRUD operations and persistence of flows.
+ * @class
+ */
 class FlowManager {
-    constructor() { this.flows = this._loadFlows(); }
+    constructor() {
+        /** @type {Flow[]} */
+        this.flows = this._loadFlows();
+    }
+    /** @private */
     _loadFlows() { try { return JSON.parse(localStorage.getItem('core_flows_v2')) || []; } catch (e) { console.error('Failed to load flows:', e); return []; } }
+    /** @private */
     _saveFlows() { localStorage.setItem('core_flows_v2', JSON.stringify(this.flows)); }
+    /** @param {string} id */
     getFlow(id) { return this.flows.find(f => f.id === id); }
+    /** @param {Omit<Flow, 'id'>} flowData */
     addFlow(flowData) { this.flows.push({ ...flowData, id: `flow-${Date.now()}` }); this._saveFlows(); }
+    /** @param {Flow} flowData */
     updateFlow(flowData) { const i = this.flows.findIndex(f => f.id === flowData.id); if (i !== -1) { this.flows[i] = flowData; this._saveFlows(); } }
+    /** @param {string} id */
     deleteFlow(id) { this.flows = this.flows.filter(f => f.id !== id); this._saveFlows(); }
 }
 const flowManager = new FlowManager();
 
 // --- Flow Runner ---
+/**
+ * Executes a flow by traversing its steps and connections.
+ * @class
+ */
 class FlowRunner {
-    constructor(flow, app) { this.flow = flow; this.app = app; this.currentStepId = null; this.isRunning = false; }
+    /**
+     * @param {Flow} flow - The flow to execute.
+     * @param {App} app - The main application instance.
+     */
+    constructor(flow, app) {
+        /** @type {Flow} */
+        this.flow = flow;
+        /** @type {App} */
+        this.app = app;
+        /** @type {string | null} */
+        this.currentStepId = null;
+        /** @type {boolean} */
+        this.isRunning = false;
+    }
+    /**
+     * Starts the flow execution from the designated start node.
+     */
     start() {
         if (this.isRunning) return;
         const startNode = this.flow.steps.find(s => !this.flow.connections.some(c => c.to === s.id));
@@ -248,7 +325,16 @@ class FlowRunner {
         this.isRunning = true;
         this.executeStep(startNode);
     }
+    /**
+     * Stops the flow execution.
+     * @param {string} [message='Flow stopped.'] - An optional message to log.
+     */
     stop(message = 'Flow stopped.') { this.isRunning = false; this.currentStepId = null; console.log(message); activeFlowRunner = null; }
+    /**
+     * Executes a single step in the flow.
+     * @param {FlowStep} step - The step to execute.
+     * @private
+     */
     executeStep(step) {
         if (!this.isRunning) return;
         this.currentStepId = step.id;
@@ -262,10 +348,20 @@ class FlowRunner {
             });
         } else { this.stop(`Unknown step type: ${step.type}`); }
     }
+    /**
+     * Finds the next step connected to a given step's output.
+     * @param {string} stepId - The ID of the source step.
+     * @param {string} [outputName='default'] - The name of the output connector.
+     * @returns {FlowStep | undefined} The next step, or undefined if not found.
+     * @private
+     */
     getNextStep(stepId, outputName = 'default') {
         const conn = this.flow.connections.find(c => c.from === stepId && (c.outputName || 'default') === outputName);
         return conn ? this.flow.steps.find(s => s.id === conn.to) : null;
     }
+    /**
+     * Continues the flow execution after an asynchronous step (like an AI response) has completed.
+     */
     continue() {
         if (!this.isRunning || !this.currentStepId) return;
 
@@ -292,9 +388,17 @@ class FlowRunner {
         }
     }
 }
+/**
+ * The currently active FlowRunner, or null if no flow is running.
+ * @type {FlowRunner | null}
+ */
 let activeFlowRunner = null;
 
 // --- UI Rendering ---
+/**
+ * Renders the list of flows in the 'Flows' tab.
+ * @private
+ */
 function renderFlowList() {
     const listEl = document.getElementById('flow-list');
     if (!listEl) return;
@@ -308,6 +412,12 @@ function renderFlowList() {
     });
 }
 
+/**
+ * Renders the flow editor view as an HTML string.
+ * @param {string} flowId - The ID of the flow to edit.
+ * @returns {string} The HTML content for the flow editor.
+ * @private
+ */
 function renderFlowEditor(flowId) {
     const flow = flowManager.getFlow(flowId);
     const dropdownContent = Object.entries(stepTypes).map(([type, { label }]) => `<a href="#" data-step-type="${type}">${label}</a>`).join('');
@@ -327,6 +437,11 @@ function renderFlowEditor(flowId) {
         </div>`;
 }
 
+/**
+ * Redraws the SVG lines connecting the flow steps.
+ * @param {Flow} flow - The flow object containing the connections to draw.
+ * @private
+ */
 function updateConnections(flow) {
     const nodeContainer = document.getElementById('flow-node-container');
     const svgLayer = document.getElementById('flow-svg-layer');
@@ -361,6 +476,11 @@ function updateConnections(flow) {
     });
 }
 
+/**
+ * Renders the entire flow canvas, including all steps and connections.
+ * @param {Flow} flow - The flow to render.
+ * @private
+ */
 function renderFlow(flow) {
     const nodeContainer = document.getElementById('flow-node-container');
     const svgLayer = document.getElementById('flow-svg-layer');
@@ -422,6 +542,11 @@ function renderFlow(flow) {
 
 // --- Canvas Interaction ---
 let dragInfo = {}, panInfo = {}, connectionInfo = {};
+
+/**
+ * Resets the state of all canvas interactions (drag, pan, connect).
+ * @private
+ */
 function resetInteractions() {
     dragInfo = { active: false }; panInfo = { active: false };
     if (connectionInfo.tempLine) connectionInfo.tempLine.remove();
@@ -429,6 +554,13 @@ function resetInteractions() {
     document.getElementById('flow-canvas-wrapper').style.cursor = 'grab';
 }
 
+/**
+ * Handles the mouse down event on the flow canvas to initiate dragging, panning, or connecting.
+ * @param {MouseEvent} e - The mouse event.
+ * @param {Flow} flow - The current flow object.
+ * @param {() => void} debouncedUpdate - The debounced function to save the flow.
+ * @private
+ */
 function handleCanvasMouseDown(e, flow, debouncedUpdate) {
     const target = e.target;
     if (target.classList.contains('connector') && target.dataset.type === 'out') {
@@ -446,6 +578,13 @@ function handleCanvasMouseDown(e, flow, debouncedUpdate) {
     }
 }
 
+/**
+ * Handles the mouse move event on the flow canvas to update positions during interactions.
+ * @param {MouseEvent} e - The mouse event.
+ * @param {Flow} flow - The current flow object.
+ * @param {() => void} debouncedUpdate - The debounced function to save the flow.
+ * @private
+ */
 function handleCanvasMouseMove(e, flow, debouncedUpdate) {
     if (dragInfo.active) {
         const newX = e.clientX - dragInfo.offsetX;
@@ -471,6 +610,13 @@ function handleCanvasMouseMove(e, flow, debouncedUpdate) {
     }
 }
 
+/**
+ * Handles the mouse up event on the flow canvas to complete interactions.
+ * @param {MouseEvent} e - The mouse event.
+ * @param {Flow} flow - The current flow object.
+ * @param {() => void} debouncedUpdate - The debounced function to save the flow.
+ * @private
+ */
 function handleCanvasMouseUp(e, flow, debouncedUpdate) {
     if (dragInfo.active) {
         const step = flow.steps.find(s => s.id === dragInfo.target.dataset.id);
@@ -495,6 +641,10 @@ function handleCanvasMouseUp(e, flow, debouncedUpdate) {
 }
 
 // --- Plugin Definition ---
+/**
+ * The main plugin object for flows.
+ * @type {import('../plugin-manager.js').Plugin}
+ */
 const flowsPlugin = {
     name: 'Flows',
     onAppInit(app) { appInstance = app; pluginManager.registerView('flow-editor', renderFlowEditor); },

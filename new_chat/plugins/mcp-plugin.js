@@ -8,28 +8,50 @@ import { pluginManager } from '../plugin-manager.js';
 import { processToolCalls as genericProcessToolCalls } from '../tool-processor.js';
 import { ChatLog } from '../chat-data.js';
 
+/**
+ * @typedef {import('../main.js').App} App
+ * @typedef {import('../main.js').Setting} Setting
+ * @typedef {import('../chat-data.js').Message} Message
+ * @typedef {import('../main.js').Chat} Chat
+ * @typedef {import('../tool-processor.js').ToolSchema} ToolSchema
+ * @typedef {import('../tool-processor.js').ToolCall} ToolCall
+ * @typedef {import('../tool-processor.js').ToolResult} ToolResult
+ * @typedef {import('./agents-plugin.js').Agent} Agent
+ */
+
 // --- State Variables ---
+/** @type {string | null} */
 let mcpUrl = null;
+/** @type {string | null} */
 let mcpSessionId = null;
+/** @type {ToolSchema[]} */
 let tools = [];
+/** @type {boolean} */
 let isInitialized = false;
+/** @type {Promise<void> | null} */
 let initPromise = null;
+/** @type {App | null} */
 let appInstance = null;
 
 
+/**
+ * Plugin for integrating with an MCP (Model Context Protocol) server.
+ * Handles tool discovery, session management, and tool execution.
+ * @type {import('../plugin-manager.js').Plugin & {getTools: () => ToolSchema[]}}
+ */
 const mcpPlugin = {
     name: 'MCP',
 
     /**
-     * Get the list of available tools.
-     * @returns {object[]} The list of tools.
+     * Get the list of available tools fetched from the MCP server.
+     * @returns {ToolSchema[]} The list of tools.
      */
     getTools: () => tools,
 
     /**
-     * Hook to register settings.
-     * @param {Array<Object>} settings - The original settings array.
-     * @returns {Array<Object>} The modified settings array.
+     * Registers the 'MCP Server URL' setting.
+     * @param {Setting[]} settings - The original settings array.
+     * @returns {Setting[]} The modified settings array.
      */
     onSettingsRegistered(settings) {
         settings.push({
@@ -43,7 +65,7 @@ const mcpPlugin = {
     },
 
     /**
-     * Hook called when the application initializes.
+     * Initializes the MCP connection when the app starts or the setting changes.
      * @param {App} app - The main application instance.
      */
     onAppInit(app) {
@@ -76,11 +98,11 @@ const mcpPlugin = {
     },
 
     /**
-     * Hook to modify the API payload before sending.
-     * @param {Object} payload - The original API payload.
-     * @param {Object} allSettings - All current settings from local storage.
-     * @param {import('./agents-plugin.js').Agent|null} agent - The active agent, if any.
-     * @returns {Object} The modified payload.
+     * Injects the available tools list into the system prompt before an API call.
+     * @param {object} payload - The original API payload.
+     * @param {object} allSettings - All current settings from local storage.
+     * @param {Agent | null} agent - The active agent, if any.
+     * @returns {object} The modified payload.
      */
     beforeApiCall(payload, allSettings, agent) {
         if (!mcpUrl || tools.length === 0) {
@@ -102,9 +124,9 @@ const mcpPlugin = {
     },
 
     /**
-     * Hook called after an API response is complete.
+     * Checks for and processes any tool calls in a completed assistant message.
      * @param {Message} message - The completed assistant message.
-     * @param {Object} activeChat - The active chat instance.
+     * @param {Chat} activeChat - The active chat instance.
      */
     async onResponseComplete(message, activeChat) {
         if (!mcpUrl) return;
@@ -120,9 +142,9 @@ const mcpPlugin = {
     },
 
     /**
-     * Hook to format message content, specifically for citations.
+     * Post-processes message content to render MCP-specific elements, like citations.
      * @param {HTMLElement} contentEl - The content element.
-     * @param {Message} message - The message object.
+     * @param {Message} message - The message object, used to access metadata.
      */
     onFormatMessageContent(contentEl, message) {
         if (!contentEl.innerHTML.includes('&lt;dma:render')) return;
@@ -181,7 +203,9 @@ IMPORTANT: Write files only if explicitely instructed to do so.
 
 
 /**
- * Initializes the MCP connection, fetches tools.
+ * Initializes the MCP connection by fetching the tool list.
+ * This is a lightweight initialization that runs on startup.
+ * @private
  */
 function initializeMcp() {
     if (!mcpUrl) return;
@@ -201,9 +225,10 @@ function initializeMcp() {
 }
 
 /**
- * Generates the tools Markdown section based on the current settings.
- * @param {import('./agents-plugin.js').Agent|null} agent - The active agent, if any.
+ * Generates the tools Markdown section for the system prompt based on the current settings.
+ * @param {Agent | null} agent - The active agent, if any, to check for custom tool settings.
  * @returns {string} The Markdown section, or an empty string if no tools are allowed.
+ * @private
  */
 function generateToolsSection(agent) {
     // Determine the effective tool settings
@@ -245,7 +270,9 @@ function generateToolsSection(agent) {
 }
 
 /**
- * Initializes the MCP session.
+ * Performs the full MCP session initialization handshake.
+ * This is only called when a tool is actually executed.
+ * @private
  */
 async function initMcpSession() {
     if (initPromise) return initPromise;
@@ -274,7 +301,15 @@ async function initMcpSession() {
 }
 
 /**
- * Sends a JSON-RPC request to the MCP server.
+ * Sends a raw JSON-RPC request to the MCP server.
+ * Handles session ID headers and different response types (JSON, SSE).
+ * @param {string} method - The JSON-RPC method name.
+ * @param {object} [params={}] - The parameters for the method.
+ * @param {boolean} [isInit=false] - True if this is the 'initialize' call.
+ * @param {boolean} [isNotification=false] - True if this is a notification (no 'id').
+ * @returns {Promise<any>} The result from the JSON-RPC response.
+ * @throws {Error} If the request fails or times out.
+ * @private
  */
 async function sendMcpRequest(method, params = {}, isInit = false, isNotification = false) {
     if (!mcpUrl) throw new Error('No MCP server URL set');
@@ -367,7 +402,13 @@ async function sendMcpRequest(method, params = {}, isInit = false, isNotificatio
 }
 
 /**
- * Performs a JSON-RPC call to the MCP server.
+ * Performs a JSON-RPC call to the MCP server, handling session initialization and retries.
+ * @param {string} method - The JSON-RPC method name.
+ * @param {object} [params={}] - The parameters for the method.
+ * @param {boolean} [retry=false] - Internal flag to prevent infinite retry loops.
+ * @returns {Promise<any>} The result from the JSON-RPC response.
+ * @throws {AggregateError} If the call fails even after a retry.
+ * @private
  */
 async function mcpJsonRpc(method, params = {}, retry = false) {
     try {
@@ -396,19 +437,23 @@ async function mcpJsonRpc(method, params = {}, retry = false) {
 // --- Tool Call Processing Functions ---
 
 /**
+ * A filter function for the generic tool processor.
  * In this context, any non-agent call is considered an MCP call.
- * @param {Object} call - The tool call object.
+ * @param {ToolCall} call - The tool call object.
  * @returns {boolean} - True if it's an MCP call.
+ * @private
  */
 function filterMcpCalls(call) {
     return !call.name.endsWith('_agent');
 }
 
 /**
- * Executes a single MCP tool call.
- * @param {Object} call - The tool call to execute.
+ * An execution function for the generic tool processor.
+ * Executes a single MCP tool call after checking permissions.
+ * @param {ToolCall} call - The tool call to execute.
  * @param {Message} message - The original assistant message, for context.
- * @returns {Promise<Object>} A promise that resolves to a tool result object.
+ * @returns {Promise<ToolResult>} A promise that resolves to a tool result object.
+ * @private
  */
 async function executeMcpCall(call, message) {
     // Determine the effective tool settings

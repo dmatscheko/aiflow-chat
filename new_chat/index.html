@@ -7,24 +7,28 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- This is the main application container, laid out using CSS Grid. -->
     <div id="app-container">
+        <!-- The left panel for global settings. -->
         <div id="settings-panel">
             <h2>Settings</h2>
             <div id="settings-container">
-                <!-- Settings will be dynamically rendered here -->
+                <!-- Settings controls are dynamically rendered here by main.js -->
             </div>
         </div>
 
+        <!-- The central panel for the main content, such as the chat view or editors. -->
         <div id="main-panel">
-            <!-- The main view (chat, editors, etc.) will be rendered here -->
+            <!-- The active view is rendered here by main.js based on the current state. -->
         </div>
 
+        <!-- The right panel, which contains multiple tabs for different functionalities. -->
         <div id="right-panel">
             <div id="panel-tabs">
-                <!-- Tab buttons will be rendered here -->
+                <!-- Tab buttons are dynamically rendered here by main.js -->
             </div>
             <div id="panel-content">
-                <!-- Tab panes will be rendered here -->
+                <!-- The content for the active tab is rendered here. -->
             </div>
         </div>
     </div>

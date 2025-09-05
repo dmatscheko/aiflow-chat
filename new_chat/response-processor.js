@@ -8,16 +8,43 @@
 
 import { pluginManager } from './plugin-manager.js';
 
+/**
+ * @typedef {import('./main.js').App} App
+ * @typedef {import('./main.js').Chat} Chat
+ * @typedef {import('./chat-data.js').Message} Message
+ */
+
+/**
+ * Manages the queue and execution of AI response generation.
+ * It scans all chats for "pending" assistant messages (content is null)
+ * and processes them one by one, ensuring that only one API call is active
+ * at a time.
+ * @class
+ */
 class ResponseProcessor {
     constructor() {
+        /**
+         * Flag to prevent multiple concurrent processing loops.
+         * @type {boolean}
+         */
         this.isProcessing = false;
+        /**
+         * Callbacks to be executed when the entire processing queue is empty.
+         * @type {Array<() => void>}
+         * @private
+         */
         this.completionSubscribers = [];
-        this.app = null; // The main app instance
+        /**
+         * The main application instance.
+         * @type {App | null}
+         * @private
+         */
+        this.app = null;
     }
 
     /**
-     * Schedules a processing check. If not already processing, it starts.
-     * @param {import('./main.js').App} app - The main application instance.
+     * Schedules a processing check. If not already processing, it starts the loop.
+     * @param {App} app - The main application instance.
      */
     scheduleProcessing(app) {
         this.app = app;
@@ -27,15 +54,17 @@ class ResponseProcessor {
     }
 
     /**
-     * Subscribes a callback to be called when processing is complete.
-     * @param {() => void} callback
+     * Subscribes a callback to be called when the processing queue is empty.
+     * Useful for chaining asynchronous operations that depend on AI responses.
+     * @param {() => void} callback The function to call on completion.
      */
     subscribeToCompletion(callback) {
         this.completionSubscribers.push(callback);
     }
 
     /**
-     * Notifies all completion subscribers.
+     * Notifies all completion subscribers and clears the list.
+     * @private
      */
     notifyCompletion() {
         this.completionSubscribers.forEach(cb => cb());
@@ -44,7 +73,10 @@ class ResponseProcessor {
 
     /**
      * Finds the next pending message across all chats and processes it.
-     * If no message is found, it notifies completion subscribers.
+     * This method forms a loop by calling itself after each message is processed,
+     * ensuring sequential execution.
+     * If no pending message is found, it stops the loop and notifies completion subscribers.
+     * @private
      */
     async findAndProcessNext() {
         this.isProcessing = true;
@@ -73,9 +105,12 @@ class ResponseProcessor {
     }
 
     /**
-     * Processes a single pending message.
-     * @param {object} chat - The chat object the message belongs to.
-     * @param {import('./chat-data.js').Message} assistantMsg - The pending message to fill.
+     * Processes a single pending assistant message.
+     * This involves fetching settings, constructing the API payload, making the
+     * API call, and streaming the response back into the message content.
+     * @param {Chat} chat - The chat object the message belongs to.
+     * @param {Message} assistantMsg - The pending assistant message to fill.
+     * @private
      */
     async processMessage(chat, assistantMsg) {
         const app = this.app;

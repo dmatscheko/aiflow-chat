@@ -5,31 +5,36 @@
 'use strict';
 
 /**
- * Returns a function, that, as long as it continues to be invoked, will not
+ * Returns a function that, as long as it continues to be invoked, will not
  * be triggered. The function will be called after it stops being called for
- * N milliseconds.
+ * `wait` milliseconds.
  * @param {Function} func The function to debounce.
- * @param {number} wait The number of milliseconds to wait.
- * @returns {Function} The debounced function.
+ * @param {number} wait The number of milliseconds to delay.
+ * @returns {(...args: any[]) => void} The new debounced function.
  */
 export function debounce(func, wait) {
+    /** @type {number|undefined} */
     let timeout;
     return function executedFunction(...args) {
         const later = () => {
-            clearTimeout(timeout);
+            timeout = undefined;
             func(...args);
         };
         clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
+        timeout = window.setTimeout(later, wait);
     };
 }
 
 /**
- * Creates HTML elements for a given set of settings.
- * @param {object[]} settings - The settings definitions.
- * @param {object} currentValues - The current values for the settings.
- * @param {string} idPrefix - A prefix for the element IDs.
- * @returns {DocumentFragment} A fragment containing the rendered settings.
+ * @typedef {import('./main.js').Setting} Setting
+ */
+
+/**
+ * Creates a DocumentFragment containing HTML elements for a given set of settings.
+ * @param {Setting[]} settings - The settings definitions.
+ * @param {Object.<string, any>} currentValues - The current values for the settings, keyed by setting ID.
+ * @param {string} idPrefix - A prefix to apply to all generated element IDs to ensure uniqueness.
+ * @returns {DocumentFragment} A fragment containing the rendered settings UI.
  */
 export function createSettingsUI(settings, currentValues, idPrefix) {
     const fragment = document.createDocumentFragment();
@@ -91,11 +96,26 @@ export function createSettingsUI(settings, currentValues, idPrefix) {
 }
 
 /**
- * Creates HTML elements for tool settings.
- * @param {object[]} tools - The list of available tools.
- * @param {object} currentSettings - The current tool settings { allowed: string[], allowAll: boolean }.
- * @param {function(object): void} onChange - Callback function when settings change.
- * @returns {HTMLElement} A fieldset element containing the tool settings UI.
+ * @typedef {import('./tool-processor.js').ToolSchema} ToolSchema
+ */
+
+/**
+ * @typedef {object} ToolSettings
+ * @property {boolean} allowAll - Whether to allow all tools.
+ * @property {string[]} allowed - A list of allowed tool names if allowAll is false.
+ */
+
+/**
+ * @callback OnToolSettingsChange
+ * @param {ToolSettings} newSettings - The updated tool settings.
+ */
+
+/**
+ * Creates an HTML fieldset element for managing tool permissions.
+ * @param {ToolSchema[]} tools - The list of available tools.
+ * @param {ToolSettings} currentSettings - The current tool settings.
+ * @param {OnToolSettingsChange} onChange - Callback function triggered when settings change.
+ * @returns {HTMLFieldSetElement} A fieldset element containing the tool settings UI.
  */
 export function createToolSettingsUI(tools, currentSettings, onChange) {
     const fieldset = document.createElement('fieldset');

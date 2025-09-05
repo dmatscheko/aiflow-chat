@@ -6,11 +6,20 @@
 
 import { pluginManager } from '../plugin-manager.js';
 
+/**
+ * @typedef {import('../main.js').Setting} Setting
+ */
+
+/**
+ * An example plugin that demonstrates how to add a custom setting and
+ * modify the API call payload.
+ * @type {import('../plugin-manager.js').Plugin}
+ */
 const examplePlugin = {
     /**
-     * Modifies the settings definition to add a new setting.
-     * @param {Array<Object>} settings - The original settings array.
-     * @returns {Array<Object>} The modified settings array.
+     * Modifies the settings definition to add a new 'Max Tokens' setting.
+     * @param {Setting[]} settings - The original settings array.
+     * @returns {Setting[]} The modified settings array.
      */
     onSettingsRegistered(settings) {
         settings.push({
@@ -24,10 +33,10 @@ const examplePlugin = {
     },
 
     /**
-     * Modifies the API payload to include the max_tokens parameter.
-     * @param {Object} payload - The original API payload.
-     * @param {Object} allSettings - All current settings from local storage.
-     * @returns {Object} The modified payload.
+     * Modifies the API payload to include the 'max_tokens' parameter if it's set.
+     * @param {object} payload - The original API payload.
+     * @param {object} allSettings - A key-value object of all current settings.
+     * @returns {object} The modified payload.
      */
     beforeApiCall(payload, allSettings) {
         if (allSettings.maxTokens && parseInt(allSettings.maxTokens, 10) > 0) {

@@ -14,24 +14,40 @@ import { pluginManager } from './plugin-manager.js';
 
 /**
  * Manages the rendering of a ChatLog instance into a designated HTML element.
+ * It subscribes to a ChatLog and automatically re-renders the UI when the
+ * log changes.
  * @class
  */
 export class ChatUI {
     /**
      * @param {HTMLElement} container - The DOM element to render the chat messages into.
-     * @param {import('./plugins/agents-plugin.js').AgentManager} agentManager - The agent manager instance.
+     * @param {import('./plugins/agents-plugin.js').AgentManager} agentManager - The agent manager instance for displaying agent names.
+     * @throws {Error} If the container element is not provided.
      */
     constructor(container, agentManager) {
         if (!container) {
             throw new Error('ChatUI container element is required.');
         }
-        /** @type {HTMLElement} */
+        /**
+         * The DOM element where chat messages are rendered.
+         * @type {HTMLElement}
+         */
         this.container = container;
-        /** @type {import('./plugins/agents-plugin.js').AgentManager} */
+        /**
+         * The agent manager instance.
+         * @type {import('./plugins/agents-plugin.js').AgentManager}
+         */
         this.agentManager = agentManager;
-        /** @type {ChatLog | null} */
+        /**
+         * The ChatLog instance this UI is currently displaying.
+         * @type {ChatLog | null}
+         */
         this.chatLog = null;
-        /** @type {() => void} */
+        /**
+         * A pre-bound reference to the update method for event listeners.
+         * @type {() => void}
+         * @private
+         */
         this.boundUpdate = this.update.bind(this);
     }
 
@@ -80,6 +96,8 @@ export class ChatUI {
 
     /**
      * Creates an HTML element for a single message.
+     * It constructs the basic message structure and then allows plugins to
+     * modify the content element before it's added to the DOM.
      * @param {Message} message - The message object to format.
      * @returns {HTMLElement} The formatted message element.
      * @private
