@@ -285,7 +285,7 @@ export class ChatLog {
 
     /**
      * Creates a ChatLog instance from a serialized JSON object.
-     * @param {SerializedAlternatives | null} jsonData - The data to load from.
+     * @param {SerializedAlternatives | null} jsonData - The serialized data to load from.
      * @returns {ChatLog} A new ChatLog instance populated with the provided data.
      */
     static fromJSON(jsonData) {
