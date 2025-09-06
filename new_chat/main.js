@@ -9,8 +9,9 @@ import { ChatLog } from './chat-data.js';
 import { ApiService } from './api-service.js';
 import { ChatUI } from './chat-ui.js';
 import { pluginManager } from './plugin-manager.js';
-import { debounce, createSettingsUI, setPropertyByPath } from './utils.js';
+import { debounce, setPropertyByPath } from './utils.js';
 import { responseProcessor } from './response-processor.js';
+import { SettingsManager } from './settings-manager.js';
 
 // Load plugins
 import './plugins/example-plugin.js';
@@ -75,21 +76,33 @@ class App {
         this.debouncedSave = debounce(() => this.saveChats(), 500);
         /** @type {Object.<string, HTMLElement>} */
         this.dom = {};
-        /** @type {Setting[]} */
-        this.settings = [];
         /** @type {Tab[]} */
         this.tabs = [];
         /** @type {Object.<string, any>} */
-        this.currentSettings = {};
+        this.currentSettings = {}; // Managed by SettingsManager, but app needs a reference
+        /** @type {Setting[]} */
+        this.settings = []; // Definitions managed by SettingsManager
 
         this.registerCoreViews();
-        this.defineSettings();
         this.defineTabs();
         this.initDOM();
-        this.loadSettings();
+
+        // --- Settings Management ---
+        this.settingsManager = new SettingsManager(this);
+        this.settingsManager.load();
+        const coreSettings = [
+            { id: 'apiUrl', label: 'API URL', type: 'text', default: 'https://api.openai.com/' },
+            { id: 'apiKey', label: 'API Key', type: 'password', default: '' },
+            { id: 'model', label: 'Model', type: 'select', options: [] },
+            { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.' },
+            { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1 },
+        ];
+        this.settingsManager.define(coreSettings);
+        // --- End Settings Management ---
+
         pluginManager.trigger('onAppInit', this);
 
-        this.renderSettings();
+        this.settingsManager.render();
         this.renderTabs();
 
         this.loadChats();
@@ -111,17 +124,6 @@ class App {
                 <button type="button" id="stop-button" style="display: none;">Stop</button>
             </form>
         `);
-    }
-
-    defineSettings() {
-        const coreSettings = [
-            { id: 'apiUrl', label: 'API URL', type: 'text', default: 'https://api.openai.com/' },
-            { id: 'apiKey', label: 'API Key', type: 'password', default: '' },
-            { id: 'model', label: 'Model', type: 'select', options: [] },
-            { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.' },
-            { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1 },
-        ];
-        this.settings = pluginManager.trigger('onSettingsRegistered', coreSettings);
     }
 
     defineTabs() {
@@ -159,101 +161,6 @@ class App {
             panelContent: document.getElementById('panel-content'),
         };
     }
-
-    /**
-     * Renders the settings UI based on the `this.settings` definition.
-     * It uses a single callback to handle all setting changes.
-     */
-    renderSettings() {
-        this.dom.settingsContainer.innerHTML = ''; // Clear previous content
-
-        const onSettingChange = (id, newValue) => {
-            this.currentSettings[id] = newValue;
-            this.saveSettings();
-
-            document.body.dispatchEvent(new CustomEvent('setting-changed', {
-                detail: { id, newValue }
-            }));
-
-            if (id === 'apiUrl' || id === 'apiKey') {
-                this.fetchModels();
-            }
-        };
-
-        const settingsFragment = createSettingsUI(
-            this.settings,
-            this.currentSettings,
-            onSettingChange,
-            'setting-',
-            'main-settings'
-        );
-        this.dom.settingsContainer.appendChild(settingsFragment);
-
-        const modelSettingEl = this.dom.settingsContainer.querySelector('#setting-model');
-        if (modelSettingEl) {
-            const refreshBtn = document.createElement('button');
-            refreshBtn.id = 'refresh-models';
-            refreshBtn.textContent = 'Refresh';
-            refreshBtn.addEventListener('click', () => this.fetchModels());
-            modelSettingEl.parentElement.appendChild(refreshBtn);
-        }
-
-        this.renderToolSettings();
-    }
-
-    /**
-     * Renders the tool settings section using the declarative `createSettingsUI`.
-     */
-    renderToolSettings() {
-        const existingContainer = this.dom.settingsContainer.querySelector('#tool-settings-container');
-        if (existingContainer) {
-            existingContainer.remove();
-        }
-
-        if (!this.mcp?.getTools) return;
-        const tools = this.mcp.getTools();
-        if (tools.length === 0) return;
-
-        /** @type {Setting} */
-        const toolSettingsDef = {
-            id: 'toolSettings',
-            type: 'fieldset',
-            label: 'Tool Settings',
-            children: [
-                { id: 'allowAll', label: 'Allow all available tools', type: 'checkbox' },
-                {
-                    id: 'allowed',
-                    type: 'checkbox-list',
-                    label: '',
-                    options: tools.map(t => ({ value: t.name, label: t.name })),
-                    dependsOn: 'allowAll',
-                    dependsOnValue: false,
-                }
-            ]
-        };
-
-        const currentData = {
-            toolSettings: JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: true, allowed: [] }
-        };
-
-        const onToolSettingChange = (path, value) => {
-            setPropertyByPath(currentData, path, value);
-            localStorage.setItem('core_tool_settings', JSON.stringify(currentData.toolSettings));
-        };
-
-        const container = document.createElement('div');
-        container.id = 'tool-settings-container';
-        const fragment = createSettingsUI(
-            [toolSettingsDef],
-            currentData,
-            onToolSettingChange,
-            'main-tool-settings-', // More specific ID prefix
-            'main-settings'      // Context
-        );
-        container.appendChild(fragment);
-        this.dom.settingsContainer.appendChild(container);
-    }
-
 
     renderTabs() {
         this.dom.panelTabs.innerHTML = '';
@@ -351,14 +258,6 @@ class App {
                 this.showTab(tabId);
             }
         });
-    }
-
-    loadSettings() {
-        this.currentSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-    }
-
-    saveSettings() {
-        localStorage.setItem('core_chat_settings', JSON.stringify(this.currentSettings));
     }
 
     loadChats() {
