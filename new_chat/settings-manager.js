@@ -4,6 +4,8 @@
 
 'use strict';
 
+import { pluginManager } from './plugin-manager.js';
+
 /**
  * @typedef {import('./main.js').App} App
  * @typedef {import('./main.js').Setting} Setting
@@ -80,7 +82,7 @@ export class SettingsManager {
      * @param {Setting[]} coreSettings - The base settings of the application.
      */
     define(coreSettings) {
-        this.settings = this.app.pluginManager.trigger('onSettingsRegistered', coreSettings);
+        this.settings = pluginManager.trigger('onSettingsRegistered', coreSettings);
         this.app.settings = this.settings;
     }
 
