@@ -59,7 +59,18 @@ const mcpPlugin = {
             label: 'MCP Server URL',
             type: 'text',
             placeholder: 'e.g., http://localhost:3000/mcp',
-            default: ''
+            default: '',
+            listeners: {
+                change: (e) => {
+                    const input = e.target;
+                    mcpUrl = input.value;
+                    if (mcpUrl) {
+                        console.log('MCP: URL changed, re-initializing...', mcpUrl);
+                        isInitialized = false; // Reset initialization state
+                        initializeMcp();
+                    }
+                }
+            }
         });
         return settings;
     },
@@ -83,18 +94,6 @@ const mcpPlugin = {
         } else {
             console.log('MCP: No URL, skipping initialization.');
         }
-
-        // Re-initialize if the setting changes
-        document.addEventListener('change', (e) => {
-            if (e.target.id === 'setting-mcpServer') {
-                mcpUrl = e.target.value;
-                if (mcpUrl) {
-                    console.log('MCP: URL changed, re-initializing...', mcpUrl);
-                    isInitialized = false; // Reset initialization state
-                    initializeMcp();
-                }
-            }
-        });
     },
 
     /**
@@ -214,9 +213,10 @@ function initializeMcp() {
     mcpJsonRpc('tools/list').then(response => {
         tools = Array.isArray(response.tools) ? response.tools : [];
         console.log('MCP: Tools fetched successfully.');
-        // Refresh the tool settings UI now that we have the list of tools.
+        // Refresh the main settings UI now that we have the list of tools.
+        // This is necessary to show the tool settings section if it wasn't there before.
         if (appInstance) {
-            appInstance.renderToolSettings();
+            appInstance.renderSettings();
         }
     }).catch(error => {
         console.error('MCP: Failed to pre-fetch tools', error);

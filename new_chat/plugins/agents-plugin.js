@@ -6,10 +6,10 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, createSettingsUI, createToolSettingsUI } from '../utils.js';
+import { debounce, createSettingsUI } from '../utils.js';
 
 /**
- * @typedef {import('../utils.js').ToolSettings} AgentToolSettings
+ * @typedef {import('../tool-processor.js').ToolSettings} AgentToolSettings
  */
 
 /**
@@ -207,93 +207,192 @@ function renderAgentList() {
  * @returns {string} The HTML content for the agent editor.
  * @private
  */
+/**
+ * Renders the agent editor view.
+ * This function is registered as a view renderer with the PluginManager.
+ * @param {string} [agentId] - The ID of the agent to edit.
+ * @returns {string} The HTML content for the agent editor.
+ * @private
+ */
 function renderAgentEditor(agentId) {
     const agent = agentId ? agentManager.getAgent(agentId) : null;
-    const modelSettings = agent?.modelSettings || {};
-    const toolSettings = agent?.toolSettings || { allowAll: false, allowed: [] };
+    if (!agent) {
+        return '<h2>Agent not found</h2>';
+    }
 
     const editorContainer = document.createElement('div');
     editorContainer.id = 'agent-editor-view';
-    editorContainer.innerHTML = `
-        <h2>${agentId ? 'Edit' : 'Create'} Agent</h2>
-        <form id="agent-editor-form" novalidate>
-            <input type="hidden" id="agent-id" value="${agent?.id || ''}">
 
-            <div class="form-group">
-                <label for="agent-name">Name</label>
-                <input type="text" id="agent-name" required value="${agent?.name || ''}">
-            </div>
+    const form = document.createElement('form');
+    form.id = 'agent-editor-form';
+    form.setAttribute('data-agent-id', agent.id);
+    form.noValidate = true;
 
-            <div class="form-group">
-                <label for="agent-system-prompt">System Prompt</label>
-                <textarea id="agent-system-prompt" rows="8">${agent?.systemPrompt || ''}</textarea>
-            </div>
+    const heading = document.createElement('h2');
+    heading.textContent = `Edit Agent: ${agent.name}`;
+    form.appendChild(heading);
 
-            <hr>
+    // --- Define Settings ---
+    const modelSettingDefs = (appInstance?.settings || [])
+        .filter(s => s.id !== 'systemPrompt')
+        .map(s => ({ ...s, id: `model.${s.id}` })); // Prefix id to avoid collisions
 
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="agent-use-custom-settings" ${agent?.useCustomModelSettings ? 'checked' : ''}>
-                    Use Custom Model Settings
-                </label>
-            </div>
+    const toolDefs = (appInstance?.mcp?.getTools() || []).map(tool => ({
+        id: `tool.${tool.name}`,
+        label: tool.name,
+        type: 'checkbox',
+        className: 'tool-checkbox'
+    }));
 
-            <fieldset id="agent-model-settings" ${agent?.useCustomModelSettings ? '' : 'disabled'}>
-                <legend>Model Settings</legend>
-            </fieldset>
-
-            <hr>
-
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="agent-use-custom-tool-settings" ${agent?.useCustomToolSettings ? 'checked' : ''}>
-                    Use Custom Tool Settings
-                </label>
-            </div>
-
-            <div id="agent-tool-settings-container" ${agent?.useCustomToolSettings ? '' : 'style="display: none;"'}>
-                <!-- Tool settings will be rendered here -->
-            </div>
-        </form>
-    `;
-
-    const form = editorContainer.querySelector('form');
-
-    // Dynamically create model settings UI
-    const modelSettingsContainer = editorContainer.querySelector('#agent-model-settings');
-    if (appInstance && appInstance.settings) {
-        const modelSettingDefs = appInstance.settings.filter(s => s.id !== 'systemPrompt');
-
-        const modelActions = {
-            model: [{
-                id: 'agent-refresh-models',
-                label: 'Refresh',
-                onClick: () => {
-                    const modelInput = document.getElementById('agent-model');
-                    if (modelInput && appInstance.fetchModels) {
-                        appInstance.fetchModels(modelInput);
-                    }
+    const settingsDefs = [
+        { id: 'name', label: 'Name', type: 'text' },
+        { id: 'systemPrompt', label: 'System Prompt', type: 'textarea' },
+        {
+            id: 'useCustomModelSettings',
+            label: 'Use Custom Model Settings',
+            type: 'checkbox',
+            listeners: {
+                change: (e) => {
+                    const fieldset = document.getElementById('agent-model-settings-fieldset');
+                    if (fieldset) fieldset.style.display = e.target.checked ? 'block' : 'none';
                 }
-            }]
-        };
-
-        const settingsFragment = createSettingsUI(modelSettingDefs, modelSettings, 'agent-', modelActions);
-        modelSettingsContainer.appendChild(settingsFragment);
-    }
-
-    // Dynamically create tool settings UI
-    const toolSettingsContainer = editorContainer.querySelector('#agent-tool-settings-container');
-    if (appInstance && appInstance.mcp && appInstance.mcp.getTools) {
-        const tools = appInstance.mcp.getTools();
-        if (tools.length > 0) {
-            const toolSettingsUI = createToolSettingsUI(tools, toolSettings, () => { /* no-op, handled by form listener */ });
-            toolSettingsUI.id = 'agent-tool-settings';
-            toolSettingsContainer.appendChild(toolSettingsUI);
+            }
+        },
+        {
+            id: 'modelSettings',
+            type: 'fieldset',
+            children: modelSettingDefs
+        },
+        {
+            id: 'useCustomToolSettings',
+            label: 'Use Custom Tool Settings',
+            type: 'checkbox',
+            listeners: {
+                change: (e) => {
+                    const fieldset = document.getElementById('agent-tool-settings-fieldset');
+                    if (fieldset) fieldset.style.display = e.target.checked ? 'block' : 'none';
+                }
+            }
+        },
+        {
+            id: 'toolSettings',
+            type: 'fieldset',
+            children: [
+                {
+                    id: 'toolSettings.allowAll',
+                    label: 'Allow all tools',
+                    type: 'checkbox',
+                    listeners: {
+                        change: (e, el) => {
+                            const fieldset = el.closest('fieldset');
+                            if (!fieldset) return;
+                            fieldset.querySelectorAll('.tool-checkbox input').forEach(cb => {
+                                cb.disabled = e.target.checked;
+                            });
+                        }
+                    }
+                },
+                ...toolDefs
+            ]
         }
-    }
+    ];
 
+    // --- Create and Append UI ---
+    settingsDefs.forEach(setting => {
+        if (setting.type === 'fieldset') {
+            const fieldset = document.createElement('fieldset');
+            fieldset.id = `agent-${setting.id}-fieldset`;
+            fieldset.style.display = 'none'; // Initially hidden
+            const legend = document.createElement('legend');
+            legend.textContent = setting.id === 'modelSettings' ? 'Model Settings' : 'Tool Settings';
+            fieldset.appendChild(legend);
+
+            // Get current values for this fieldset
+            const currentFieldsetValues = {};
+            if (setting.id === 'modelSettings') {
+                Object.entries(agent.modelSettings || {}).forEach(([key, value]) => {
+                    currentFieldsetValues[`model.${key}`] = value;
+                });
+            } else if (setting.id === 'toolSettings') {
+                currentFieldsetValues['toolSettings.allowAll'] = agent.toolSettings?.allowAll || false;
+                (agent.toolSettings?.allowed || []).forEach(toolName => {
+                    currentFieldsetValues[`tool.${toolName}`] = true;
+                });
+            }
+
+            const settingsFragment = createSettingsUI(setting.children, currentFieldsetValues, 'agent-', 'agent_settings');
+            fieldset.appendChild(settingsFragment);
+            form.appendChild(fieldset);
+        } else {
+            const currentValues = { [setting.id]: agent[setting.id] };
+            const settingsFragment = createSettingsUI([setting], currentValues, 'agent-', 'agent_settings');
+            form.appendChild(settingsFragment);
+        }
+    });
+
+    editorContainer.appendChild(form);
     return editorContainer.outerHTML;
 }
+
+
+/**
+ * Saves all data from the agent editor form.
+ * @param {HTMLFormElement} form - The agent editor form element.
+ * @private
+ */
+function saveAgentFromForm(form) {
+    const agentId = form.dataset.agentId;
+    const agent = agentManager.getAgent(agentId);
+    if (!agent) return;
+
+    const newAgentData = {
+        id: agent.id,
+        name: form.querySelector('#agent-name')?.value || agent.name,
+        systemPrompt: form.querySelector('#agent-systemPrompt')?.value || agent.systemPrompt,
+        useCustomModelSettings: form.querySelector('#agent-useCustomModelSettings')?.checked || false,
+        useCustomToolSettings: form.querySelector('#agent-useCustomToolSettings')?.checked || false,
+        modelSettings: {},
+        toolSettings: {
+            allowAll: form.querySelector('#agent-toolSettings\\.allowAll')?.checked || false,
+            allowed: []
+        }
+    };
+
+    // Gather model settings
+    if (newAgentData.useCustomModelSettings) {
+        const modelSettingDefs = (appInstance?.settings || []).filter(s => s.id !== 'systemPrompt');
+        modelSettingDefs.forEach(setting => {
+            const input = form.querySelector(`#agent-model\\.${setting.id}`);
+            if (input) {
+                let value;
+                if (input.type === 'checkbox') value = input.checked;
+                else if (input.type === 'range' || input.type === 'number') value = parseFloat(input.value);
+                else value = input.value;
+                newAgentData.modelSettings[setting.id] = value;
+            }
+        });
+    }
+
+    // Gather tool settings
+    if (newAgentData.useCustomToolSettings && !newAgentData.toolSettings.allowAll) {
+        const toolDefs = appInstance?.mcp?.getTools() || [];
+        toolDefs.forEach(tool => {
+            const input = form.querySelector(`#agent-tool\\.${tool.name}`);
+            if (input?.checked) {
+                newAgentData.toolSettings.allowed.push(tool.name);
+            }
+        });
+    }
+
+    agentManager.updateAgent(newAgentData);
+
+    // Update the name in the agent list
+    const agentListItem = document.querySelector(`.agent-list-item[data-id="${agentId}"] span`);
+    if (agentListItem && agentListItem.textContent !== newAgentData.name) {
+        agentListItem.textContent = newAgentData.name;
+    }
+}
+
 
 /**
  * Attaches event listeners to the agent editor form for auto-saving changes.
@@ -304,82 +403,30 @@ function attachAgentFormListeners() {
     const form = document.getElementById('agent-editor-form');
     if (!form) return;
 
-    const modelSettingDefs = (appInstance && appInstance.settings)
-        ? appInstance.settings.filter(s => s.id !== 'systemPrompt')
-        : [];
+    // --- Initial State Setup ---
+    // Show/hide fieldsets based on initial agent data
+    const agent = agentManager.getAgent(form.dataset.agentId);
+    if (!agent) return;
 
-    const saveAgent = () => {
-        const agentId = form.querySelector('#agent-id').value;
+    const modelFieldset = document.getElementById('agent-modelSettings-fieldset');
+    if (modelFieldset) modelFieldset.style.display = agent.useCustomModelSettings ? 'block' : 'none';
 
-        const modelSettings = {};
-        modelSettingDefs.forEach(setting => {
-            const input = form.querySelector(`#agent-${setting.id}`);
-            if (input) {
-                let value = input.value;
-                if (setting.type === 'range' || setting.type === 'number') {
-                    value = parseFloat(value);
-                }
-                if (value !== '' && value !== null && !isNaN(value)) {
-                    modelSettings[setting.id] = value;
-                }
-            }
-        });
-
-        const toolSettingsUI = form.querySelector('#agent-tool-settings');
-        let toolSettings = { allowAll: false, allowed: [] };
-        if (toolSettingsUI) {
-            const allCheckboxes = toolSettingsUI.querySelectorAll('input[type="checkbox"]');
-            let allowAll = false;
-            const allowed = [];
-
-            allCheckboxes.forEach(cb => {
-                if (cb.classList.contains('allow-all-tools-checkbox')) {
-                    allowAll = cb.checked;
-                } else {
-                    if (cb.checked) {
-                        allowed.push(cb.value);
-                    }
-                }
+    const toolFieldset = document.getElementById('agent-toolSettings-fieldset');
+    if (toolFieldset) {
+        toolFieldset.style.display = agent.useCustomToolSettings ? 'block' : 'none';
+        // Set initial disabled state for tool checkboxes
+        const allowAll = toolFieldset.querySelector('#agent-toolSettings\\.allowAll');
+        if (allowAll?.checked) {
+            toolFieldset.querySelectorAll('.tool-checkbox input').forEach(cb => {
+                cb.disabled = true;
             });
-            toolSettings = { allowAll, allowed };
         }
+    }
 
-        const agentData = {
-            id: agentId,
-            name: form.querySelector('#agent-name').value,
-            systemPrompt: form.querySelector('#agent-system-prompt').value,
-            useCustomModelSettings: form.querySelector('#agent-use-custom-settings').checked,
-            modelSettings: modelSettings,
-            useCustomToolSettings: form.querySelector('#agent-use-custom-tool-settings').checked,
-            toolSettings: toolSettings,
-        };
-
-        if (agentId) {
-            agentManager.updateAgent(agentData);
-            const agentListItem = document.querySelector(`.agent-list-item[data-id="${agentId}"] span`);
-            if (agentListItem) {
-                agentListItem.textContent = agentData.name;
-            }
-        }
-        // Auto-saving doesn't handle creating new agents, only editing existing ones.
-        // A new agent is created with default values and then can be edited.
-    };
-
-    const debouncedSave = debounce(saveAgent, 500);
+    // --- Attach Listeners ---
+    const debouncedSave = debounce(() => saveAgentFromForm(form), 500);
     form.addEventListener('input', debouncedSave);
     form.addEventListener('change', debouncedSave);
-
-    const customModelCheckbox = form.querySelector('#agent-use-custom-settings');
-    const modelSettingsFieldset = form.querySelector('#agent-model-settings');
-    customModelCheckbox.addEventListener('change', () => {
-        modelSettingsFieldset.disabled = !customModelCheckbox.checked;
-    });
-
-    const customToolCheckbox = form.querySelector('#agent-use-custom-tool-settings');
-    const toolSettingsContainer = form.querySelector('#agent-tool-settings-container');
-    customToolCheckbox.addEventListener('change', () => {
-        toolSettingsContainer.style.display = customToolCheckbox.checked ? 'block' : 'none';
-    });
 }
 
 /**
