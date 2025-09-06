@@ -332,14 +332,18 @@ function renderAgentEditor(agentId) {
     allSettings.push(toolSettingsGroup);
 
     // --- Create UI ---
+    const modelValues = agent.modelSettings || {};
+    const toolSettings = agent.toolSettings || { allowed: [] };
+    const toolValues = Object.fromEntries((toolSettings.allowed || []).map(t => [`tool-${t}`, true]));
+
     const currentValues = {
         name: agent.name,
         systemPrompt: agent.systemPrompt,
         useCustomModelSettings: agent.useCustomModelSettings,
         useCustomToolSettings: agent.useCustomToolSettings,
-        ...(agent.modelSettings || {}),
-        'agent-allowAllTools': agent.toolSettings?.allowAll,
-        ...Object.fromEntries((agent.toolSettings?.allowed || []).map(t => [`tool-${t}`, true]))
+        ...modelValues,
+        'agent-allowAllTools': toolSettings.allowAll,
+        ...toolValues,
     };
 
     const settingsFragment = createSettingsUI(allSettings, currentValues, 'agent-');

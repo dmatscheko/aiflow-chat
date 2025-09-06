@@ -101,7 +101,14 @@ export function createSettingsUI(settings, currentValues, idPrefix, context) {
                         input.appendChild(option);
                     });
                 }
-                // We set the value directly on the select element.
+                // If the desired value isn't in the options, add it as a "saved" option.
+                let optionExists = Array.from(input.options).some(opt => opt.value === valueToSet);
+                if (!optionExists && valueToSet) {
+                    const savedOption = document.createElement('option');
+                    savedOption.value = valueToSet;
+                    savedOption.textContent = `${valueToSet} (saved)`;
+                    input.appendChild(savedOption);
+                }
                 input.value = valueToSet;
 
             } else if (setting.type === 'range') {

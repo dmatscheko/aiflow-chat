@@ -230,9 +230,15 @@ class App {
         this.dom.settingsContainer.innerHTML = '';
 
         // Get all current settings from localStorage, including tool settings
+        const coreSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
+        const toolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowed: [] };
+
+        const toolValues = Object.fromEntries((toolSettings.allowed || []).map(t => [`tool-${t}`, true]));
+
         const currentSettings = {
-            ...(JSON.parse(localStorage.getItem('core_chat_settings')) || {}),
-            ...(JSON.parse(localStorage.getItem('core_tool_settings')) || {})
+            ...coreSettings,
+            'main-allowAllTools': toolSettings.allowAll,
+            ...toolValues,
         };
 
         const settingsFragment = createSettingsUI(this.settings, currentSettings, 'setting-', 'main');
