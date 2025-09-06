@@ -177,6 +177,7 @@ export function createToolSettingsUI(tools, currentSettings, onChange) {
 
     const allowAllCheckbox = document.createElement('input');
     allowAllCheckbox.type = 'checkbox';
+    allowAllCheckbox.classList.add('allow-all-tools-checkbox'); // Add class for specific selection
     allowAllCheckbox.checked = currentSettings.allowAll;
 
     const toolListContainer = document.createElement('div');

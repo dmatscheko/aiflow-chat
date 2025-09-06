@@ -328,8 +328,9 @@ function attachAgentFormListeners() {
         const toolSettingsUI = form.querySelector('#agent-tool-settings');
         let toolSettings = { allowAll: false, allowed: [] };
         if (toolSettingsUI) {
-            const allowAllCheckbox = toolSettingsUI.querySelector('input[type="checkbox"]');
-            const allowedCheckboxes = toolSettingsUI.querySelectorAll('input[type="checkbox"]:not(:first-child)');
+            const allowAllCheckbox = toolSettingsUI.querySelector('.allow-all-tools-checkbox');
+            const toolListContainer = toolSettingsUI.querySelector('.tool-list-container');
+            const allowedCheckboxes = toolListContainer.querySelectorAll('input[type="checkbox"]');
             toolSettings = {
                 allowAll: allowAllCheckbox.checked,
                 allowed: Array.from(allowedCheckboxes).filter(cb => cb.checked).map(cb => cb.value),
