@@ -213,10 +213,9 @@ function initializeMcp() {
     mcpJsonRpc('tools/list').then(response => {
         tools = Array.isArray(response.tools) ? response.tools : [];
         console.log('MCP: Tools fetched successfully.');
-        // Refresh the main settings UI now that we have the list of tools.
-        // This is necessary to show the tool settings section if it wasn't there before.
-        if (appInstance) {
-            appInstance.renderSettings();
+        // Refresh the tool settings UI now that we have the list of tools.
+        if (appInstance && appInstance.renderToolSettings) {
+            appInstance.renderToolSettings();
         }
     }).catch(error => {
         console.error('MCP: Failed to pre-fetch tools', error);
