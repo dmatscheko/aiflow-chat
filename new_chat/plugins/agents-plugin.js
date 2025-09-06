@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, createSettingsUI, createToolSettingsUI } from '../utils.js';
+import { debounce, createSettingsUI } from '../utils.js';
 
 /**
  * @typedef {import('../utils.js').ToolSettings} AgentToolSettings
@@ -203,184 +203,167 @@ function renderAgentList() {
 /**
  * Renders the agent editor view as an HTML string.
  * This function is registered as a view renderer with the PluginManager.
- * @param {string} [agentId] - The ID of the agent to edit. If not provided, renders a creation form.
+ * @param {string} [agentId] - The ID of the agent to edit.
  * @returns {string} The HTML content for the agent editor.
  * @private
  */
 function renderAgentEditor(agentId) {
     const agent = agentId ? agentManager.getAgent(agentId) : null;
-    const modelSettings = agent?.modelSettings || {};
-    const toolSettings = agent?.toolSettings || { allowAll: false, allowed: [] };
+    if (!agent) return `<h2>Agent not found</h2>`;
+
+    const debouncedSave = debounce(() => {
+        agentManager.updateAgent(agent);
+        const agentListItem = document.querySelector(`.agent-list-item[data-id="${agent.id}"] span`);
+        if (agentListItem) agentListItem.textContent = agent.name;
+    }, 500);
+
+    const createValueChangeHandler = (targetObj, key, isCheckbox = false) => (e) => {
+        if (!targetObj) return;
+        targetObj[key] = isCheckbox ? e.target.checked : e.target.value;
+        debouncedSave();
+    };
+
+    const createModelValueChangeHandler = (key, isNumeric = false) => (e) => {
+        if (!agent.modelSettings) agent.modelSettings = {};
+        agent.modelSettings[key] = isNumeric ? parseFloat(e.target.value) : e.target.value;
+        debouncedSave();
+    };
+
+    const createToolValueChangeHandler = (toolName) => (e) => {
+        if (!agent.toolSettings) agent.toolSettings = { allowAll: false, allowed: [] };
+        const allowedSet = new Set(agent.toolSettings.allowed);
+        if (e.target.checked) {
+            allowedSet.add(toolName);
+        } else {
+            allowedSet.delete(toolName);
+        }
+        agent.toolSettings.allowed = Array.from(allowedSet);
+        debouncedSave();
+    };
 
     const editorContainer = document.createElement('div');
     editorContainer.id = 'agent-editor-view';
-    editorContainer.innerHTML = `
-        <h2>${agentId ? 'Edit' : 'Create'} Agent</h2>
-        <form id="agent-editor-form" novalidate>
-            <input type="hidden" id="agent-id" value="${agent?.id || ''}">
+    editorContainer.innerHTML = `<h2>Edit Agent</h2>`;
 
-            <div class="form-group">
-                <label for="agent-name">Name</label>
-                <input type="text" id="agent-name" required value="${agent?.name || ''}">
-            </div>
+    const form = document.createElement('form');
+    form.id = 'agent-editor-form';
+    form.addEventListener('submit', e => e.preventDefault());
 
-            <div class="form-group">
-                <label for="agent-system-prompt">System Prompt</label>
-                <textarea id="agent-system-prompt" rows="8">${agent?.systemPrompt || ''}</textarea>
-            </div>
+    const allSettings = [];
 
-            <hr>
+    // --- Main Agent Settings ---
+    allSettings.push(
+        { id: 'name', label: 'Name', type: 'text', listener: { input: createValueChangeHandler(agent, 'name') } },
+        { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', rows: 8, listener: { input: createValueChangeHandler(agent, 'systemPrompt') } }
+    );
 
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="agent-use-custom-settings" ${agent?.useCustomModelSettings ? 'checked' : ''}>
-                    Use Custom Model Settings
-                </label>
-            </div>
-
-            <fieldset id="agent-model-settings" ${agent?.useCustomModelSettings ? '' : 'disabled'}>
-                <legend>Model Settings</legend>
-            </fieldset>
-
-            <hr>
-
-            <div class="form-group">
-                <label class="checkbox-label">
-                    <input type="checkbox" id="agent-use-custom-tool-settings" ${agent?.useCustomToolSettings ? 'checked' : ''}>
-                    Use Custom Tool Settings
-                </label>
-            </div>
-
-            <div id="agent-tool-settings-container" ${agent?.useCustomToolSettings ? '' : 'style="display: none;"'}>
-                <!-- Tool settings will be rendered here -->
-            </div>
-        </form>
-    `;
-
-    const form = editorContainer.querySelector('form');
-
-    // Dynamically create model settings UI
-    const modelSettingsContainer = editorContainer.querySelector('#agent-model-settings');
-    if (appInstance && appInstance.settings) {
-        const modelSettingDefs = appInstance.settings.filter(s => s.id !== 'systemPrompt');
-
-        const modelActions = {
-            model: [{
-                id: 'agent-refresh-models',
-                label: 'Refresh',
-                onClick: () => {
-                    const modelInput = document.getElementById('agent-model');
-                    if (modelInput && appInstance.fetchModels) {
-                        appInstance.fetchModels(modelInput);
-                    }
-                }
-            }]
-        };
-
-        const settingsFragment = createSettingsUI(modelSettingDefs, modelSettings, 'agent-', modelActions);
-        modelSettingsContainer.appendChild(settingsFragment);
-    }
-
-    // Dynamically create tool settings UI
-    const toolSettingsContainer = editorContainer.querySelector('#agent-tool-settings-container');
-    if (appInstance && appInstance.mcp && appInstance.mcp.getTools) {
-        const tools = appInstance.mcp.getTools();
-        if (tools.length > 0) {
-            const toolSettingsUI = createToolSettingsUI(tools, toolSettings, () => { /* no-op, handled by form listener */ });
-            toolSettingsUI.id = 'agent-tool-settings';
-            toolSettingsContainer.appendChild(toolSettingsUI);
+    // --- Model Override Settings ---
+    const modelSettingDefs = (appInstance?.settings || [])
+        .filter(s => ['apiUrl', 'apiKey', 'model', 'temperature'].includes(s.id))
+        .map(s => ({
+            ...s, // Copy original definition, including type, label, etc.
+            id: s.id, // Keep original ID for modelSettings object
+            listener: { change: createModelValueChangeHandler(s.id, s.type === 'range') }
+        }));
+    modelSettingDefs.push({
+        id: 'refresh-models', type: 'button', label: 'Refresh',
+        listener: {
+            click: () => {
+                if (!appInstance?.fetchModels) return;
+                const modelInput = document.getElementById('agent-model');
+                appInstance.fetchModels(modelInput, {
+                    apiUrl: agent.modelSettings.apiUrl,
+                    apiKey: agent.modelSettings.apiKey
+                });
+            }
         }
+    });
+
+    allSettings.push({
+        id: 'useCustomModelSettings', label: 'Use Custom Model Settings', type: 'checkbox',
+        listener: {
+            change: (e) => {
+                createValueChangeHandler(agent, 'useCustomModelSettings', true)(e);
+                const fieldset = document.getElementById('agent-modelSettings');
+                if (fieldset) fieldset.disabled = !e.target.checked;
+            }
+        }
+    });
+    allSettings.push({ id: 'modelSettings', type: 'group', label: 'Model Settings', children: modelSettingDefs });
+
+    // --- Tool Override Settings ---
+    let toolSettingsGroup;
+    if (appInstance?.mcp?.generateToolSettings) {
+        toolSettingsGroup = appInstance.mcp.generateToolSettings(appInstance.mcp.getTools(), 'agent');
+
+        // Custom listeners for agent tool settings
+        const allowAllCheckbox = toolSettingsGroup.children.find(c => c.id === 'agent-allowAllTools');
+        if (allowAllCheckbox) {
+            const originalListener = allowAllCheckbox.listener.change;
+            allowAllCheckbox.listener.change = (e, el) => {
+                originalListener(e, el); // Keep show/hide logic
+                if (!agent.toolSettings) agent.toolSettings = { allowAll: false, allowed: [] };
+                agent.toolSettings.allowAll = e.target.checked;
+                debouncedSave();
+            };
+        }
+
+        const toolListGroup = toolSettingsGroup.children.find(c => c.id === 'agent-toolList');
+        if (toolListGroup) {
+            toolListGroup.children.forEach(toolCheckbox => {
+                const toolName = toolCheckbox.id.replace('tool-', '');
+                toolCheckbox.listener = { change: createToolValueChangeHandler(toolName) };
+            });
+        }
+    } else {
+         toolSettingsGroup = { id: 'tools-unavailable', type: 'group', label: 'Tool Settings', children: [{ type: 'static', label: 'MCP plugin not available or no tools found.'}]};
     }
+
+    allSettings.push({
+        id: 'useCustomToolSettings', label: 'Use Custom Tool Settings', type: 'checkbox',
+        listener: {
+            change: (e) => {
+                createValueChangeHandler(agent, 'useCustomToolSettings', true)(e);
+                const fieldset = document.getElementById('agent-toolSettings');
+                if (fieldset) fieldset.style.display = e.target.checked ? 'block' : 'none';
+            }
+        }
+    });
+    allSettings.push(toolSettingsGroup);
+
+    // --- Create UI ---
+    const currentValues = {
+        name: agent.name,
+        systemPrompt: agent.systemPrompt,
+        useCustomModelSettings: agent.useCustomModelSettings,
+        useCustomToolSettings: agent.useCustomToolSettings,
+        ...(agent.modelSettings || {}),
+        'agent-allowAllTools': agent.toolSettings?.allowAll,
+        ...Object.fromEntries((agent.toolSettings?.allowed || []).map(t => [`tool-${t}`, true]))
+    };
+
+    const settingsFragment = createSettingsUI(allSettings, currentValues, 'agent-');
+    form.appendChild(settingsFragment);
+    editorContainer.appendChild(form);
+
+    // Set initial states after render, since they depend on the DOM being built
+    setTimeout(() => {
+        const modelFieldset = document.getElementById('agent-modelSettings');
+        if (modelFieldset) modelFieldset.disabled = !agent.useCustomModelSettings;
+
+        const toolFieldset = document.getElementById('agent-toolSettings');
+        if (toolFieldset) toolFieldset.style.display = agent.useCustomToolSettings ? 'block' : 'none';
+
+        const allowAllCheckbox = document.getElementById('agent-agent-allowAllTools');
+        if (allowAllCheckbox && allowAllCheckbox.checked) {
+            const toolListEl = document.getElementById('agent-agent-toolList');
+            if (toolListEl) toolListEl.style.display = 'none';
+        }
+    }, 0);
 
     return editorContainer.outerHTML;
 }
 
-/**
- * Attaches event listeners to the agent editor form for auto-saving changes.
- * This function is called when the agent editor view is rendered.
- * @private
- */
-function attachAgentFormListeners() {
-    const form = document.getElementById('agent-editor-form');
-    if (!form) return;
-
-    const modelSettingDefs = (appInstance && appInstance.settings)
-        ? appInstance.settings.filter(s => s.id !== 'systemPrompt')
-        : [];
-
-    const saveAgent = () => {
-        const agentId = form.querySelector('#agent-id').value;
-
-        const modelSettings = {};
-        modelSettingDefs.forEach(setting => {
-            const input = form.querySelector(`#agent-${setting.id}`);
-            if (input) {
-                let value = input.value;
-                if (setting.type === 'range' || setting.type === 'number') {
-                    value = parseFloat(value);
-                }
-                if (value !== '' && value !== null && !isNaN(value)) {
-                    modelSettings[setting.id] = value;
-                }
-            }
-        });
-
-        const toolSettingsUI = form.querySelector('#agent-tool-settings');
-        let toolSettings = { allowAll: false, allowed: [] };
-        if (toolSettingsUI) {
-            const allCheckboxes = toolSettingsUI.querySelectorAll('input[type="checkbox"]');
-            let allowAll = false;
-            const allowed = [];
-
-            allCheckboxes.forEach(cb => {
-                if (cb.classList.contains('allow-all-tools-checkbox')) {
-                    allowAll = cb.checked;
-                } else {
-                    if (cb.checked) {
-                        allowed.push(cb.value);
-                    }
-                }
-            });
-            toolSettings = { allowAll, allowed };
-        }
-
-        const agentData = {
-            id: agentId,
-            name: form.querySelector('#agent-name').value,
-            systemPrompt: form.querySelector('#agent-system-prompt').value,
-            useCustomModelSettings: form.querySelector('#agent-use-custom-settings').checked,
-            modelSettings: modelSettings,
-            useCustomToolSettings: form.querySelector('#agent-use-custom-tool-settings').checked,
-            toolSettings: toolSettings,
-        };
-
-        if (agentId) {
-            agentManager.updateAgent(agentData);
-            const agentListItem = document.querySelector(`.agent-list-item[data-id="${agentId}"] span`);
-            if (agentListItem) {
-                agentListItem.textContent = agentData.name;
-            }
-        }
-        // Auto-saving doesn't handle creating new agents, only editing existing ones.
-        // A new agent is created with default values and then can be edited.
-    };
-
-    const debouncedSave = debounce(saveAgent, 500);
-    form.addEventListener('input', debouncedSave);
-    form.addEventListener('change', debouncedSave);
-
-    const customModelCheckbox = form.querySelector('#agent-use-custom-settings');
-    const modelSettingsFieldset = form.querySelector('#agent-model-settings');
-    customModelCheckbox.addEventListener('change', () => {
-        modelSettingsFieldset.disabled = !customModelCheckbox.checked;
-    });
-
-    const customToolCheckbox = form.querySelector('#agent-use-custom-tool-settings');
-    const toolSettingsContainer = form.querySelector('#agent-tool-settings-container');
-    customToolCheckbox.addEventListener('change', () => {
-        toolSettingsContainer.style.display = customToolCheckbox.checked ? 'block' : 'none';
-    });
-}
 
 /**
  * Populates the agent selector dropdown in the chat area with the available agents
@@ -456,6 +439,8 @@ const agentsPlugin = {
                         systemPrompt: 'You are a helpful assistant.',
                         useCustomModelSettings: false,
                         modelSettings: {},
+                        useCustomToolSettings: false,
+                        toolSettings: { allowAll: true, allowed: [] }
                     };
                     const addedAgent = agentManager.addAgent(newAgent);
                     renderAgentList();
@@ -473,6 +458,10 @@ const agentsPlugin = {
                             agentManager.deleteAgent(agentId);
                             renderAgentList();
                             populateAgentSelector();
+                            // If the deleted agent was being edited, switch view
+                            if (appInstance.activeView.type === 'agent-editor' && appInstance.activeView.id === agentId) {
+                                appInstance.setView('chat', appInstance.activeChatId);
+                            }
                         }
                     } else {
                         appInstance.setView('agent-editor', agentId);
@@ -525,9 +514,7 @@ const agentsPlugin = {
      * @param {View} view - The rendered view object.
      */
     onViewRendered(view) {
-        if (view.type === 'agent-editor') {
-            attachAgentFormListeners();
-        }
+        // No longer needed, all listeners are attached in createSettingsUI
     }
 };
 

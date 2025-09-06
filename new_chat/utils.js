@@ -30,201 +30,130 @@ export function debounce(func, wait) {
  */
 
 /**
- * @typedef {object} SettingAction
- * @property {string} id - The unique identifier for the button.
- * @property {string} label - The display text for the button.
- * @property {() => void} onClick - The function to call when the button is clicked.
- */
-
-/**
  * Creates a DocumentFragment containing HTML elements for a given set of settings.
+ * This is a recursive function that can handle nested settings and groups.
  * @param {Setting[]} settings - The settings definitions.
  * @param {Object.<string, any>} currentValues - The current values for the settings, keyed by setting ID.
  * @param {string} idPrefix - A prefix to apply to all generated element IDs to ensure uniqueness.
- * @param {Object.<string, SettingAction[]>} [actions={}] - An object mapping setting IDs to an array of action buttons.
+ * @param {string} [context] - An optional context string passed to listeners.
  * @returns {DocumentFragment} A fragment containing the rendered settings UI.
  */
-export function createSettingsUI(settings, currentValues, idPrefix, actions = {}) {
+export function createSettingsUI(settings, currentValues, idPrefix, context) {
     const fragment = document.createDocumentFragment();
 
     settings.forEach(setting => {
-        const el = document.createElement('div');
-        el.classList.add('setting');
-
-        const label = document.createElement('label');
-        label.setAttribute('for', `${idPrefix}${setting.id}`);
-        label.textContent = setting.label;
-        el.appendChild(label);
-
-        let input;
         const currentValue = currentValues[setting.id];
+        let el;
 
-        if (setting.type === 'textarea') {
-            input = document.createElement('textarea');
-            input.rows = 4;
-        } else if (setting.type === 'select') {
-            input = document.createElement('select');
-            if (setting.options) {
-                setting.options.forEach(opt => {
-                    const option = document.createElement('option');
-                    option.value = typeof opt === 'string' ? opt : opt.value;
-                    option.textContent = typeof opt === 'string' ? opt : opt.label;
-                    input.appendChild(option);
-                });
+        // Group handling (for fieldsets)
+        if (setting.type === 'group') {
+            const fieldset = document.createElement('fieldset');
+            fieldset.id = `${idPrefix}${setting.id}`;
+            if (setting.label) {
+                const legend = document.createElement('legend');
+                legend.textContent = setting.label;
+                fieldset.appendChild(legend);
             }
-        } else if (setting.type === 'range') {
-            input = document.createElement('input');
-            input.type = 'range';
-            input.min = setting.min;
-            input.max = setting.max;
-            input.step = setting.step;
+            if (setting.children) {
+                fieldset.appendChild(createSettingsUI(setting.children, currentValues, idPrefix, context));
+            }
+            el = fieldset;
 
-            const valueSpan = document.createElement('span');
-            valueSpan.id = `${idPrefix}${setting.id}-value`;
-            valueSpan.textContent = currentValue ?? setting.default;
-            el.appendChild(valueSpan);
+        } else if (setting.type === 'button') {
+            const button = document.createElement('button');
+            button.id = `${idPrefix}${setting.id}`;
+            button.textContent = setting.label;
+            el = button;
 
-            input.addEventListener('input', () => {
-                valueSpan.textContent = input.value;
-            });
-        } else {
-            input = document.createElement('input');
-            input.type = setting.type || 'text';
-            if (setting.placeholder) input.placeholder = setting.placeholder;
+        } else if (setting.type === 'static') {
+            const staticEl = document.createElement('div');
+            staticEl.classList.add('setting', 'setting-static');
+            staticEl.textContent = setting.label;
+            el = staticEl;
+
+        } else { // Handle standard input types
+            const settingWrapper = document.createElement('div');
+            settingWrapper.classList.add('setting');
+
+            const label = document.createElement('label');
+            label.setAttribute('for', `${idPrefix}${setting.id}`);
+            // label.textContent = setting.label; // Defer this for checkbox
+            if (setting.type !== 'checkbox') {
+                 settingWrapper.appendChild(label);
+                 label.textContent = setting.label;
+            }
+
+
+            let input;
+            const valueToSet = currentValue ?? setting.default ?? '';
+
+            if (setting.type === 'textarea') {
+                input = document.createElement('textarea');
+                input.rows = setting.rows || 4;
+                input.value = valueToSet;
+            } else if (setting.type === 'select') {
+                input = document.createElement('select');
+                if (setting.options) {
+                    setting.options.forEach(opt => {
+                        const option = document.createElement('option');
+                        option.value = typeof opt === 'string' ? opt : opt.value;
+                        option.textContent = typeof opt === 'string' ? opt : opt.label;
+                        input.appendChild(option);
+                    });
+                }
+                // We set the value directly on the select element.
+                input.value = valueToSet;
+
+            } else if (setting.type === 'range') {
+                input = document.createElement('input');
+                input.type = 'range';
+                input.min = setting.min;
+                input.max = setting.max;
+                input.step = setting.step;
+                input.value = valueToSet;
+
+                const valueSpan = document.createElement('span');
+                valueSpan.id = `${idPrefix}${setting.id}-value`;
+                valueSpan.textContent = valueToSet;
+                settingWrapper.appendChild(valueSpan);
+
+                // Add a default listener to update the value span, can be overridden.
+                input.addEventListener('input', () => valueSpan.textContent = input.value);
+
+            } else if (setting.type === 'checkbox') {
+                input = document.createElement('input');
+                input.type = 'checkbox';
+                input.checked = !!currentValue; // Use currentValue directly for checkbox
+                // For checkboxes, the label should wrap the input
+                label.appendChild(input);
+                label.appendChild(document.createTextNode(' ' + setting.label));
+                settingWrapper.appendChild(label);
+
+            } else { // Default to a standard text-like input
+                input = document.createElement('input');
+                input.type = setting.type || 'text';
+                if (setting.placeholder) input.placeholder = setting.placeholder;
+                input.value = valueToSet;
+            }
+
+            input.id = `${idPrefix}${setting.id}`;
+            if(setting.type !== 'checkbox') {
+                settingWrapper.appendChild(input);
+            }
+            el = settingWrapper;
         }
 
-        input.id = `${idPrefix}${setting.id}`;
-        const valueToSet = currentValue ?? setting.default ?? '';
+        const targetElement = el.querySelector('input, select, textarea, button') || el;
 
-        if (setting.type === 'select') {
-            // For select, we need to find the matching option and set its `selected` property.
-            let optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
-
-            // If the saved value isn't in the list, create a new option for it.
-            // This is useful for when a model is no longer listed but is still the saved setting.
-            if (!optionToSelect && valueToSet) {
-                const newOption = document.createElement('option');
-                newOption.value = valueToSet;
-                newOption.textContent = `${valueToSet} (saved)`;
-                input.appendChild(newOption);
-                optionToSelect = newOption;
+        // Attach generic listeners
+        if (setting.listener && targetElement) {
+            for (const [event, handler] of Object.entries(setting.listener)) {
+                targetElement.addEventListener(event, (e) => handler(e, el, context));
             }
-
-            if (optionToSelect) {
-                optionToSelect.selected = true;
-            }
-        } else {
-            // For other input types, setting the value attribute is more reliable
-            // for serialization than setting the .value property.
-            input.setAttribute('value', valueToSet);
-        }
-
-        el.appendChild(input);
-
-        // Add any action buttons for this setting
-        if (actions[setting.id]) {
-            const buttonContainer = document.createElement('div');
-            buttonContainer.classList.add('setting-actions');
-            actions[setting.id].forEach(action => {
-                const button = document.createElement('button');
-                button.id = action.id;
-                button.textContent = action.label;
-                button.addEventListener('click', action.onClick);
-                buttonContainer.appendChild(button);
-            });
-            el.appendChild(buttonContainer);
         }
 
         fragment.appendChild(el);
     });
 
     return fragment;
-}
-
-/**
- * @typedef {import('./tool-processor.js').ToolSchema} ToolSchema
- */
-
-/**
- * @typedef {object} ToolSettings
- * @property {boolean} allowAll - Whether to allow all tools.
- * @property {string[]} allowed - A list of allowed tool names if allowAll is false.
- */
-
-/**
- * @callback OnToolSettingsChange
- * @param {ToolSettings} newSettings - The updated tool settings.
- */
-
-/**
- * Creates an HTML fieldset element for managing tool permissions.
- * @param {ToolSchema[]} tools - The list of available tools.
- * @param {ToolSettings} currentSettings - The current tool settings.
- * @param {OnToolSettingsChange} onChange - Callback function triggered when settings change.
- * @returns {HTMLFieldSetElement} A fieldset element containing the tool settings UI.
- */
-export function createToolSettingsUI(tools, currentSettings, onChange) {
-    const fieldset = document.createElement('fieldset');
-    const legend = document.createElement('legend');
-    legend.textContent = 'Tool Settings';
-    fieldset.appendChild(legend);
-
-    const allowAllContainer = document.createElement('div');
-    allowAllContainer.classList.add('form-group');
-
-    const allowAllLabel = document.createElement('label');
-    allowAllLabel.classList.add('checkbox-label');
-
-    const allowAllCheckbox = document.createElement('input');
-    allowAllCheckbox.type = 'checkbox';
-    allowAllCheckbox.classList.add('allow-all-tools-checkbox'); // Add class for specific selection
-    allowAllCheckbox.checked = currentSettings.allowAll;
-
-    const toolListContainer = document.createElement('div');
-    toolListContainer.style.display = currentSettings.allowAll ? 'none' : 'block';
-
-    allowAllLabel.appendChild(allowAllCheckbox);
-    allowAllLabel.appendChild(document.createTextNode(' Allow all tools'));
-    allowAllContainer.appendChild(allowAllLabel);
-    fieldset.appendChild(allowAllContainer);
-    fieldset.appendChild(toolListContainer);
-
-    const allowedSet = new Set(currentSettings.allowed);
-
-    tools.forEach(tool => {
-        const toolContainer = document.createElement('div');
-        const toolLabel = document.createElement('label');
-        toolLabel.classList.add('checkbox-label');
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.value = tool.name;
-        checkbox.checked = allowedSet.has(tool.name);
-
-        toolLabel.appendChild(checkbox);
-        toolLabel.appendChild(document.createTextNode(` ${tool.name}`));
-        toolContainer.appendChild(toolLabel);
-        toolListContainer.appendChild(toolContainer);
-    });
-
-    const getSettings = () => {
-        const allowed = Array.from(toolListContainer.querySelectorAll('input:checked')).map(cb => cb.value);
-        return {
-            allowAll: allowAllCheckbox.checked,
-            allowed,
-        };
-    };
-
-    allowAllCheckbox.addEventListener('change', () => {
-        toolListContainer.style.display = allowAllCheckbox.checked ? 'none' : 'block';
-        onChange(getSettings());
-    });
-
-    fieldset.addEventListener('change', (e) => {
-        if (e.target.type === 'checkbox' && e.target !== allowAllCheckbox) {
-            onChange(getSettings());
-        }
-    });
-
-    return fieldset;
 }

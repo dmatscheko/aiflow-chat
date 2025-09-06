@@ -9,7 +9,7 @@ import { ChatLog } from './chat-data.js';
 import { ApiService } from './api-service.js';
 import { ChatUI } from './chat-ui.js';
 import { pluginManager } from './plugin-manager.js';
-import { debounce, createSettingsUI, createToolSettingsUI } from './utils.js';
+import { debounce, createSettingsUI } from './utils.js';
 import { responseProcessor } from './response-processor.js';
 
 // Load plugins
@@ -102,14 +102,12 @@ class App {
         this.renderSettings();
         this.renderTabs();
 
-        this.loadSettings();
         this.loadChats(); // This will set the initial active chat id
 
         // Set initial view
         this.activeView.id = this.activeChatId;
         this.renderMainView();
 
-        this.initEventListeners();
         this.fetchModels();
     }
 
@@ -138,12 +136,33 @@ class App {
      * @private
      */
     defineSettings() {
+        const createChangeHandler = (id, isCheckbox = false) => (e) => {
+            const value = isCheckbox ? e.target.checked : e.target.value;
+            this.saveSetting(id, value);
+            if (id === 'apiUrl' || id === 'apiKey') {
+                this.fetchModels();
+            }
+        };
+
         const coreSettings = [
-            { id: 'apiUrl', label: 'API URL', type: 'text', default: 'https://api.openai.com/' },
-            { id: 'apiKey', label: 'API Key', type: 'password', default: '' },
-            { id: 'model', label: 'Model', type: 'select', options: [] },
-            { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.' },
-            { id: 'temperature', label: 'Temperature', type: 'range', default: '1', min: 0, max: 2, step: 0.1 },
+            { id: 'apiUrl', label: 'API URL', type: 'text', default: 'https://api.openai.com/', listener: { change: createChangeHandler('apiUrl') } },
+            { id: 'apiKey', label: 'API Key', type: 'password', default: '', listener: { change: createChangeHandler('apiKey') } },
+            {
+                id: 'model',
+                label: 'Model',
+                type: 'select',
+                options: [],
+                listener: { change: createChangeHandler('model') }
+            }, {
+                id: 'refreshModels',
+                label: 'Refresh',
+                type: 'button',
+                listener: {
+                    click: () => this.fetchModels()
+                }
+            },
+            { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.', listener: { change: createChangeHandler('systemPrompt') } },
+            { id: 'temperature', label: 'Temperature', type: 'range', default: '1', min: 0, max: 2, step: 0.1, listener: { change: createChangeHandler('temperature') } },
         ];
         this.settings = pluginManager.trigger('onSettingsRegistered', coreSettings);
     }
@@ -198,58 +217,30 @@ class App {
 
     /**
      * Renders the settings UI in the left panel based on the `this.settings` definition.
-     * @private
+     * This is now public so plugins can trigger a re-render.
      */
     renderSettings() {
         this.dom.settingsContainer.innerHTML = '';
 
-        // --- Render standard model and plugin settings ---
-        const currentSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-        const settingsFragment = createSettingsUI(this.settings, currentSettings, 'setting-');
+        // Get all current settings from localStorage, including tool settings
+        const currentSettings = {
+            ...(JSON.parse(localStorage.getItem('core_chat_settings')) || {}),
+            ...(JSON.parse(localStorage.getItem('core_tool_settings')) || {})
+        };
+
+        const settingsFragment = createSettingsUI(this.settings, currentSettings, 'setting-', 'main');
         this.dom.settingsContainer.appendChild(settingsFragment);
 
-        // Add the refresh models button manually as it's a special case
-        const modelSettingEl = this.dom.settingsContainer.querySelector('#setting-model').parentElement;
-        if (modelSettingEl) {
-            const refreshBtn = document.createElement('button');
-            refreshBtn.id = 'refresh-models';
-            refreshBtn.textContent = 'Refresh';
-            modelSettingEl.appendChild(refreshBtn);
-        }
-
-        // --- Render Tool Settings ---
-        this.renderToolSettings();
-
-        // Cache the DOM elements for settings
+        // Cache the DOM elements for settings for easy access
         this.dom.settings = {};
         this.settings.forEach(s => {
-            this.dom.settings[s.id] = document.getElementById(`setting-${s.id}`);
-        });
-    }
-
-    /**
-     * Renders the tool settings section in the settings panel.
-     * Can be called independently to refresh just the tool list.
-     * @private
-     */
-    renderToolSettings() {
-        // Remove existing tool settings UI if present
-        const existingToolSettings = this.dom.settingsContainer.querySelector('#tool-settings-fieldset');
-        if (existingToolSettings) {
-            existingToolSettings.remove();
-        }
-
-        if (this.mcp && this.mcp.getTools) {
-            const tools = this.mcp.getTools();
-            if (tools.length > 0) {
-                const currentToolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: false, allowed: [] };
-                const toolSettingsUI = createToolSettingsUI(tools, currentToolSettings, (newSettings) => {
-                    localStorage.setItem('core_tool_settings', JSON.stringify(newSettings));
-                });
-                toolSettingsUI.id = 'tool-settings-fieldset'; // Give it an ID to find it later
-                this.dom.settingsContainer.appendChild(toolSettingsUI);
+            // This is a bit simplistic now since settings can be nested.
+            // We'll cache top-level settings for now.
+            const el = document.getElementById(`setting-${s.id}`);
+            if (el) {
+                this.dom.settings[s.id] = el.querySelector('input, select, textarea') || el;
             }
-        }
+        });
     }
 
     /**
@@ -372,69 +363,16 @@ class App {
     }
 
     /**
-     * Initializes global event listeners for settings and panel tabs.
-     * @private
+     * Saves a single setting value to the appropriate localStorage item.
+     * @param {string} id - The ID of the setting.
+     * @param {any} value - The value to save.
      */
-    initEventListeners() {
-        this.settings.forEach(setting => {
-            const inputEl = this.dom.settings[setting.id];
-            if (inputEl) {
-                inputEl.addEventListener('change', () => {
-                    this.saveSettings();
-                    // If the API URL or key changes, we should refetch models.
-                    if (setting.id === 'apiUrl' || setting.id === 'apiKey') {
-                        this.fetchModels();
-                    }
-                });
-                if (setting.type === 'range') {
-                    const valueSpan = document.getElementById(`setting-${setting.id}-value`);
-                    inputEl.addEventListener('input', () => {
-                        if (valueSpan) valueSpan.textContent = inputEl.value;
-                    });
-                }
-            }
-        });
-        document.getElementById('refresh-models').addEventListener('click', () => this.fetchModels());
-
-        this.dom.panelTabs.addEventListener('click', (e) => {
-            const tabId = e.target.dataset.tabId;
-            if (tabId) {
-                this.showTab(tabId);
-            }
-        });
-    }
-
-    /**
-     * Loads settings from localStorage and applies them to the UI.
-     * @private
-     */
-    loadSettings() {
-        const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-        this.settings.forEach(setting => {
-            const inputEl = this.dom.settings[setting.id];
-            if(inputEl) {
-                inputEl.value = savedSettings[setting.id] || setting.default;
-                if (setting.type === 'range') {
-                    const valueSpan = document.getElementById(`setting-${setting.id}-value`);
-                    if(valueSpan) valueSpan.textContent = inputEl.value;
-                }
-            }
-        });
-    }
-
-    /**
-     * Saves the current settings from the UI to localStorage.
-     * @private
-     */
-    saveSettings() {
-        const settingsToSave = {};
-        this.settings.forEach(setting => {
-            const inputEl = this.dom.settings[setting.id];
-            if(inputEl) {
-                settingsToSave[setting.id] = inputEl.value;
-            }
-        });
-        localStorage.setItem('core_chat_settings', JSON.stringify(settingsToSave));
+    saveSetting(id, value) {
+        // This function can be used by core settings listeners.
+        // Plugins are expected to manage their own state.
+        const settings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
+        settings[id] = value;
+        localStorage.setItem('core_chat_settings', JSON.stringify(settings));
     }
 
     /**

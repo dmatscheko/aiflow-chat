@@ -33,6 +33,73 @@ let initPromise = null;
 /** @type {App | null} */
 let appInstance = null;
 
+/**
+ * Generates the Setting definition for the tool settings UI.
+ * @param {ToolSchema[]} toolList - The list of available tools.
+ * @param {string} context - The context for which to generate settings ('main' or 'agent').
+ * @returns {Setting} A setting object of type 'group'.
+ */
+function generateToolSettings(toolList, context) {
+    // This is for main settings only. Agent settings have their own save handlers.
+    const saveToolSetting = (key, value) => {
+        if (context !== 'main') return;
+        const settings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: true, allowed: [] };
+        if (key === 'allowAll') {
+            settings.allowAll = value;
+        } else {
+            const toolName = key;
+            const allowedSet = new Set(settings.allowed);
+            if (value) {
+                allowedSet.add(toolName);
+            } else {
+                allowedSet.delete(toolName);
+            }
+            settings.allowed = Array.from(allowedSet);
+        }
+        localStorage.setItem('core_tool_settings', JSON.stringify(settings));
+    };
+
+    const onAllowAllChange = (e, element) => {
+        const fieldset = element.closest('fieldset');
+        const toolListEl = fieldset.querySelector(`#setting-${context}-toolList`);
+        if (toolListEl) {
+            toolListEl.style.display = e.target.checked ? 'none' : 'block';
+        }
+        saveToolSetting('allowAll', e.target.checked);
+    };
+
+    const onToolChange = (toolName) => (e) => {
+        saveToolSetting(toolName, e.target.checked);
+    };
+
+    const toolCheckboxes = toolList.map(tool => ({
+        id: `tool-${tool.name}`,
+        label: tool.name,
+        type: 'checkbox',
+        default: false,
+        listener: { change: onToolChange(tool.name) }
+    }));
+
+    return {
+        id: `${context}-toolSettings`,
+        type: 'group',
+        label: 'Tool Settings',
+        children: [{
+            id: `${context}-allowAllTools`,
+            label: 'Allow all tools',
+            type: 'checkbox',
+            default: true,
+            listener: {
+                change: onAllowAllChange
+            }
+        }, {
+            id: `${context}-toolList`,
+            type: 'group',
+            children: toolCheckboxes
+        }]
+    };
+}
+
 
 /**
  * Plugin for integrating with an MCP (Model Context Protocol) server.
@@ -49,7 +116,7 @@ const mcpPlugin = {
     getTools: () => tools,
 
     /**
-     * Registers the 'MCP Server URL' setting.
+     * Registers the 'MCP Server URL' setting and a placeholder for tool settings.
      * @param {Setting[]} settings - The original settings array.
      * @returns {Setting[]} The modified settings array.
      */
@@ -59,20 +126,45 @@ const mcpPlugin = {
             label: 'MCP Server URL',
             type: 'text',
             placeholder: 'e.g., http://localhost:3000/mcp',
-            default: ''
+            default: '',
+            listener: {
+                change: (e) => {
+                    const newUrl = e.target.value;
+                    if (newUrl && newUrl !== mcpUrl) {
+                        mcpUrl = newUrl;
+                        console.log('MCP: URL changed, re-initializing...', mcpUrl);
+                        isInitialized = false; // Reset initialization state
+                        initializeMcp();
+                    }
+                }
+            }
         });
+
+        // Add a placeholder for the tool settings, which will be populated asynchronously.
+        settings.push({
+            id: 'main-toolSettings',
+            type: 'group',
+            label: 'Tool Settings',
+            children: [{
+                id: 'tools-loading',
+                type: 'static', // A new type we can choose to ignore or show 'Loading...'
+                label: 'Enter MCP Server URL to load tools...'
+            }]
+        });
+
         return settings;
     },
 
     /**
-     * Initializes the MCP connection when the app starts or the setting changes.
+     * Initializes the MCP connection when the app starts.
      * @param {App} app - The main application instance.
      */
     onAppInit(app) {
         appInstance = app;
         // Expose the plugin's API to the app instance
         app.mcp = {
-            getTools: mcpPlugin.getTools
+            getTools: mcpPlugin.getTools,
+            generateToolSettings: generateToolSettings // Expose for agent settings
         };
 
         const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
@@ -83,18 +175,6 @@ const mcpPlugin = {
         } else {
             console.log('MCP: No URL, skipping initialization.');
         }
-
-        // Re-initialize if the setting changes
-        document.addEventListener('change', (e) => {
-            if (e.target.id === 'setting-mcpServer') {
-                mcpUrl = e.target.value;
-                if (mcpUrl) {
-                    console.log('MCP: URL changed, re-initializing...', mcpUrl);
-                    isInitialized = false; // Reset initialization state
-                    initializeMcp();
-                }
-            }
-        });
     },
 
     /**
@@ -208,7 +288,20 @@ IMPORTANT: Write files only if explicitely instructed to do so.
  * @private
  */
 function initializeMcp() {
-    if (!mcpUrl) return;
+    if (!mcpUrl || !appInstance) return;
+
+    // Update UI to show loading state
+    const toolSettingsIndex = appInstance.settings.findIndex(s => s.id === 'main-toolSettings');
+    if (toolSettingsIndex !== -1) {
+        appInstance.settings[toolSettingsIndex].children = [{
+            id: 'tools-loading',
+            type: 'static',
+            label: 'Loading tools...'
+        }];
+        appInstance.renderSettings();
+    }
+
+
     mcpSessionId = localStorage.getItem(`mcpSession_${mcpUrl}`) || null;
     console.log('MCP: Pre-fetching tools from', mcpUrl);
     mcpJsonRpc('tools/list').then(response => {
@@ -216,11 +309,25 @@ function initializeMcp() {
         console.log('MCP: Tools fetched successfully.');
         // Refresh the tool settings UI now that we have the list of tools.
         if (appInstance) {
-            appInstance.renderToolSettings();
+            const toolSettingsIndex = appInstance.settings.findIndex(s => s.id === 'main-toolSettings');
+            if (toolSettingsIndex !== -1) {
+                appInstance.settings[toolSettingsIndex] = generateToolSettings(tools, 'main');
+                appInstance.renderSettings();
+            }
         }
     }).catch(error => {
         console.error('MCP: Failed to pre-fetch tools', error);
-        // Optionally, notify the user in the UI
+        if (appInstance) {
+            const toolSettingsIndex = appInstance.settings.findIndex(s => s.id === 'main-toolSettings');
+            if (toolSettingsIndex !== -1) {
+                appInstance.settings[toolSettingsIndex].children = [{
+                    id: 'tools-loading-error',
+                    type: 'static',
+                    label: `Error loading tools: ${error.message}`
+                }];
+                appInstance.renderSettings();
+            }
+        }
         alert(`Failed to connect to MCP server at ${mcpUrl}. Please check the URL and server status.\n\n${error.message}`);
     });
 }
