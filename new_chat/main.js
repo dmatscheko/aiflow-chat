@@ -565,9 +565,9 @@ class App {
      * Fetches the list of available models from the API and populates the model dropdown.
      * @private
      */
-    async fetchModels(targetSelectElement = null) {
-        const apiUrl = this.dom.settings.apiUrl.value;
-        const apiKey = this.dom.settings.apiKey.value;
+    async fetchModels(targetSelectElement = null, overrideCredentials = {}) {
+        const apiUrl = overrideCredentials.apiUrl || this.dom.settings.apiUrl.value;
+        const apiKey = overrideCredentials.apiKey || this.dom.settings.apiKey.value;
         if (!apiUrl) return;
         try {
             const models = await this.apiService.getModels(apiUrl, apiKey);

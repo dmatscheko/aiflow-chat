@@ -392,8 +392,17 @@ function attachAgentFormListeners() {
         refreshBtn.addEventListener('click', (e) => {
             e.preventDefault();
             const modelInput = document.getElementById('agent-model');
+
+            // Get credentials from the agent form to override globals
+            const agentApiUrlInput = form.querySelector('#agent-apiUrl');
+            const agentApiKeyInput = form.querySelector('#agent-apiKey');
+            const overrideCredentials = {
+                apiUrl: agentApiUrlInput ? agentApiUrlInput.value : null,
+                apiKey: agentApiKeyInput ? agentApiKeyInput.value : null,
+            };
+
             if (modelInput && appInstance.fetchModels) {
-                appInstance.fetchModels(modelInput);
+                appInstance.fetchModels(modelInput, overrideCredentials);
             }
         });
     }
