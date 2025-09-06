@@ -93,7 +93,7 @@ export function createSettingsUI(settings, currentValues, idPrefix, context, act
             case 'textarea':
                 input = document.createElement('textarea');
                 input.rows = 4;
-                input.value = valueToSet;
+                input.value = valueToSet; // Use property for textarea
                 break;
 
             case 'select':
@@ -106,6 +106,7 @@ export function createSettingsUI(settings, currentValues, idPrefix, context, act
                         input.appendChild(option);
                     });
                 }
+                input.value = valueToSet; // Use property for select
                 break;
 
             case 'range':
@@ -114,12 +115,11 @@ export function createSettingsUI(settings, currentValues, idPrefix, context, act
                 input.min = setting.min;
                 input.max = setting.max;
                 input.step = setting.step;
-                input.value = valueToSet;
+                input.value = valueToSet; // Use property for range
                 const valueSpan = document.createElement('span');
                 valueSpan.id = `${idPrefix}${setting.id}-value`;
                 valueSpan.textContent = valueToSet;
                 el.appendChild(valueSpan);
-                // Add a default listener to update the value span, can be overridden.
                 if (!setting.listeners?.input) {
                     input.addEventListener('input', () => valueSpan.textContent = input.value);
                 }
@@ -133,7 +133,6 @@ export function createSettingsUI(settings, currentValues, idPrefix, context, act
                 input.checked = !!valueToSet;
                 label.appendChild(input);
                 label.appendChild(document.createTextNode(` ${setting.label}`));
-                // The label element is the main container for checkbox
                 el.appendChild(label);
                 break;
 
@@ -142,7 +141,6 @@ export function createSettingsUI(settings, currentValues, idPrefix, context, act
                 container.id = `${idPrefix}${setting.id}`;
                 container.classList.add('checkbox-list-container');
                 if (setting.children) {
-                    // Get the values for the children checkboxes
                     const childValues = valueToSet.allowed || [];
                     const childCurrentValues = {};
                     setting.children.forEach(child => {
@@ -163,7 +161,8 @@ export function createSettingsUI(settings, currentValues, idPrefix, context, act
             default: // 'text', 'password', 'number', etc.
                 input = document.createElement('input');
                 input.type = setting.type || 'text';
-                input.value = valueToSet;
+                // For text-like inputs, setting the attribute is more reliable for reflecting the initial state in the DOM.
+                input.setAttribute('value', valueToSet);
                 if (setting.placeholder) input.placeholder = setting.placeholder;
                 break;
         }
@@ -172,18 +171,16 @@ export function createSettingsUI(settings, currentValues, idPrefix, context, act
             input.id = `${idPrefix}${setting.id}`;
             input.setAttribute('data-setting-id', setting.id);
 
-            // Set value for select after options are populated
+            // Post-population value setting for select
             if (setting.type === 'select') {
-                let optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
-                if (!optionToSelect && valueToSet) {
-                    const newOption = document.createElement('option');
-                    newOption.value = valueToSet;
-                    newOption.textContent = `${valueToSet} (saved)`;
-                    input.appendChild(newOption);
-                    optionToSelect = newOption;
-                }
-                if (optionToSelect) {
-                    optionToSelect.selected = true;
+                input.value = valueToSet;
+                // If the value is not in the options, it might be a custom value
+                if (input.value !== valueToSet) {
+                     const newOption = document.createElement('option');
+                     newOption.value = valueToSet;
+                     newOption.textContent = `${valueToSet} (saved)`;
+                     input.appendChild(newOption);
+                     newOption.selected = true;
                 }
             }
 

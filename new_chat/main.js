@@ -220,7 +220,7 @@ class App {
 
         // Add the refresh models button manually as it's a special case
         const modelSettingEl = this.dom.settingsContainer.querySelector('#setting-model');
-        if (modelSettingEl) {
+        if (modelSettingEl && !document.getElementById('refresh-models')) {
             const refreshBtn = document.createElement('button');
             refreshBtn.id = 'refresh-models';
             refreshBtn.textContent = 'Refresh';
@@ -474,9 +474,13 @@ class App {
     saveSettings() {
         const settingsToSave = {};
         this.settings.forEach(setting => {
-            const inputEl = this.dom.settings[setting.id];
-            if(inputEl) {
-                settingsToSave[setting.id] = inputEl.value;
+            const inputEl = document.getElementById(`setting-${setting.id}`);
+            if (inputEl) {
+                if (inputEl.type === 'checkbox') {
+                    settingsToSave[setting.id] = inputEl.checked;
+                } else {
+                    settingsToSave[setting.id] = inputEl.value;
+                }
             }
         });
         localStorage.setItem('core_chat_settings', JSON.stringify(settingsToSave));
