@@ -89,7 +89,7 @@ function getAgentsDropdown(step, agentOptions) {
     return `
         <label>Agent:</label>
         <select class="flow-step-agent flow-step-input" data-id="${step.id}" data-key="agentId">
-            <option value="">Default AI</option>
+            <option value="">Default (Active Agent)</option>
             ${agentOptions}
         </select>`;
 }
