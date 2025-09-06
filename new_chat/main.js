@@ -9,7 +9,7 @@ import { ChatLog } from './chat-data.js';
 import { ApiService } from './api-service.js';
 import { ChatUI } from './chat-ui.js';
 import { pluginManager } from './plugin-manager.js';
-import { debounce, setPropertyByPath } from './utils.js';
+import { debounce } from './utils.js';
 import { responseProcessor } from './response-processor.js';
 import { SettingsManager } from './settings-manager.js';
 
@@ -82,6 +82,8 @@ class App {
         this.currentSettings = {}; // Managed by SettingsManager, but app needs a reference
         /** @type {Setting[]} */
         this.settings = []; // Definitions managed by SettingsManager
+        /** @type {SettingsManager} */
+        this.settingsManager = null;
 
         this.registerCoreViews();
         this.defineTabs();

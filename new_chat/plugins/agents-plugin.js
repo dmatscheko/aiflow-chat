@@ -6,7 +6,8 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, createSettingsUI } from '../utils.js';
+import { debounce } from '../utils.js';
+import { createSettingsUI } from '../settings-manager.js';
 
 /**
  * @typedef {import('../main.js').Setting} Setting
@@ -63,6 +64,10 @@ class AgentManager {
         }
     }
 
+    /**
+     * Saves the current list of agents to localStorage.
+     * @private
+     */
     _saveAgents() {
         localStorage.setItem('core_agents_v2', JSON.stringify(this.agents));
     }
@@ -81,6 +86,10 @@ class AgentManager {
         }
     }
 
+    /**
+     * Saves the current chat-to-agent mapping to localStorage.
+     * @private
+     */
     _saveChatAgentMap() {
         localStorage.setItem('core_chat_agent_map_v2', JSON.stringify(this.chatAgentMap));
     }
@@ -124,6 +133,12 @@ class AgentManager {
         }
     }
 
+    /**
+     * Updates a specific property of an agent using a dot-notation path.
+     * @param {string} agentId - The ID of the agent to update.
+     * @param {string} path - The dot-notation path to the property (e.g., 'modelSettings.temperature').
+     * @param {any} value - The new value to set.
+     */
     updateAgentProperty(agentId, path, value) {
         const agent = this.getAgent(agentId);
         if (agent) {

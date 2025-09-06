@@ -184,6 +184,7 @@ export class SettingsManager {
  * @param {string} [pathPrefix=''] - A prefix for the dot-notation path.
  * @param {Map<string, any[]>} [dependencyMap] - For internal recursive use.
  * @returns {DocumentFragment} A fragment containing the rendered and interactive settings UI.
+ * @private
  */
 function createSettingsUI(settings, currentValues, onChange, idPrefix = '', context = '', pathPrefix = '', dependencyMap = new Map()) {
     const fragment = document.createDocumentFragment();
