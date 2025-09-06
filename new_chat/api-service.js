@@ -23,6 +23,7 @@ export class ApiService {
      * @throws {Error} If the API request fails.
      */
     async getModels(apiUrl, apiKey) {
+        console.log('Fetching models ...');
         // The models endpoint is usually at /v1/models
         const modelsUrl = new URL('/v1/models', apiUrl).href;
         try {
@@ -52,6 +53,7 @@ export class ApiService {
      * @throws {Error} If the API request fails, the response body is null, or the request is aborted.
      */
     async streamChat(payload, apiUrl, apiKey, abortSignal) {
+        console.log('Streaming chat ...');
         // The chat completions endpoint is usually at /v1/chat/completions
         const chatUrl = new URL('/v1/chat/completions', apiUrl).href;
         const headers = { 'Content-Type': 'application/json' };

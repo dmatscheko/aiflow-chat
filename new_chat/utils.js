@@ -86,7 +86,22 @@ export function createSettingsUI(settings, currentValues, idPrefix) {
         }
 
         input.id = `${idPrefix}${setting.id}`;
-        input.value = currentValue ?? setting.default ?? '';
+        const valueToSet = currentValue ?? setting.default ?? '';
+
+        if (setting.type === 'select') {
+            // For select, we need to find the matching option and set its `selected` property.
+            // This is because setting `input.value` on a select element before it's in the DOM
+            // doesn't guarantee the correct option will be displayed.
+            const optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
+            if (optionToSelect) {
+                optionToSelect.selected = true;
+            }
+        } else {
+            // For other input types, setting the value attribute is more reliable
+            // for serialization than setting the .value property.
+            input.setAttribute('value', valueToSet);
+        }
+
         el.appendChild(input);
 
         fragment.appendChild(el);

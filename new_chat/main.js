@@ -362,12 +362,18 @@ class App {
     initEventListeners() {
         this.settings.forEach(setting => {
             const inputEl = this.dom.settings[setting.id];
-            if(inputEl) {
-                inputEl.addEventListener('change', () => this.saveSettings());
+            if (inputEl) {
+                inputEl.addEventListener('change', () => {
+                    this.saveSettings();
+                    // If the API URL or key changes, we should refetch models.
+                    if (setting.id === 'apiUrl' || setting.id === 'apiKey') {
+                        this.fetchModels();
+                    }
+                });
                 if (setting.type === 'range') {
                     const valueSpan = document.getElementById(`setting-${setting.id}-value`);
                     inputEl.addEventListener('input', () => {
-                        if(valueSpan) valueSpan.textContent = inputEl.value;
+                        if (valueSpan) valueSpan.textContent = inputEl.value;
                     });
                 }
             }
