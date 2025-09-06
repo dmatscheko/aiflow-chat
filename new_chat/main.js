@@ -9,7 +9,7 @@ import { ChatLog } from './chat-data.js';
 import { ApiService } from './api-service.js';
 import { ChatUI } from './chat-ui.js';
 import { pluginManager } from './plugin-manager.js';
-import { debounce, createSettingsUI, createToolSettingsUI } from './utils.js';
+import { debounce, createSettingsUI } from './utils.js';
 import { responseProcessor } from './response-processor.js';
 
 // Load plugins
@@ -18,6 +18,16 @@ import './plugins/agents-plugin.js';
 import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
 import './plugins/formatting-plugin.js';
+
+/**
+ * @typedef {import('./utils.js').SettingContext} SettingContext
+ */
+
+/**
+ * @callback SettingListener
+ * @param {Event} event - The DOM event.
+ * @param {SettingContext} context - The context of the setting.
+ */
 
 /**
  * @typedef {object} Chat
@@ -29,10 +39,12 @@ import './plugins/formatting-plugin.js';
 /**
  * @typedef {object} Setting
  * @property {string} id - The unique identifier for the setting.
- * @property {string} label - The display label for the setting.
- * @property {string} type - The input type (e.g., 'text', 'select').
- * @property {any} default - The default value for the setting.
- * @property {any[]} [options] - Options for 'select' type settings.
+ * @property {string} [label] - The display label for the setting.
+ * @property {string} type - The input type (e.g., 'text', 'select', 'checkbox-list').
+ * @property {any} [default] - The default value for the setting.
+ * @property {any[]} [options] - Options for 'select' or 'checkbox-list' type settings.
+ * @property {boolean} [allowAll] - For 'checkbox-list', shows an "Allow All" option.
+ * @property {Object.<string, SettingListener>} [listeners] - Event listeners for the setting's input element.
  */
 
 /**
@@ -67,45 +79,32 @@ class App {
         this.activeChatId = null;
         /** @type {ChatUI | null} */
         this.chatUI = null;
-        /**
-         * A debounced version of the saveChats method.
-         * @type {() => void}
-         */
+        /** @type {() => void} */
         this.debouncedSave = debounce(() => this.saveChats(), 500);
-
-        /**
-         * A map of cached DOM elements.
-         * @type {Object.<string, HTMLElement>}
-         */
+        /** @type {Object.<string, HTMLElement>} */
         this.dom = {};
-
-        /**
-         * The application settings definition.
-         * @type {Setting[]}
-         */
+        /** @type {Setting[]} */
         this.settings = [];
-
-        /**
-         * The application tabs definition.
-         * @type {Tab[]}
-         */
+        /** @type {Tab[]} */
         this.tabs = [];
-
+        /** @type {Object<string, any>} */
+        this.currentSettings = {};
 
         this.registerCoreViews();
+        // Initialize plugins early so their hooks are ready
         pluginManager.trigger('onAppInit', this);
 
-        this.defineSettings();
-        this.defineTabs();
         this.initDOM();
+        this.loadSettings(); // Load settings from localStorage first
+
+        this.defineSettings(); // Define settings structure (now depends on loaded data)
+        this.defineTabs();
 
         this.renderSettings();
         this.renderTabs();
 
-        this.loadSettings();
-        this.loadChats(); // This will set the initial active chat id
+        this.loadChats();
 
-        // Set initial view
         this.activeView.id = this.activeChatId;
         this.renderMainView();
 
@@ -115,7 +114,6 @@ class App {
 
     /**
      * Registers the core views provided by the application.
-     * Plugins can register additional views.
      * @private
      */
     registerCoreViews() {
@@ -134,30 +132,77 @@ class App {
 
     /**
      * Defines the core application settings.
-     * Plugins can modify this list via the 'onSettingsRegistered' hook.
+     * This is now declarative, including event listeners.
      * @private
      */
     defineSettings() {
+        const onSettingChange = debounce(() => this.saveSettings(), 250);
+        const onApiCredsChange = debounce(() => {
+            this.saveSettings();
+            this.fetchModels();
+        }, 500);
+
         const coreSettings = [
-            { id: 'apiUrl', label: 'API URL', type: 'text', default: 'https://api.openai.com/' },
-            { id: 'apiKey', label: 'API Key', type: 'password', default: '' },
-            { id: 'model', label: 'Model', type: 'select', options: [] },
-            { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.' },
-            { id: 'temperature', label: 'Temperature', type: 'range', default: '1', min: 0, max: 2, step: 0.1 },
-        ];
+            {
+                id: 'apiUrl', label: 'API URL', type: 'text', default: 'https://api.openai.com/',
+                listeners: { 'change': onApiCredsChange }
+            },
+            {
+                id: 'apiKey', label: 'API Key', type: 'password', default: '',
+                listeners: { 'change': onApiCredsChange }
+            },
+            {
+                id: 'model', label: 'Model', type: 'select', options: [],
+                listeners: { 'change': onSettingChange }
+            },
+            {
+                id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.',
+                listeners: { 'input': onSettingChange }
+            },
+            {
+                id: 'temperature', label: 'Temperature', type: 'range', default: '1', min: 0, max: 2, step: 0.1,
+                listeners: { 'input': onSettingChange }
+            },
+            // Placeholder for tool settings, which will be managed by the MCP plugin
+            this.getToolSettingsDefinition()
+        ].filter(Boolean); // Filter out null/undefined from getToolSettingsDefinition
+
         this.settings = pluginManager.trigger('onSettingsRegistered', coreSettings);
     }
 
     /**
+     * Constructs the setting definition object for the tool settings.
+     * This keeps the logic for tool settings self-contained.
+     * @returns {Setting | null}
+     * @private
+     */
+    getToolSettingsDefinition() {
+        if (!this.mcp || !this.mcp.getTools) return null;
+
+        const tools = this.mcp.getTools();
+        if (tools.length === 0) return null;
+
+        return {
+            id: 'toolSettings',
+            label: 'Tool Settings',
+            type: 'checkbox-list',
+            allowAll: true,
+            default: { allowAll: false, allowed: [] },
+            options: tools.map(tool => ({ value: tool.name, label: tool.name })),
+            listeners: {
+                'change': debounce(() => this.saveSettings(), 250)
+            }
+        };
+    }
+
+    /**
      * Defines the core application tabs for the right-hand panel.
-     * Plugins can modify this list via the 'onTabsRegistered' hook.
      * @private
      */
     defineTabs() {
         const coreTabs = [
             {
-                id: 'chats',
-                label: 'Chats',
+                id: 'chats', label: 'Chats',
                 onActivate: () => {
                     const contentEl = document.getElementById('chats-pane');
                     contentEl.innerHTML = `
@@ -165,7 +210,6 @@ class App {
                         <button id="new-chat-button">New Chat</button>
                     `;
                     this.renderChatList();
-
                     document.getElementById('new-chat-button').addEventListener('click', () => this.createNewChat());
                     document.getElementById('chat-list').addEventListener('click', (e) => {
                         const target = e.target;
@@ -197,58 +241,31 @@ class App {
     }
 
     /**
+     * Re-defines and re-renders the entire settings UI.
+     * Useful for plugins that dynamically add settings (like tools).
+     */
+    refreshSettingsUI() {
+        this.defineSettings();
+        this.renderSettings();
+    }
+
+    /**
      * Renders the settings UI in the left panel based on the `this.settings` definition.
      * @private
      */
     renderSettings() {
         this.dom.settingsContainer.innerHTML = '';
-
-        // --- Render standard model and plugin settings ---
-        const currentSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-        const settingsFragment = createSettingsUI(this.settings, currentSettings, 'setting-');
+        const settingsFragment = createSettingsUI(this.settings, this.currentSettings, 'setting-', 'main-settings');
         this.dom.settingsContainer.appendChild(settingsFragment);
 
         // Add the refresh models button manually as it's a special case
-        const modelSettingEl = this.dom.settingsContainer.querySelector('#setting-model').parentElement;
+        const modelSettingEl = this.dom.settingsContainer.querySelector('[data-setting-id="model"]');
         if (modelSettingEl) {
             const refreshBtn = document.createElement('button');
             refreshBtn.id = 'refresh-models';
             refreshBtn.textContent = 'Refresh';
+            refreshBtn.addEventListener('click', () => this.fetchModels());
             modelSettingEl.appendChild(refreshBtn);
-        }
-
-        // --- Render Tool Settings ---
-        this.renderToolSettings();
-
-        // Cache the DOM elements for settings
-        this.dom.settings = {};
-        this.settings.forEach(s => {
-            this.dom.settings[s.id] = document.getElementById(`setting-${s.id}`);
-        });
-    }
-
-    /**
-     * Renders the tool settings section in the settings panel.
-     * Can be called independently to refresh just the tool list.
-     * @private
-     */
-    renderToolSettings() {
-        // Remove existing tool settings UI if present
-        const existingToolSettings = this.dom.settingsContainer.querySelector('#tool-settings-fieldset');
-        if (existingToolSettings) {
-            existingToolSettings.remove();
-        }
-
-        if (this.mcp && this.mcp.getTools) {
-            const tools = this.mcp.getTools();
-            if (tools.length > 0) {
-                const currentToolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: false, allowed: [] };
-                const toolSettingsUI = createToolSettingsUI(tools, currentToolSettings, (newSettings) => {
-                    localStorage.setItem('core_tool_settings', JSON.stringify(newSettings));
-                });
-                toolSettingsUI.id = 'tool-settings-fieldset'; // Give it an ID to find it later
-                this.dom.settingsContainer.appendChild(toolSettingsUI);
-            }
         }
     }
 
@@ -259,7 +276,6 @@ class App {
     renderTabs() {
         this.dom.panelTabs.innerHTML = '';
         this.dom.panelContent.innerHTML = '';
-
         this.tabs.forEach(tab => {
             const tabBtn = document.createElement('button');
             tabBtn.id = `tab-btn-${tab.id}`;
@@ -267,16 +283,16 @@ class App {
             tabBtn.dataset.tabId = tab.id;
             tabBtn.textContent = tab.label;
             this.dom.panelTabs.appendChild(tabBtn);
-
             const tabPane = document.createElement('div');
             tabPane.id = `${tab.id}-pane`;
             tabPane.classList.add('tab-pane');
             this.dom.panelContent.appendChild(tabPane);
         });
-
-        this.dom.panelTabs.querySelector('.tab-btn').classList.add('active');
-        this.dom.panelContent.querySelector('.tab-pane').classList.add('active');
-        this.tabs[0].onActivate();
+        if (this.tabs.length > 0) {
+            this.dom.panelTabs.querySelector('.tab-btn').classList.add('active');
+            this.dom.panelContent.querySelector('.tab-pane').classList.add('active');
+            this.tabs[0].onActivate();
+        }
     }
 
     /**
@@ -286,7 +302,6 @@ class App {
      */
     setView(type, id) {
         this.activeView = { type, id };
-        console.log('Setting view to', this.activeView);
         if (type === 'chat') {
             this.activeChatId = id;
             localStorage.setItem('core_active_chat_id', this.activeChatId);
@@ -302,12 +317,9 @@ class App {
     renderMainView() {
         const { type, id } = this.activeView;
         const renderer = pluginManager.getViewRenderer(type);
-
         if (renderer) {
             this.dom.mainPanel.innerHTML = renderer(id);
-            if (type === 'chat') {
-                this.initChatView(id);
-            }
+            if (type === 'chat') this.initChatView(id);
             pluginManager.trigger('onViewRendered', this.activeView);
         } else {
             this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
@@ -321,22 +333,15 @@ class App {
      */
     showTab(tabId) {
         if (!tabId) return;
-
         const tab = this.tabs.find(t => t.id === tabId);
         if (!tab) return;
-
         this.dom.panelTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         this.dom.panelContent.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-
         const tabBtn = document.getElementById(`tab-btn-${tabId}`);
         const tabPane = document.getElementById(`${tabId}-pane`);
-
         if (tabBtn) tabBtn.classList.add('active');
         if (tabPane) tabPane.classList.add('active');
-
-        if (tab.onActivate) {
-            tab.onActivate();
-        }
+        if (tab.onActivate) tab.onActivate();
     }
 
     /**
@@ -347,14 +352,11 @@ class App {
     initChatView(chatId) {
         const chat = this.chats.find(c => c.id === chatId);
         if (!chat) return;
-
         this.chatUI = new ChatUI(document.getElementById('chat-container'), this.agentManager);
         this.chatUI.setChatLog(chat.log);
-
         this.dom.messageForm = document.getElementById('message-form');
         this.dom.messageInput = document.getElementById('message-input');
         this.dom.stopButton = document.getElementById('stop-button');
-
         this.dom.messageForm.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleFormSubmit();
@@ -362,80 +364,62 @@ class App {
         this.dom.stopButton.addEventListener('click', () => {
             if (this.abortController) this.abortController.abort();
         });
-
-        // Let plugins render chat area controls
         const chatAreaControls = document.getElementById('chat-area-controls');
-        if(chatAreaControls) {
+        if (chatAreaControls) {
             chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '');
-            pluginManager.trigger('onChatSwitched', chat); // Notify plugins that the chat view is ready
+            pluginManager.trigger('onChatSwitched', chat);
         }
     }
 
     /**
-     * Initializes global event listeners for settings and panel tabs.
+     * Initializes global event listeners that are not part of the settings UI.
      * @private
      */
     initEventListeners() {
-        this.settings.forEach(setting => {
-            const inputEl = this.dom.settings[setting.id];
-            if (inputEl) {
-                inputEl.addEventListener('change', () => {
-                    this.saveSettings();
-                    // If the API URL or key changes, we should refetch models.
-                    if (setting.id === 'apiUrl' || setting.id === 'apiKey') {
-                        this.fetchModels();
-                    }
-                });
-                if (setting.type === 'range') {
-                    const valueSpan = document.getElementById(`setting-${setting.id}-value`);
-                    inputEl.addEventListener('input', () => {
-                        if (valueSpan) valueSpan.textContent = inputEl.value;
-                    });
-                }
-            }
-        });
-        document.getElementById('refresh-models').addEventListener('click', () => this.fetchModels());
-
         this.dom.panelTabs.addEventListener('click', (e) => {
             const tabId = e.target.dataset.tabId;
-            if (tabId) {
-                this.showTab(tabId);
-            }
+            if (tabId) this.showTab(tabId);
         });
     }
 
     /**
-     * Loads settings from localStorage and applies them to the UI.
+     * Loads settings from localStorage into the `this.currentSettings` object.
      * @private
      */
     loadSettings() {
-        const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-        this.settings.forEach(setting => {
-            const inputEl = this.dom.settings[setting.id];
-            if(inputEl) {
-                inputEl.value = savedSettings[setting.id] || setting.default;
-                if (setting.type === 'range') {
-                    const valueSpan = document.getElementById(`setting-${setting.id}-value`);
-                    if(valueSpan) valueSpan.textContent = inputEl.value;
-                }
-            }
-        });
+        this.currentSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
     }
 
     /**
      * Saves the current settings from the UI to localStorage.
+     * It now reads all values from the form and saves them.
      * @private
      */
     saveSettings() {
         const settingsToSave = {};
         this.settings.forEach(setting => {
-            const inputEl = this.dom.settings[setting.id];
-            if(inputEl) {
-                settingsToSave[setting.id] = inputEl.value;
+            const el = this.dom.settingsContainer.querySelector(`#setting-${setting.id}`);
+            if (el) {
+                let value;
+                if (setting.type === 'checkbox-list') {
+                    const checkboxes = Array.from(el.querySelectorAll('input[type="checkbox"]'));
+                    const allowAll = checkboxes.find(cb => cb.parentElement.textContent.trim() === 'Allow all')?.checked || false;
+                    const allowed = checkboxes.filter(cb => cb.checked && cb.parentElement.textContent.trim() !== 'Allow all').map(cb => cb.value);
+                    value = { allowAll, allowed };
+                } else if (setting.type === 'checkbox') {
+                    value = el.checked;
+                } else {
+                    value = el.value;
+                }
+                settingsToSave[setting.id] = value;
             }
         });
         localStorage.setItem('core_chat_settings', JSON.stringify(settingsToSave));
+        // Update the in-memory store as well
+        this.currentSettings = settingsToSave;
+        console.log('Settings saved:', this.currentSettings);
     }
+
 
     /**
      * Loads chat history from localStorage.
@@ -454,12 +438,10 @@ class App {
                 chat.log.subscribe(this.debouncedSave);
                 return chat;
             });
-            this.activeChatId = localStorage.getItem('core_active_chat_id') || this.chats[0].id;
-        } else {
-            // createNewChat is called in saveChats if chats is empty
+            this.activeChatId = localStorage.getItem('core_active_chat_id') || this.chats[0]?.id;
         }
         if (this.chats.length === 0) {
-             this.createNewChat();
+            this.createNewChat();
         }
     }
 
@@ -489,9 +471,12 @@ class App {
         };
         newChat.log.subscribe(this.debouncedSave);
         this.chats.unshift(newChat);
-        this.renderChatList();
+        this.activeChatId = newChat.id; // Set new chat as active
+        this.saveChats(); // Save immediately
+        if (document.getElementById('chats-pane')) {
+            this.renderChatList();
+        }
         this.setView('chat', newChat.id);
-        this.saveChats(); // Save immediately to create the entry
     }
 
     /**
@@ -506,8 +491,8 @@ class App {
             if (newActiveChat) {
                 this.setView('chat', newActiveChat.id);
             } else {
-                this.createNewChat();
-                return; // createNewChat calls setView
+                this.createNewChat(); // This will also set the view
+                return;
             }
         }
         this.renderChatList();
@@ -525,16 +510,10 @@ class App {
         this.chats.forEach(chat => {
             const li = document.createElement('li');
             li.dataset.id = chat.id;
-
-            const span = document.createElement('span');
-            span.textContent = chat.title;
-            li.appendChild(span);
-
-            const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = 'X';
-            deleteBtn.classList.add('delete-chat-button');
-            li.appendChild(deleteBtn);
-
+            li.innerHTML = `
+                <span>${chat.title}</span>
+                <button class="delete-chat-button">X</button>
+            `;
             chatListEl.appendChild(li);
         });
         this.updateActiveChatInList();
@@ -563,25 +542,23 @@ class App {
 
     /**
      * Fetches the list of available models from the API and populates the model dropdown.
+     * @param {HTMLSelectElement} [targetSelectElement=null]
+     * @param {object} [overrideCredentials={}]
      * @private
      */
     async fetchModels(targetSelectElement = null, overrideCredentials = {}) {
-        let apiUrl, apiKey;
-        if (overrideCredentials.apiUrl) {
-            apiUrl = overrideCredentials.apiUrl;
-            apiKey = overrideCredentials.apiKey;
-        } else {
-            apiUrl = this.dom.settings.apiUrl.value;
-            apiKey = this.dom.settings.apiKey.value;
-        }
+        const settings = this.currentSettings;
+        const apiUrl = overrideCredentials.apiUrl || settings.apiUrl;
+        const apiKey = overrideCredentials.apiKey || settings.apiKey;
+
         if (!apiUrl) return;
+
         try {
             const models = await this.apiService.getModels(apiUrl, apiKey);
-            const modelSelect = targetSelectElement || this.dom.settings.model;
+            const modelSelect = targetSelectElement || document.getElementById('setting-model');
             if (!modelSelect) return;
 
-            const currentModel = modelSelect.value;
-
+            const currentModel = modelSelect.value || settings.model;
             modelSelect.innerHTML = '';
             models.forEach(model => {
                 const option = document.createElement('option');
@@ -590,7 +567,6 @@ class App {
                 modelSelect.appendChild(option);
             });
 
-            // Try to re-select the previous value or add it if it's not in the list
             let optionToSelect = Array.from(modelSelect.options).find(opt => opt.value === currentModel);
             if (!optionToSelect && currentModel) {
                 const newOption = document.createElement('option');
@@ -602,16 +578,6 @@ class App {
             if (optionToSelect) {
                 optionToSelect.selected = true;
             }
-
-
-            // If this was the main settings dropdown, re-apply saved setting and save all.
-            if (modelSelect === this.dom.settings.model) {
-                const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-                if (savedSettings.model) {
-                    modelSelect.value = savedSettings.model;
-                }
-                this.saveSettings();
-            }
         } catch (error) {
             alert(`Failed to fetch models: ${error.message}`);
         }
@@ -619,10 +585,9 @@ class App {
 
     /**
      * Handles the submission of the message form.
-     * Adds the user message to the log and schedules the response processor.
-     * @param {object} [options={}] - Options for the submission.
-     * @param {boolean} [options.isContinuation=false] - Whether this is a continuation of a previous turn.
-     * @param {string|null} [options.agentId=null] - The ID of an agent to force for this turn.
+     * @param {object} [options={}]
+     * @param {boolean} [options.isContinuation=false]
+     * @param {string|null} [options.agentId=null]
      * @private
      */
     async handleFormSubmit(options = {}) {
@@ -637,13 +602,8 @@ class App {
             this.dom.messageInput.value = '';
         }
 
-        // Determine the agent to use: the override, the chat's active agent, or null.
         const finalAgentId = agentId || this.agentManager.getActiveAgentForChat(activeChat.id);
-
-        // Add a placeholder message with the same agent context.
         const assistantMsg = activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
-
-        // Schedule the response processor to find and process the new placeholder.
         responseProcessor.scheduleProcessing(this);
     }
 }
