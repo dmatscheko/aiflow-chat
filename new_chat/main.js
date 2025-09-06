@@ -548,7 +548,7 @@ class App {
                 if (savedSettings.model) {
                     modelSelect.value = savedSettings.model;
                 }
-                this.saveSettings();
+                this.saveSetting('model', modelSelect.value);
             }
         } catch (error) {
             alert(`Failed to fetch models: ${error.message}`);
