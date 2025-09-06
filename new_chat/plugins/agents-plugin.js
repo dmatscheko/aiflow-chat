@@ -229,43 +229,34 @@ function renderAgentEditor(agentId) {
     form.noValidate = true;
 
     const heading = document.createElement('h2');
-    heading.textContent = `Edit Agent: ${agent.name}`;
+    heading.textContent = `Edit Agent: ${agent.name || 'New Agent'}`;
     form.appendChild(heading);
 
-    // Consolidate all current values into a single object for createSettingsUI
-    const allCurrentValues = {
-        name: agent.name,
-        systemPrompt: agent.systemPrompt,
-        useCustomModelSettings: agent.useCustomModelSettings,
-        useCustomToolSettings: agent.useCustomToolSettings,
-        'toolSettings.allowAll': agent.toolSettings?.allowAll || false,
-    };
-    Object.entries(agent.modelSettings || {}).forEach(([key, value]) => {
-        allCurrentValues[`model.${key}`] = value;
-    });
-    (agent.toolSettings?.allowed || []).forEach(toolName => {
-        allCurrentValues[`tool.${toolName}`] = true;
-    });
-
-    // --- Define Settings Structure ---
+    // --- Define Settings Structure with default values from agent ---
     const modelSettingDefs = (appInstance?.settings || [])
         .filter(s => s.id !== 'systemPrompt')
-        .map(s => ({ ...s, id: `model.${s.id}` }));
+        .map(s => ({
+            ...s,
+            id: `model.${s.id}`,
+            default: agent.modelSettings?.[s.id] ?? s.default
+        }));
 
     const toolDefs = (appInstance?.mcp?.getTools() || []).map(tool => ({
         id: `tool.${tool.name}`,
         label: tool.name,
         type: 'checkbox',
-        className: 'tool-checkbox'
+        className: 'tool-checkbox',
+        default: agent.toolSettings?.allowed?.includes(tool.name) || false
     }));
 
     const settingsDefs = [
-        { id: 'name', label: 'Name', type: 'text' },
-        { id: 'systemPrompt', label: 'System Prompt', type: 'textarea' },
+        { id: 'name', label: 'Name', type: 'text', default: agent.name },
+        { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: agent.systemPrompt },
         {
             id: 'useCustomModelSettings',
             label: 'Use Custom Model Settings',
             type: 'checkbox',
+            default: agent.useCustomModelSettings,
             listeners: {
                 change: (e) => {
                     const fieldset = document.getElementById('agent-modelSettings-fieldset');
@@ -278,6 +269,7 @@ function renderAgentEditor(agentId) {
             id: 'useCustomToolSettings',
             label: 'Use Custom Tool Settings',
             type: 'checkbox',
+            default: agent.useCustomToolSettings,
             listeners: {
                 change: (e) => {
                     const fieldset = document.getElementById('agent-tool-settings-fieldset');
@@ -293,6 +285,7 @@ function renderAgentEditor(agentId) {
                     id: 'toolSettings.allowAll',
                     label: 'Allow all tools',
                     type: 'checkbox',
+                    default: agent.toolSettings?.allowAll || false,
                     listeners: {
                         change: (e, el) => {
                             const fieldset = el.closest('fieldset');
@@ -309,6 +302,8 @@ function renderAgentEditor(agentId) {
     ];
 
     // --- Create and Append UI ---
+    // Pass an empty currentValues object; let createSettingsUI use the defaults we just defined.
+    const emptyCurrentValues = {};
     settingsDefs.forEach(setting => {
         if (setting.type === 'fieldset') {
             const fieldset = document.createElement('fieldset');
@@ -316,11 +311,11 @@ function renderAgentEditor(agentId) {
             const legend = document.createElement('legend');
             legend.textContent = setting.id === 'modelSettings' ? 'Model Settings' : 'Tool Settings';
             fieldset.appendChild(legend);
-            const settingsFragment = createSettingsUI(setting.children, allCurrentValues, 'agent-', 'agent_settings');
+            const settingsFragment = createSettingsUI(setting.children, emptyCurrentValues, 'agent-', 'agent_settings');
             fieldset.appendChild(settingsFragment);
             form.appendChild(fieldset);
         } else {
-            const settingsFragment = createSettingsUI([setting], allCurrentValues, 'agent-', 'agent_settings');
+            const settingsFragment = createSettingsUI([setting], emptyCurrentValues, 'agent-', 'agent_settings');
             form.appendChild(settingsFragment);
         }
     });

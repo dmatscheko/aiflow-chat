@@ -220,7 +220,7 @@ class App {
 
         // Add the refresh models button manually as it's a special case
         const modelSettingEl = this.dom.settingsContainer.querySelector('#setting-model');
-        if (modelSettingEl && !document.getElementById('refresh-models')) {
+        if (modelSettingEl) {
             const refreshBtn = document.createElement('button');
             refreshBtn.id = 'refresh-models';
             refreshBtn.textContent = 'Refresh';
@@ -476,6 +476,7 @@ class App {
         this.settings.forEach(setting => {
             const inputEl = document.getElementById(`setting-${setting.id}`);
             if (inputEl) {
+                // For checkboxes, the 'value' is the 'on' string, but we want the boolean state.
                 if (inputEl.type === 'checkbox') {
                     settingsToSave[setting.id] = inputEl.checked;
                 } else {

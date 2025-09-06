@@ -161,8 +161,7 @@ export function createSettingsUI(settings, currentValues, idPrefix, context, act
             default: // 'text', 'password', 'number', etc.
                 input = document.createElement('input');
                 input.type = setting.type || 'text';
-                // For text-like inputs, setting the attribute is more reliable for reflecting the initial state in the DOM.
-                input.setAttribute('value', valueToSet);
+                input.value = valueToSet;
                 if (setting.placeholder) input.placeholder = setting.placeholder;
                 break;
         }
