@@ -58,7 +58,7 @@ const mcpPlugin = {
             id: 'mcpServer',
             label: 'MCP Server URL',
             type: 'text',
-            placeholder: 'e.g., http://localhost:3000/mcp',
+            placeholder: 'e.g. http://localhost:3000/mcp',
             default: ''
         });
         return settings;

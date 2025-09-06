@@ -17,7 +17,7 @@
 export class ApiService {
     /**
      * Fetches the list of available models from the API.
-     * @param {string} apiUrl - The base URL of the API (e.g., "https://api.openai.com/").
+     * @param {string} apiUrl - The base URL of the API (e.g., "https://api.someai.com/").
      * @param {string} apiKey - The user's API key.
      * @returns {Promise<ApiModel[]>} A promise that resolves to an array of model objects, sorted by ID.
      * @throws {Error} If the API request fails.

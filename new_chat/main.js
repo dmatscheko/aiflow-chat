@@ -93,7 +93,7 @@ class App {
         this.settingsManager = new SettingsManager(this);
         this.settingsManager.load();
         const coreSettings = [
-            { id: 'apiUrl', label: 'API URL', type: 'text', default: 'https://api.openai.com/' },
+            { id: 'apiUrl', label: 'API URL', type: 'text', default: '', placeholder: 'e.g. https://api.someai.com/' },
             { id: 'apiKey', label: 'API Key', type: 'password', default: '' },
             { id: 'model', label: 'Model', type: 'select', options: [] },
             { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.' },
