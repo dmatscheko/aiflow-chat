@@ -218,6 +218,27 @@ class App {
         }
 
         // --- Render Tool Settings ---
+        this.renderToolSettings();
+
+        // Cache the DOM elements for settings
+        this.dom.settings = {};
+        this.settings.forEach(s => {
+            this.dom.settings[s.id] = document.getElementById(`setting-${s.id}`);
+        });
+    }
+
+    /**
+     * Renders the tool settings section in the settings panel.
+     * Can be called independently to refresh just the tool list.
+     * @private
+     */
+    renderToolSettings() {
+        // Remove existing tool settings UI if present
+        const existingToolSettings = this.dom.settingsContainer.querySelector('#tool-settings-fieldset');
+        if (existingToolSettings) {
+            existingToolSettings.remove();
+        }
+
         if (this.mcp && this.mcp.getTools) {
             const tools = this.mcp.getTools();
             if (tools.length > 0) {
@@ -225,15 +246,10 @@ class App {
                 const toolSettingsUI = createToolSettingsUI(tools, currentToolSettings, (newSettings) => {
                     localStorage.setItem('core_tool_settings', JSON.stringify(newSettings));
                 });
+                toolSettingsUI.id = 'tool-settings-fieldset'; // Give it an ID to find it later
                 this.dom.settingsContainer.appendChild(toolSettingsUI);
             }
         }
-
-        // Cache the DOM elements for settings
-        this.dom.settings = {};
-        this.settings.forEach(s => {
-            this.dom.settings[s.id] = document.getElementById(`setting-${s.id}`);
-        });
     }
 
     /**
@@ -549,13 +565,17 @@ class App {
      * Fetches the list of available models from the API and populates the model dropdown.
      * @private
      */
-    async fetchModels() {
+    async fetchModels(targetSelectElement = null) {
         const apiUrl = this.dom.settings.apiUrl.value;
         const apiKey = this.dom.settings.apiKey.value;
         if (!apiUrl) return;
         try {
             const models = await this.apiService.getModels(apiUrl, apiKey);
-            const modelSelect = this.dom.settings.model;
+            const modelSelect = targetSelectElement || this.dom.settings.model;
+            if (!modelSelect) return;
+
+            const currentModel = modelSelect.value;
+
             modelSelect.innerHTML = '';
             models.forEach(model => {
                 const option = document.createElement('option');
@@ -563,11 +583,29 @@ class App {
                 option.textContent = model.id;
                 modelSelect.appendChild(option);
             });
-            const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-            if (savedSettings.model) {
-                modelSelect.value = savedSettings.model;
+
+            // Try to re-select the previous value or add it if it's not in the list
+            let optionToSelect = Array.from(modelSelect.options).find(opt => opt.value === currentModel);
+            if (!optionToSelect && currentModel) {
+                const newOption = document.createElement('option');
+                newOption.value = currentModel;
+                newOption.textContent = `${currentModel} (saved)`;
+                modelSelect.appendChild(newOption);
+                optionToSelect = newOption;
             }
-            this.saveSettings();
+            if (optionToSelect) {
+                optionToSelect.selected = true;
+            }
+
+
+            // If this was the main settings dropdown, re-apply saved setting and save all.
+            if (modelSelect === this.dom.settings.model) {
+                const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
+                if (savedSettings.model) {
+                    modelSelect.value = savedSettings.model;
+                }
+                this.saveSettings();
+            }
         } catch (error) {
             alert(`Failed to fetch models: ${error.message}`);
         }

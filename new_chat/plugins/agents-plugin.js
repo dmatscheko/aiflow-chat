@@ -263,7 +263,21 @@ function renderAgentEditor(agentId) {
     const modelSettingsContainer = editorContainer.querySelector('#agent-model-settings');
     if (appInstance && appInstance.settings) {
         const modelSettingDefs = appInstance.settings.filter(s => s.id !== 'systemPrompt');
-        const settingsFragment = createSettingsUI(modelSettingDefs, modelSettings, 'agent-');
+
+        const modelActions = {
+            model: [{
+                id: 'agent-refresh-models',
+                label: 'Refresh',
+                onClick: () => {
+                    const modelInput = document.getElementById('agent-model');
+                    if (modelInput && appInstance.fetchModels) {
+                        appInstance.fetchModels(modelInput);
+                    }
+                }
+            }]
+        };
+
+        const settingsFragment = createSettingsUI(modelSettingDefs, modelSettings, 'agent-', modelActions);
         modelSettingsContainer.appendChild(settingsFragment);
     }
 

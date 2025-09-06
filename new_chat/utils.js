@@ -30,13 +30,21 @@ export function debounce(func, wait) {
  */
 
 /**
+ * @typedef {object} SettingAction
+ * @property {string} id - The unique identifier for the button.
+ * @property {string} label - The display text for the button.
+ * @property {() => void} onClick - The function to call when the button is clicked.
+ */
+
+/**
  * Creates a DocumentFragment containing HTML elements for a given set of settings.
  * @param {Setting[]} settings - The settings definitions.
  * @param {Object.<string, any>} currentValues - The current values for the settings, keyed by setting ID.
  * @param {string} idPrefix - A prefix to apply to all generated element IDs to ensure uniqueness.
+ * @param {Object.<string, SettingAction[]>} [actions={}] - An object mapping setting IDs to an array of action buttons.
  * @returns {DocumentFragment} A fragment containing the rendered settings UI.
  */
-export function createSettingsUI(settings, currentValues, idPrefix) {
+export function createSettingsUI(settings, currentValues, idPrefix, actions = {}) {
     const fragment = document.createDocumentFragment();
 
     settings.forEach(setting => {
@@ -90,9 +98,18 @@ export function createSettingsUI(settings, currentValues, idPrefix) {
 
         if (setting.type === 'select') {
             // For select, we need to find the matching option and set its `selected` property.
-            // This is because setting `input.value` on a select element before it's in the DOM
-            // doesn't guarantee the correct option will be displayed.
-            const optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
+            let optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
+
+            // If the saved value isn't in the list, create a new option for it.
+            // This is useful for when a model is no longer listed but is still the saved setting.
+            if (!optionToSelect && valueToSet) {
+                const newOption = document.createElement('option');
+                newOption.value = valueToSet;
+                newOption.textContent = `${valueToSet} (saved)`;
+                input.appendChild(newOption);
+                optionToSelect = newOption;
+            }
+
             if (optionToSelect) {
                 optionToSelect.selected = true;
             }
@@ -103,6 +120,20 @@ export function createSettingsUI(settings, currentValues, idPrefix) {
         }
 
         el.appendChild(input);
+
+        // Add any action buttons for this setting
+        if (actions[setting.id]) {
+            const buttonContainer = document.createElement('div');
+            buttonContainer.classList.add('setting-actions');
+            actions[setting.id].forEach(action => {
+                const button = document.createElement('button');
+                button.id = action.id;
+                button.textContent = action.label;
+                button.addEventListener('click', action.onClick);
+                buttonContainer.appendChild(button);
+            });
+            el.appendChild(buttonContainer);
+        }
 
         fragment.appendChild(el);
     });
