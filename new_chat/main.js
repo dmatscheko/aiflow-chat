@@ -108,6 +108,13 @@ class App {
         this.activeView.id = this.activeChatId;
         this.renderMainView();
 
+        this.dom.panelTabs.addEventListener('click', (e) => {
+            const tabId = e.target.dataset.tabId;
+            if (tabId) {
+                this.showTab(tabId);
+            }
+        });
+
         this.fetchModels();
     }
 
