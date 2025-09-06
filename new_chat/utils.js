@@ -26,173 +26,258 @@ export function debounce(func, wait) {
 }
 
 /**
- * @typedef {import('./main.js').Setting} Setting
+ * Gets a nested property from an object using a dot-notation string.
+ * @param {object} obj - The object to query.
+ * @param {string} path - The dot-notation path to the property.
+ * @returns {any} The value of the property, or undefined if not found.
  */
-
-/**
- * Creates a DocumentFragment containing HTML elements for a given set of settings.
- * @param {Setting[]} settings - The settings definitions.
- * @param {Object.<string, any>} currentValues - The current values for the settings, keyed by setting ID.
- * @param {string} idPrefix - A prefix to apply to all generated element IDs to ensure uniqueness.
- * @returns {DocumentFragment} A fragment containing the rendered settings UI.
- */
-export function createSettingsUI(settings, currentValues, idPrefix) {
-    const fragment = document.createDocumentFragment();
-
-    settings.forEach(setting => {
-        const el = document.createElement('div');
-        el.classList.add('setting');
-
-        const label = document.createElement('label');
-        label.setAttribute('for', `${idPrefix}${setting.id}`);
-        label.textContent = setting.label;
-        el.appendChild(label);
-
-        let input;
-        const currentValue = currentValues[setting.id];
-
-        if (setting.type === 'textarea') {
-            input = document.createElement('textarea');
-            input.rows = 4;
-        } else if (setting.type === 'select') {
-            input = document.createElement('select');
-            if (setting.options) {
-                setting.options.forEach(opt => {
-                    const option = document.createElement('option');
-                    option.value = typeof opt === 'string' ? opt : opt.value;
-                    option.textContent = typeof opt === 'string' ? opt : opt.label;
-                    input.appendChild(option);
-                });
-            }
-        } else if (setting.type === 'range') {
-            input = document.createElement('input');
-            input.type = 'range';
-            input.min = setting.min;
-            input.max = setting.max;
-            input.step = setting.step;
-
-            const valueSpan = document.createElement('span');
-            valueSpan.id = `${idPrefix}${setting.id}-value`;
-            valueSpan.textContent = currentValue ?? setting.default;
-            el.appendChild(valueSpan);
-
-            input.addEventListener('input', () => {
-                valueSpan.textContent = input.value;
-            });
-        } else {
-            input = document.createElement('input');
-            input.type = setting.type || 'text';
-            if (setting.placeholder) input.placeholder = setting.placeholder;
-        }
-
-        input.id = `${idPrefix}${setting.id}`;
-        const valueToSet = currentValue ?? setting.default ?? '';
-
-        if (setting.type === 'select') {
-            // For select, we need to find the matching option and set its `selected` property.
-            // This is because setting `input.value` on a select element before it's in the DOM
-            // doesn't guarantee the correct option will be displayed.
-            const optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
-            if (optionToSelect) {
-                optionToSelect.selected = true;
-            }
-        } else {
-            // For other input types, setting the value attribute is more reliable
-            // for serialization than setting the .value property.
-            input.setAttribute('value', valueToSet);
-        }
-
-        el.appendChild(input);
-
-        fragment.appendChild(el);
-    });
-
-    return fragment;
+function getPropertyByPath(obj, path) {
+    if (!path) return undefined;
+    return path.split('.').reduce((acc, part) => acc && acc[part], obj);
 }
 
 /**
+ * Sets a nested property on an object using a dot-notation string.
+ * @param {object} obj - The object to modify.
+ * @param {string} path - The dot-notation path to the property.
+ * @param {any} value - The value to set.
+ */
+export function setPropertyByPath(obj, path, value) {
+    const keys = path.split('.');
+    const lastKey = keys.pop();
+    const target = keys.reduce((acc, key) => {
+        if (!acc[key] || typeof acc[key] !== 'object') {
+            acc[key] = {};
+        }
+        return acc[key];
+    }, obj);
+    target[lastKey] = value;
+}
+
+
+/**
+ * @typedef {import('./main.js').Setting} Setting
  * @typedef {import('./tool-processor.js').ToolSchema} ToolSchema
  */
 
 /**
- * @typedef {object} ToolSettings
- * @property {boolean} allowAll - Whether to allow all tools.
- * @property {string[]} allowed - A list of allowed tool names if allowAll is false.
+ * @callback SettingChangedCallback
+ * @param {string} id - The dot-notation ID of the setting that changed (e.g., 'name', 'modelSettings.apiKey').
+ * @param {any} newValue - The new value of the setting.
+ * @param {string} context - The context string passed to createSettingsUI.
+ * @param {HTMLElement} inputElement - The specific input element that triggered the change.
  */
 
 /**
- * @callback OnToolSettingsChange
- * @param {ToolSettings} newSettings - The updated tool settings.
+ * Creates and manages a settings UI from a declarative definition.
+ * @param {Setting[]} settings - The array of setting definitions.
+ * @param {object} currentValues - An object containing the current values for the settings.
+ * @param {SettingChangedCallback} [onChange] - A single callback function to handle all data changes.
+ * @param {string} [idPrefix=''] - A prefix for generated element IDs.
+ * @param {string} [context=''] - A context string to be passed to the onChange callback.
+ * @param {string} [pathPrefix=''] - A prefix for the dot-notation path.
+ * @param {Map<string, any[]>} [dependencyMap] - For internal recursive use.
+ * @returns {DocumentFragment} A fragment containing the rendered and interactive settings UI.
  */
+export function createSettingsUI(settings, currentValues, onChange, idPrefix = '', context = '', pathPrefix = '', dependencyMap = new Map()) {
+    const fragment = document.createDocumentFragment();
+    const isTopLevel = !pathPrefix; // We are at the top level if pathPrefix is empty
 
-/**
- * Creates an HTML fieldset element for managing tool permissions.
- * @param {ToolSchema[]} tools - The list of available tools.
- * @param {ToolSettings} currentSettings - The current tool settings.
- * @param {OnToolSettingsChange} onChange - Callback function triggered when settings change.
- * @returns {HTMLFieldSetElement} A fieldset element containing the tool settings UI.
- */
-export function createToolSettingsUI(tools, currentSettings, onChange) {
-    const fieldset = document.createElement('fieldset');
-    const legend = document.createElement('legend');
-    legend.textContent = 'Tool Settings';
-    fieldset.appendChild(legend);
+    settings.forEach(setting => {
+        if (setting.type === 'divider') {
+            fragment.appendChild(document.createElement('hr'));
+            return;
+        }
 
-    const allowAllContainer = document.createElement('div');
-    allowAllContainer.classList.add('form-group');
+        if (!setting.id) {
+            console.warn('Skipping setting because it has no ID:', setting);
+            return;
+        }
 
-    const allowAllLabel = document.createElement('label');
-    allowAllLabel.classList.add('checkbox-label');
+        const settingId = `${idPrefix}${setting.id}`;
+        const settingPath = pathPrefix ? `${pathPrefix}.${setting.id}` : setting.id;
+        const currentValue = getPropertyByPath(currentValues, setting.id);
 
-    const allowAllCheckbox = document.createElement('input');
-    allowAllCheckbox.type = 'checkbox';
-    allowAllCheckbox.checked = currentSettings.allowAll;
+        let container;
+        let input;
+        let label;
 
-    const toolListContainer = document.createElement('div');
-    toolListContainer.style.display = currentSettings.allowAll ? 'none' : 'block';
+        try {
+            switch (setting.type) {
+                case 'fieldset':
+                    container = document.createElement('fieldset');
+                    container.id = settingId;
+                    const legend = document.createElement('legend');
+                    legend.textContent = setting.label;
+                    container.appendChild(legend);
+                    if (setting.children) {
+                        const childFragment = createSettingsUI(setting.children, currentValue || {}, onChange, `${settingId}-`, context, settingPath, dependencyMap);
+                        container.appendChild(childFragment);
+                    }
+                    break;
 
-    allowAllLabel.appendChild(allowAllCheckbox);
-    allowAllLabel.appendChild(document.createTextNode(' Allow all tools'));
-    allowAllContainer.appendChild(allowAllLabel);
-    fieldset.appendChild(allowAllContainer);
-    fieldset.appendChild(toolListContainer);
+                case 'checkbox-list':
+                    container = document.createElement('div');
+                    container.id = settingId;
+                    container.classList.add('setting', 'checkbox-list');
+                    if (setting.label) {
+                        label = document.createElement('label');
+                        label.textContent = setting.label;
+                        container.appendChild(label);
+                    }
+                    const allowedSet = new Set(currentValue || []);
+                    (setting.options || []).forEach(opt => {
+                        const cbLabel = document.createElement('label');
+                        cbLabel.classList.add('checkbox-label');
+                        const cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.value = opt.value;
+                        cb.checked = allowedSet.has(opt.value);
+                        cb.addEventListener('change', () => {
+                            const selected = Array.from(container.querySelectorAll('input:checked')).map(c => c.value);
+                            onChange?.(settingPath, selected, context, cb);
+                        });
+                        cbLabel.appendChild(cb);
+                        cbLabel.appendChild(document.createTextNode(` ${opt.label}`));
+                        container.appendChild(cbLabel);
+                    });
+                    break;
 
-    const allowedSet = new Set(currentSettings.allowed);
+                default:
+                    container = document.createElement('div');
+                    container.classList.add('setting');
 
-    tools.forEach(tool => {
-        const toolContainer = document.createElement('div');
-        const toolLabel = document.createElement('label');
-        toolLabel.classList.add('checkbox-label');
+                    if (setting.label) {
+                        label = document.createElement('label');
+                        label.setAttribute('for', settingId);
+                        label.textContent = setting.label;
+                        container.appendChild(label);
+                    }
 
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.value = tool.name;
-        checkbox.checked = allowedSet.has(tool.name);
+                    const valueToSet = currentValue ?? setting.default ?? '';
 
-        toolLabel.appendChild(checkbox);
-        toolLabel.appendChild(document.createTextNode(` ${tool.name}`));
-        toolContainer.appendChild(toolLabel);
-        toolListContainer.appendChild(toolContainer);
-    });
+                    if (setting.type === 'textarea') {
+                        input = document.createElement('textarea');
+                        input.rows = 4;
+                        input.value = valueToSet;
+                    } else if (setting.type === 'select') {
+                        input = document.createElement('select');
+                        if (setting.options) {
+                            setting.options.forEach(opt => {
+                                const option = document.createElement('option');
+                                option.value = typeof opt === 'string' ? opt : opt.value;
+                                option.textContent = typeof opt === 'string' ? opt : opt.label;
+                                input.appendChild(option);
+                            });
+                        }
+                        let optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
+                        if (!optionToSelect && valueToSet) {
+                            const newOption = document.createElement('option');
+                            newOption.value = valueToSet;
+                            newOption.textContent = `${valueToSet} (saved)`;
+                            input.appendChild(newOption);
+                            optionToSelect = newOption;
+                        }
+                        if (optionToSelect) optionToSelect.selected = true;
 
-    const getSettings = () => {
-        const allowed = Array.from(toolListContainer.querySelectorAll('input:checked')).map(cb => cb.value);
-        return {
-            allowAll: allowAllCheckbox.checked,
-            allowed,
-        };
-    };
+                    } else if (setting.type === 'range') {
+                        input = document.createElement('input');
+                        input.type = 'range';
+                        input.min = setting.min;
+                        input.max = setting.max;
+                        input.step = setting.step;
+                        input.value = valueToSet;
+                        const valueSpan = document.createElement('span');
+                        valueSpan.id = `${settingId}-value`;
+                        valueSpan.textContent = valueToSet;
+                        container.appendChild(valueSpan);
+                        input.addEventListener('input', () => { valueSpan.textContent = input.value; });
+                    } else {
+                        input = document.createElement('input');
+                        input.type = setting.type || 'text';
+                        if (setting.placeholder) input.placeholder = setting.placeholder;
+                        if (input.type === 'checkbox') {
+                            input.checked = !!valueToSet;
+                        } else {
+                            input.value = valueToSet;
+                        }
+                    }
 
-    allowAllCheckbox.addEventListener('change', () => {
-        toolListContainer.style.display = allowAllCheckbox.checked ? 'none' : 'block';
-        onChange(getSettings());
-    });
+                    input.id = settingId;
+                    input.dataset.path = settingPath;
 
-    fieldset.addEventListener('change', (e) => {
-        if (e.target.type === 'checkbox' && e.target !== allowAllCheckbox) {
-            onChange(getSettings());
+                    input.addEventListener('change', (e) => {
+                        const target = e.target;
+                        let newValue;
+                        if (target.type === 'checkbox') {
+                            newValue = target.checked;
+                        } else if (target.type === 'range' || target.type === 'number') {
+                            newValue = parseFloat(target.value);
+                        } else {
+                            newValue = target.value;
+                        }
+                        onChange?.(settingPath, newValue, context, target);
+                    });
+
+                    if (input) {
+                        container.appendChild(input);
+                    }
+
+            if (setting.actions) {
+                const buttonContainer = document.createElement('div');
+                buttonContainer.classList.add('setting-actions');
+                setting.actions.forEach(action => {
+                    const button = document.createElement('button');
+                    button.id = action.id;
+                    button.textContent = action.label;
+                    button.type = 'button';
+                    button.addEventListener('click', (e) => {
+                        action.onClick(e, input);
+                    });
+                    buttonContainer.appendChild(button);
+                });
+                container.appendChild(buttonContainer);
+            }
+            }
+
+            if (setting.dependsOn) {
+                // The controller's ID is constructed relative to the current element's prefix.
+                const controllerId = `${idPrefix}${setting.dependsOn}`;
+                if (!dependencyMap.has(controllerId)) {
+                    dependencyMap.set(controllerId, []);
+                }
+                dependencyMap.get(controllerId).push({
+                    dependentElement: container,
+                    requiredValue: setting.dependsOnValue,
+                });
+            }
+
+            fragment.appendChild(container);
+
+        } catch (error) {
+            console.error('Error creating setting UI for:', setting, error);
         }
     });
 
-    return fieldset;
+    // Only process dependencies at the top-level call, after the whole fragment is built.
+    if (isTopLevel) {
+        dependencyMap.forEach((dependents, controllerId) => {
+            const controllerElement = fragment.querySelector(`#${controllerId}`);
+            if (controllerElement) {
+                const updateDependents = () => {
+                    const currentValue = controllerElement.type === 'checkbox' ? controllerElement.checked : controllerElement.value;
+                    dependents.forEach(({ dependentElement, requiredValue }) => {
+                        const shouldBeVisible = currentValue === requiredValue;
+                        dependentElement.style.display = shouldBeVisible ? 'block' : 'none';
+                    });
+                };
+                controllerElement.addEventListener('change', updateDependents);
+                updateDependents(); // Initial check
+            } else {
+                console.warn(`Dependency controller element with ID #${controllerId} not found.`);
+            }
+        });
+    }
+
+    return fragment;
 }

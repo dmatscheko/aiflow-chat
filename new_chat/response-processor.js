@@ -146,9 +146,12 @@ class ResponseProcessor {
             if (agent) {
                 systemPrompt = agent.systemPrompt;
                 if (agent.useCustomModelSettings) {
+                    // Override all model-related settings
                     settings = { ...settings, ...agent.modelSettings };
-                    if(agent.modelSettings.apiUrl) finalApiUrl = agent.modelSettings.apiUrl;
-                    if(agent.modelSettings.apiKey) finalApiKey = agent.modelSettings.apiKey;
+                    // If the agent's API URL is set, also use the agent's credentials, even if empty
+                    if (agent.modelSettings.apiUrl) {
+                        finalApiKey = agent.modelSettings.apiKey;
+                    }
                 }
             }
 
