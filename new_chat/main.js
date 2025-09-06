@@ -442,15 +442,45 @@ class App {
         return this.chats.find(c => c.id === this.activeChatId);
     }
 
-    async fetchModels(targetSelectElement = null, overrideCredentials = null) {
-        let apiUrl, apiKey;
-        if (overrideCredentials) {
-            apiUrl = overrideCredentials.apiUrl;
-            apiKey = overrideCredentials.apiKey;
-        } else {
-            apiUrl = this.currentSettings.apiUrl;
-            apiKey = this.currentSettings.apiKey;
+    /**
+     * Gets the effective API and model configuration based on the active agent.
+     * If an agent is active and has custom model settings, they override the global settings.
+     * The API URL and key are handled specially: if the agent defines a custom API URL,
+     * only the agent's API key is used, even if it's empty.
+     * @param {string|null} [agentId=null] - The ID of a specific agent to check. If null, checks the active agent for the current chat.
+     * @returns {object} An object containing the effective settings (apiUrl, apiKey, model, temperature, etc.).
+     */
+    getEffectiveApiConfig(agentId = null) {
+        const baseConfig = { ...this.currentSettings };
+        const finalAgentId = agentId || this.agentManager?.getActiveAgentForChat(this.activeChatId);
+
+        if (!finalAgentId || !this.agentManager) {
+            return baseConfig;
         }
+
+        const agent = this.agentManager.getAgent(finalAgentId);
+
+        if (agent && agent.useCustomModelSettings) {
+            const mergedConfig = { ...baseConfig, ...agent.modelSettings };
+
+            // If the agent does NOT have a custom URL, we must revert to the base URL and key.
+            // This prevents using the agent's key with the global URL.
+            if (!agent.modelSettings.apiUrl) {
+                mergedConfig.apiUrl = baseConfig.apiUrl;
+                mergedConfig.apiKey = baseConfig.apiKey;
+            }
+            // If the agent DOES have a custom URL, the merged config is already correct,
+            // as it will have the agent's apiUrl and apiKey (which could be undefined).
+
+            return mergedConfig;
+        }
+
+        return baseConfig;
+    }
+
+    async fetchModels(targetSelectElement = null, agentId = null) {
+        const effectiveConfig = this.getEffectiveApiConfig(agentId);
+        const { apiUrl, apiKey } = effectiveConfig;
 
         if (!apiUrl) return;
         try {
@@ -475,10 +505,13 @@ class App {
                 modelSelect.appendChild(newOption);
                 optionToSelect = newOption;
             }
+
+            // After repopulating, try to set the correct value
             if (optionToSelect) {
                 optionToSelect.selected = true;
-            } else if (this.currentSettings.model) {
-                modelSelect.value = this.currentSettings.model;
+            } else if (effectiveConfig.model && Array.from(modelSelect.options).some(opt => opt.value === effectiveConfig.model)) {
+                // If the config's model exists in the new list, select it
+                modelSelect.value = effectiveConfig.model;
             }
 
         } catch (error) {

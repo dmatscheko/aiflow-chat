@@ -241,19 +241,8 @@ function initializeAgentEditor() {
                         label: 'Refresh',
                         onClick: (e, modelInput) => {
                             if (!modelInput || !appInstance.fetchModels) return;
-
-                            const agent = agentManager.getAgent(agentId);
-                            if (!agent) return;
-
-                            if (agent.useCustomModelSettings) {
-                                const credentials = {
-                                    apiUrl: agent.modelSettings.apiUrl,
-                                    apiKey: agent.modelSettings.apiKey,
-                                };
-                                appInstance.fetchModels(modelInput, credentials);
-                            } else {
-                                appInstance.fetchModels(modelInput, null); // Pass null to use main settings
-                            }
+                            // The new fetchModels function can take an agentId directly.
+                            appInstance.fetchModels(modelInput, agentId);
                         }
                     }]
                 };
