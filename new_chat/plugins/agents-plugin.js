@@ -211,6 +211,10 @@ function renderAgentEditor(agentId) {
     const agent = agentId ? agentManager.getAgent(agentId) : null;
     if (!agent) return `<h2>Agent not found</h2>`;
 
+    // Ensure nested settings objects exist
+    if (!agent.modelSettings) agent.modelSettings = {};
+    if (!agent.toolSettings) agent.toolSettings = { allowAll: true, allowed: [] };
+
     const debouncedSave = debounce(() => {
         agentManager.updateAgent(agent);
         const agentListItem = document.querySelector(`.agent-list-item[data-id="${agent.id}"] span`);
@@ -218,19 +222,16 @@ function renderAgentEditor(agentId) {
     }, 500);
 
     const createValueChangeHandler = (targetObj, key, isCheckbox = false) => (e) => {
-        if (!targetObj) return;
         targetObj[key] = isCheckbox ? e.target.checked : e.target.value;
         debouncedSave();
     };
 
     const createModelValueChangeHandler = (key, isNumeric = false) => (e) => {
-        if (!agent.modelSettings) agent.modelSettings = {};
         agent.modelSettings[key] = isNumeric ? parseFloat(e.target.value) : e.target.value;
         debouncedSave();
     };
 
     const createToolValueChangeHandler = (toolName) => (e) => {
-        if (!agent.toolSettings) agent.toolSettings = { allowAll: false, allowed: [] };
         const allowedSet = new Set(agent.toolSettings.allowed);
         if (e.target.checked) {
             allowedSet.add(toolName);
@@ -249,38 +250,44 @@ function renderAgentEditor(agentId) {
     form.id = 'agent-editor-form';
     form.addEventListener('submit', e => e.preventDefault());
 
-    const allSettings = [];
-
     // --- Main Agent Settings ---
-    allSettings.push(
-        { id: 'name', label: 'Name', type: 'text', listener: { input: createValueChangeHandler(agent, 'name') } },
-        { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', rows: 8, listener: { input: createValueChangeHandler(agent, 'systemPrompt') } }
-    );
+    const mainSettings = [
+        { id: 'name', label: 'Name', type: 'text', default: agent.name, listener: { input: createValueChangeHandler(agent, 'name') } },
+        { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', rows: 8, default: agent.systemPrompt, listener: { input: createValueChangeHandler(agent, 'systemPrompt') } }
+    ];
 
     // --- Model Override Settings ---
     const modelSettingDefs = (appInstance?.settings || [])
         .filter(s => ['apiUrl', 'apiKey', 'model', 'temperature'].includes(s.id))
         .map(s => ({
-            ...s, // Copy original definition, including type, label, etc.
-            id: s.id, // Keep original ID for modelSettings object
+            ...s,
+            id: s.id,
+            default: agent.modelSettings[s.id] ?? s.default, // Use agent's value or the core default
             listener: { change: createModelValueChangeHandler(s.id, s.type === 'range') }
         }));
-    modelSettingDefs.push({
-        id: 'refresh-models', type: 'button', label: 'Refresh',
-        listener: {
-            click: () => {
-                if (!appInstance?.fetchModels) return;
-                const modelInput = document.getElementById('agent-model');
-                appInstance.fetchModels(modelInput, {
-                    apiUrl: agent.modelSettings.apiUrl,
-                    apiKey: agent.modelSettings.apiKey
-                });
-            }
-        }
-    });
 
-    allSettings.push({
-        id: 'useCustomModelSettings', label: 'Use Custom Model Settings', type: 'checkbox',
+    const modelSettingsGroup = {
+        id: 'modelSettings', type: 'group', label: 'Model Settings',
+        children: [
+            ...modelSettingDefs,
+            {
+                id: 'refresh-models', type: 'button', label: 'Refresh',
+                listener: {
+                    click: () => {
+                        if (!appInstance?.fetchModels) return;
+                        const modelInput = document.getElementById('agent-model');
+                        appInstance.fetchModels(modelInput, {
+                            apiUrl: agent.modelSettings.apiUrl,
+                            apiKey: agent.modelSettings.apiKey
+                        });
+                    }
+                }
+            }
+        ]
+    };
+
+    const useCustomModelSettings = {
+        id: 'useCustomModelSettings', label: 'Use Custom Model Settings', type: 'checkbox', default: agent.useCustomModelSettings,
         listener: {
             change: (e) => {
                 createValueChangeHandler(agent, 'useCustomModelSettings', true)(e);
@@ -288,21 +295,19 @@ function renderAgentEditor(agentId) {
                 if (fieldset) fieldset.disabled = !e.target.checked;
             }
         }
-    });
-    allSettings.push({ id: 'modelSettings', type: 'group', label: 'Model Settings', children: modelSettingDefs });
+    };
 
     // --- Tool Override Settings ---
     let toolSettingsGroup;
     if (appInstance?.mcp?.generateToolSettings) {
         toolSettingsGroup = appInstance.mcp.generateToolSettings(appInstance.mcp.getTools(), 'agent');
 
-        // Custom listeners for agent tool settings
         const allowAllCheckbox = toolSettingsGroup.children.find(c => c.id === 'agent-allowAllTools');
         if (allowAllCheckbox) {
+            allowAllCheckbox.default = agent.toolSettings.allowAll;
             const originalListener = allowAllCheckbox.listener.change;
             allowAllCheckbox.listener.change = (e, el) => {
                 originalListener(e, el); // Keep show/hide logic
-                if (!agent.toolSettings) agent.toolSettings = { allowAll: false, allowed: [] };
                 agent.toolSettings.allowAll = e.target.checked;
                 debouncedSave();
             };
@@ -312,6 +317,7 @@ function renderAgentEditor(agentId) {
         if (toolListGroup) {
             toolListGroup.children.forEach(toolCheckbox => {
                 const toolName = toolCheckbox.id.replace('tool-', '');
+                toolCheckbox.default = agent.toolSettings.allowed.includes(toolName);
                 toolCheckbox.listener = { change: createToolValueChangeHandler(toolName) };
             });
         }
@@ -319,8 +325,8 @@ function renderAgentEditor(agentId) {
          toolSettingsGroup = { id: 'tools-unavailable', type: 'group', label: 'Tool Settings', children: [{ type: 'static', label: 'MCP plugin not available or no tools found.'}]};
     }
 
-    allSettings.push({
-        id: 'useCustomToolSettings', label: 'Use Custom Tool Settings', type: 'checkbox',
+    const useCustomToolSettings = {
+        id: 'useCustomToolSettings', label: 'Use Custom Tool Settings', type: 'checkbox', default: agent.useCustomToolSettings,
         listener: {
             change: (e) => {
                 createValueChangeHandler(agent, 'useCustomToolSettings', true)(e);
@@ -328,25 +334,18 @@ function renderAgentEditor(agentId) {
                 if (fieldset) fieldset.style.display = e.target.checked ? 'block' : 'none';
             }
         }
-    });
-    allSettings.push(toolSettingsGroup);
-
-    // --- Create UI ---
-    const modelValues = agent.modelSettings || {};
-    const toolSettings = agent.toolSettings || { allowed: [] };
-    const toolValues = Object.fromEntries((toolSettings.allowed || []).map(t => [`tool-${t}`, true]));
-
-    const currentValues = {
-        name: agent.name,
-        systemPrompt: agent.systemPrompt,
-        useCustomModelSettings: agent.useCustomModelSettings,
-        useCustomToolSettings: agent.useCustomToolSettings,
-        ...modelValues,
-        'agent-allowAllTools': toolSettings.allowAll,
-        ...toolValues,
     };
 
-    const settingsFragment = createSettingsUI(allSettings, currentValues, 'agent-');
+    // --- Assemble final settings object ---
+    const allSettings = [
+        ...mainSettings,
+        useCustomModelSettings,
+        modelSettingsGroup,
+        useCustomToolSettings,
+        toolSettingsGroup,
+    ];
+
+    const settingsFragment = createSettingsUI(allSettings, {}, 'agent-');
     form.appendChild(settingsFragment);
     editorContainer.appendChild(form);
 
