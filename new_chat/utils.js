@@ -24,21 +24,3 @@ export function debounce(func, wait) {
         timeout = window.setTimeout(later, wait);
     };
 }
-
-/**
- * Sets a nested property on an object using a dot-notation string.
- * @param {object} obj - The object to modify.
- * @param {string} path - The dot-notation path to the property.
- * @param {any} value - The value to set.
- */
-export function setPropertyByPath(obj, path, value) {
-    const keys = path.split('.');
-    const lastKey = keys.pop();
-    const target = keys.reduce((acc, key) => {
-        if (!acc[key] || typeof acc[key] !== 'object') {
-            acc[key] = {};
-        }
-        return acc[key];
-    }, obj);
-    target[lastKey] = value;
-}

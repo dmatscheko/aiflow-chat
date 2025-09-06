@@ -4,8 +4,6 @@
 
 'use strict';
 
-import { setPropertyByPath } from './utils.js';
-
 /**
  * @typedef {import('./main.js').App} App
  * @typedef {import('./main.js').Setting} Setting
@@ -19,11 +17,28 @@ import { setPropertyByPath } from './utils.js';
  * @param {object} obj - The object to query.
  * @param {string} path - The dot-notation path to the property.
  * @returns {any} The value of the property, or undefined if not found.
- * @private
  */
-function getPropertyByPath(obj, path) {
+export function getPropertyByPath(obj, path) {
     if (!path) return undefined;
     return path.split('.').reduce((acc, part) => acc && acc[part], obj);
+}
+
+/**
+ * Sets a nested property on an object using a dot-notation string.
+ * @param {object} obj - The object to modify.
+ * @param {string} path - The dot-notation path to the property.
+ * @param {any} value - The value to set.
+ */
+export function setPropertyByPath(obj, path, value) {
+    const keys = path.split('.');
+    const lastKey = keys.pop();
+    const target = keys.reduce((acc, key) => {
+        if (!acc[key] || typeof acc[key] !== 'object') {
+            acc[key] = {};
+        }
+        return acc[key];
+    }, obj);
+    target[lastKey] = value;
 }
 
 /**
@@ -184,9 +199,8 @@ export class SettingsManager {
  * @param {string} [pathPrefix=''] - A prefix for the dot-notation path.
  * @param {Map<string, any[]>} [dependencyMap] - For internal recursive use.
  * @returns {DocumentFragment} A fragment containing the rendered and interactive settings UI.
- * @private
  */
-function createSettingsUI(settings, currentValues, onChange, idPrefix = '', context = '', pathPrefix = '', dependencyMap = new Map()) {
+export function createSettingsUI(settings, currentValues, onChange, idPrefix = '', context = '', pathPrefix = '', dependencyMap = new Map()) {
     const fragment = document.createDocumentFragment();
     const isTopLevel = !pathPrefix; // We are at the top level if pathPrefix is empty
 

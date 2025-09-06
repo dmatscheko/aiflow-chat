@@ -7,7 +7,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { debounce } from '../utils.js';
-import { createSettingsUI } from '../settings-manager.js';
+import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 
 /**
  * @typedef {import('../main.js').Setting} Setting
@@ -34,8 +34,6 @@ import { createSettingsUI } from '../settings-manager.js';
  * @property {boolean} useCustomToolSettings - Whether to use custom tool settings.
  * @property {AgentToolSettings} toolSettings - The custom tool settings.
  */
-
-import { setPropertyByPath } from '../utils.js';
 
 /**
  * Manages the lifecycle and storage of agents.
