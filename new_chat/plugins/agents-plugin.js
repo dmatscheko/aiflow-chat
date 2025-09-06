@@ -372,6 +372,30 @@ function attachAgentFormListeners() {
     customToolCheckbox.addEventListener('change', () => {
         toolSettingsContainer.style.display = customToolCheckbox.checked ? 'block' : 'none';
     });
+
+    // Add listener for the "Allow all tools" checkbox within the agent settings
+    const agentToolSettings = form.querySelector('#agent-tool-settings');
+    if (agentToolSettings) {
+        const allowAllCheckbox = agentToolSettings.querySelector('input[type="checkbox"]');
+        const toolListContainer = agentToolSettings.querySelector('.tool-list-container');
+        if (allowAllCheckbox && toolListContainer) {
+            allowAllCheckbox.addEventListener('change', () => {
+                toolListContainer.style.display = allowAllCheckbox.checked ? 'none' : 'block';
+            });
+        }
+    }
+
+    // Add listener for the agent-specific model refresh button
+    const refreshBtn = form.querySelector('#agent-refresh-models');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const modelInput = document.getElementById('agent-model');
+            if (modelInput && appInstance.fetchModels) {
+                appInstance.fetchModels(modelInput);
+            }
+        });
+    }
 }
 
 /**

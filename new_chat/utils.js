@@ -180,6 +180,7 @@ export function createToolSettingsUI(tools, currentSettings, onChange) {
     allowAllCheckbox.checked = currentSettings.allowAll;
 
     const toolListContainer = document.createElement('div');
+    toolListContainer.classList.add('tool-list-container'); // Add class for easier selection
     toolListContainer.style.display = currentSettings.allowAll ? 'none' : 'block';
 
     allowAllLabel.appendChild(allowAllCheckbox);
