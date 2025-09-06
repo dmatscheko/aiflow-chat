@@ -210,7 +210,7 @@ function initializeMcp() {
         tools = Array.isArray(response.tools) ? response.tools : [];
         console.log('MCP: Tools fetched successfully.');
         if (appInstance) {
-            appInstance.renderToolSettings();
+            appInstance.settingsManager.render();
         }
     }).catch(error => {
         console.error('MCP: Failed to pre-fetch tools', error);
