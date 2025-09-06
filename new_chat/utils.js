@@ -130,7 +130,7 @@ export function createSettingsUI(settings, currentValues, idPrefix, context) {
             } else if (setting.type === 'checkbox') {
                 input = document.createElement('input');
                 input.type = 'checkbox';
-                input.checked = !!currentValue; // Use currentValue directly for checkbox
+                input.checked = !!(currentValue ?? setting.default);
                 // For checkboxes, the label should wrap the input
                 label.appendChild(input);
                 label.appendChild(document.createTextNode(' ' + setting.label));
