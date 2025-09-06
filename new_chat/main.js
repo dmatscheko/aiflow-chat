@@ -566,8 +566,8 @@ class App {
      * @private
      */
     async fetchModels(targetSelectElement = null, overrideCredentials = {}) {
-        const apiUrl = overrideCredentials.apiUrl || this.dom.settings.apiUrl.value;
-        const apiKey = overrideCredentials.apiKey || this.dom.settings.apiKey.value;
+        const apiUrl = overrideCredentials.apiUrl ?? this.dom.settings.apiUrl.value;
+        const apiKey = overrideCredentials.apiKey ?? this.dom.settings.apiKey.value;
         if (!apiUrl) return;
         try {
             const models = await this.apiService.getModels(apiUrl, apiKey);
