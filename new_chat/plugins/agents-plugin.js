@@ -446,7 +446,7 @@ function initializeAgentEditor() {
                 id: 'allowed',
                 type: 'checkbox-list',
                 label: '',
-                    options: (appInstance.mcp.getToolsForUrl(agent.modelSettings.mcpServer) || []).map(t => ({ value: t.name, label: t.name })),
+                options: tools.map(t => ({ value: t.name, label: t.name })),
                 dependsOn: 'allowAll',
                 dependsOnValue: false
             }
