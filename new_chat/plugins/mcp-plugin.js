@@ -195,38 +195,37 @@ async function sendMcpRequest(url, method, params, isNotification = false, retur
 
         if (isNotification) return null;
 
-        const contentType = resp.headers.get('Content-Type') || '';
-        if (contentType.includes('application/json')) {
+        // Clone the response so we can read the body twice if needed
+        const clonedResp = resp.clone();
+
+        try {
+            // First, optimistically try to parse as JSON
             const data = await resp.json();
             if (data.error) throw new Error(data.error.message || 'MCP call failed');
             return data.result;
-        } else if (contentType.includes('text/event-stream')) {
-            const reader = resp.body.getReader();
-            let buffer = '';
-            let result = null;
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                buffer += new TextDecoder().decode(value);
-                const lines = buffer.split('\n');
-                buffer = lines.pop(); // Last incomplete line
-                for (const line of lines) {
-                    if (line.startsWith('data: ')) {
-                        try {
-                            const partial = JSON.parse(line.slice(6));
-                            if (partial.jsonrpc) result = partial.result;
-                        } catch (e) {
-                            console.warn("MCP: Could not parse event-stream data chunk as JSON.", line.slice(6));
+        } catch (error) {
+            // If JSON parsing fails, check if it's an SSE stream
+            if (error instanceof SyntaxError) {
+                console.warn('MCP: JSON parsing failed, attempting to parse as event-stream.');
+                const text = await clonedResp.text();
+                if (text.includes('data:')) {
+                    let result = null;
+                    const lines = text.split('\n');
+                    for (const line of lines) {
+                         if (line.startsWith('data: ')) {
+                            try {
+                                const partial = JSON.parse(line.slice(6));
+                                if (partial.jsonrpc) result = partial.result;
+                            } catch (e) {
+                                console.warn("MCP: Could not parse event-stream data chunk as JSON.", line.slice(6));
+                            }
                         }
                     }
+                    if (result) return result;
                 }
             }
-            if (result) return result;
-            throw new Error('Invalid SSE response: No valid JSON-RPC result found in stream.');
-        } else {
-            // It might be a plain text error response
-            const text = await resp.text();
-            throw new Error(`Unexpected Content-Type: ${contentType}. Response: ${text}`);
+            // If all parsing fails, re-throw the original error
+            throw error;
         }
 
     } catch (error) {

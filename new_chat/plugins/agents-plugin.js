@@ -458,11 +458,12 @@ function initializeAgentEditor() {
                     id: 'agent-refresh-tools',
                     label: 'Refresh Tools',
                     onClick: () => {
-                        const mcpServerUrl = agent.modelSettings.mcpServer;
+                        const effectiveConfig = agentManager.getEffectiveApiConfig(agent.id);
+                        const mcpServerUrl = effectiveConfig.mcpServer;
                         if (mcpServerUrl) {
                             appInstance.mcp.fetchToolsForUrl(mcpServerUrl);
                         } else {
-                            alert('Please set an MCP Server URL first.');
+                            alert('Please set an MCP Server URL for this agent or the Default Agent first.');
                         }
                     }
                 }
