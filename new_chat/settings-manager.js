@@ -54,8 +54,6 @@ export class SettingsManager {
     constructor(app) {
         /** @type {App} */
         this.app = app;
-        /** @private */
-        this.container = app.dom.settingsContainer;
         /** @type {Setting[]} */
         this.settings = [];
         /** @type {Object.<string, any>} */
@@ -87,10 +85,11 @@ export class SettingsManager {
     }
 
     /**
-     * Renders the entire settings UI, including main and tool settings.
+     * Renders the entire settings UI into a given container element.
+     * @param {HTMLElement} container - The element to render the settings into.
      */
-    render() {
-        this.container.innerHTML = ''; // Clear previous content
+    render(container) {
+        container.innerHTML = ''; // Clear previous content
 
         const onSettingChange = (id, newValue) => {
             this.currentValues[id] = newValue;
@@ -113,9 +112,9 @@ export class SettingsManager {
             'setting-',
             'main-settings'
         );
-        this.container.appendChild(settingsFragment);
+        container.appendChild(settingsFragment);
 
-        const modelSettingEl = this.container.querySelector('#setting-model');
+        const modelSettingEl = container.querySelector('#setting-model');
         if (modelSettingEl) {
             const refreshBtn = document.createElement('button');
             refreshBtn.id = 'refresh-models';
@@ -124,15 +123,16 @@ export class SettingsManager {
             modelSettingEl.parentElement.appendChild(refreshBtn);
         }
 
-        this.renderToolSettings();
+        this.renderToolSettings(container);
     }
 
     /**
-     * Renders the tool settings section.
+     * Renders the tool settings section into the main settings container.
+     * @param {HTMLElement} container - The main settings container element.
      * @private
      */
-    renderToolSettings() {
-        const existingContainer = this.container.querySelector('#tool-settings-container');
+    renderToolSettings(container) {
+        const existingContainer = container.querySelector('#tool-settings-container');
         if (existingContainer) {
             existingContainer.remove();
         }
@@ -168,8 +168,8 @@ export class SettingsManager {
             localStorage.setItem('core_tool_settings', JSON.stringify(currentData.toolSettings));
         };
 
-        const container = document.createElement('div');
-        container.id = 'tool-settings-container';
+        const toolSettingsContainer = document.createElement('div');
+        toolSettingsContainer.id = 'tool-settings-container';
         const fragment = createSettingsUI(
             [toolSettingsDef],
             currentData,
@@ -177,8 +177,8 @@ export class SettingsManager {
             'main-tool-settings-', // More specific ID prefix
             'main-settings'      // Context
         );
-        container.appendChild(fragment);
-        this.container.appendChild(container);
+        toolSettingsContainer.appendChild(fragment);
+        container.appendChild(toolSettingsContainer);
     }
 }
 

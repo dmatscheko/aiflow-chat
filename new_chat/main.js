@@ -107,7 +107,6 @@ class App {
 
         pluginManager.trigger('onAppInit', this);
 
-        this.settingsManager.render();
         this.renderTabs();
 
         this._loadLastActiveIds();
@@ -158,13 +157,19 @@ class App {
                     }
                 });
             }
+        }, {
+            id: 'settings',
+            label: 'Settings',
+            onActivate: () => {
+                const contentEl = document.getElementById('settings-pane');
+                this.settingsManager.render(contentEl);
+            }
         }];
         this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
     }
 
     initDOM() {
         this.dom = {
-            settingsContainer: document.getElementById('settings-container'),
             mainPanel: document.getElementById('main-panel'),
             panelTabs: document.getElementById('panel-tabs'),
             panelContent: document.getElementById('panel-content'),

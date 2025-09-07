@@ -26,17 +26,12 @@ body {
 }
 
 /* Panels (Settings and Right Panel) */
-#settings-panel, #right-panel {
+#right-panel {
     width: 250px;
     background-color: var(--panel-bg-color);
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--border-color);
-}
-#settings-panel {
-    padding: 1rem;
-    border-right: 1px solid var(--border-color);
-    border-left: none;
 }
 
 h2 {
