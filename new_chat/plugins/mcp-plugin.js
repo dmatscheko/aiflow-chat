@@ -39,34 +39,6 @@ let appInstance = null;
 // --- Helper Functions ---
 
 /**
- * Gets the effective MCP URL and tool list for a given agent.
- * Falls back to the Default Agent's configuration if the agent doesn't have custom settings.
- * @param {Agent | null} agent - The agent to get the config for. If null, uses the Default Agent.
- * @returns {{mcpUrl: string | null, tools: ToolSchema[]}}
- */
-function getEffectiveMcpConfig(agent) {
-    const agentManager = appInstance?.agentManager;
-    if (!agentManager) return { mcpUrl: null, tools: [] };
-
-    const defaultAgent = agentManager.getAgent('agent-default');
-    let effectiveAgent = agent;
-
-    // If the provided agent doesn't use custom model settings, fall back to default.
-    if (agent && !agent.useCustomModelSettings) {
-        effectiveAgent = defaultAgent;
-    }
-    // If no agent is provided, use the default.
-    if (!effectiveAgent) {
-        effectiveAgent = defaultAgent;
-    }
-
-    const mcpUrl = effectiveAgent?.modelSettings?.mcpServer || null;
-    const tools = mcpUrl ? mcpToolCache.get(mcpUrl) || [] : [];
-
-    return { mcpUrl, tools };
-}
-
-/**
  * Fetches the tool list for a given MCP server URL and updates the cache.
  * @param {string} url - The MCP server URL to fetch tools from.
  * @returns {Promise<ToolSchema[]>}
@@ -256,14 +228,18 @@ const mcpPlugin = {
             fetchToolsForUrl: mcpPlugin.fetchToolsForUrl,
         };
         // On startup, pre-fetch tools for the default agent.
-        const { mcpUrl } = getEffectiveMcpConfig(null);
+        const { mcpServer: mcpUrl } = appInstance.agentManager.getEffectiveApiConfig('agent-default');
         if (mcpUrl) {
             fetchToolsForUrl(mcpUrl);
         }
     },
 
     beforeApiCall(payload, allSettings, agent) {
-        const { mcpUrl, tools } = getEffectiveMcpConfig(agent);
+        // The agent object is passed directly to this hook. Use its ID.
+        const effectiveConfig = appInstance.agentManager.getEffectiveApiConfig(agent?.id);
+        const mcpUrl = effectiveConfig.mcpServer;
+        const tools = mcpUrl ? mcpToolCache.get(mcpUrl) || [] : [];
+
         if (!mcpUrl || tools.length === 0) {
             return payload;
         }
@@ -279,11 +255,13 @@ const mcpPlugin = {
     },
 
     async onResponseComplete(message, activeChat) {
-        const agentId = activeChat.log.getLastMessage()?.agent || null;
-        const agent = agentId ? appInstance.agentManager.getAgent(agentId) : null;
-        const { mcpUrl, tools } = getEffectiveMcpConfig(agent);
+        // The message object passed to this hook contains the agent ID.
+        const agentId = message.agent || null;
+        const effectiveConfig = appInstance.agentManager.getEffectiveApiConfig(agentId);
+        const mcpUrl = effectiveConfig.mcpServer;
+        const tools = mcpUrl ? mcpToolCache.get(mcpUrl) || [] : [];
 
-        if (!mcpUrl) return;
+        if (!mcpUrl || !tools || tools.length === 0) return;
 
         await genericProcessToolCalls(
             appInstance,
