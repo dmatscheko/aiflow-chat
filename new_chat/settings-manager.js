@@ -266,6 +266,35 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     });
                     break;
 
+                case 'radio-list':
+                    container = document.createElement('div');
+                    container.id = settingId;
+                    container.classList.add('setting', 'radio-list');
+                    if (setting.label) {
+                        label = document.createElement('label');
+                        label.textContent = setting.label;
+                        container.appendChild(label);
+                    }
+                    const radioName = settingId; // Use settingId as the shared name for mutual exclusivity
+                    (setting.options || []).forEach(opt => {
+                        const radioLabel = document.createElement('label');
+                        radioLabel.classList.add('radio-label');
+                        const radio = document.createElement('input');
+                        radio.type = 'radio';
+                        radio.name = radioName;
+                        radio.value = opt.value;
+                        radio.checked = currentValue === opt.value;
+                        radio.addEventListener('change', () => {
+                            if (radio.checked) {
+                                onChange?.(settingPath, radio.value, context, radio);
+                            }
+                        });
+                        radioLabel.appendChild(radio);
+                        radioLabel.appendChild(document.createTextNode(` ${opt.label}`));
+                        container.appendChild(radioLabel);
+                    });
+                    break;
+
                 default:
                     container = document.createElement('div');
                     container.classList.add('setting');
@@ -307,7 +336,7 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                         input = document.createElement('input');
                         input.type = setting.type || 'text';
                         if (setting.placeholder) input.placeholder = setting.placeholder;
-                        if (input.type === 'checkbox') {
+                        if (['checkbox', 'radio'].includes(input.type)) {
                             input.checked = !!valueToSet;
                         } else {
                             input.value = valueToSet;
@@ -320,7 +349,7 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     input.addEventListener('change', (e) => {
                         const target = e.target;
                         let newValue;
-                        if (target.type === 'checkbox') {
+                        if (['checkbox', 'radio'].includes(target.type)) {
                             newValue = target.checked;
                         } else if (target.type === 'range' || target.type === 'number') {
                             newValue = parseFloat(target.value);
@@ -331,10 +360,10 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     });
 
                     // Now, construct the DOM structure based on the input type
-                    if (input.type === 'checkbox') {
+                    if (['checkbox', 'radio'].includes(input.type)) {
                         if (setting.label) {
                             label = document.createElement('label');
-                            label.classList.add('checkbox-label');
+                            label.classList.add(`${input.type}-label`);
                             label.appendChild(input);
                             label.appendChild(document.createTextNode(` ${setting.label}`));
                             container.appendChild(label);
@@ -351,16 +380,16 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                             container.appendChild(label);
                         }
 
+                        if (input) {
+                            container.appendChild(input);
+                        }
+
                         if (setting.type === 'range') {
                             const valueSpan = document.createElement('span');
                             valueSpan.id = `${settingId}-value`;
                             valueSpan.textContent = valueToSet;
                             container.appendChild(valueSpan);
                             input.addEventListener('input', () => { valueSpan.textContent = input.value; });
-                        }
-
-                        if (input) {
-                            container.appendChild(input);
                         }
                     }
 
