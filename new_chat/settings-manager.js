@@ -270,15 +270,9 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     container = document.createElement('div');
                     container.classList.add('setting');
 
-                    if (setting.label) {
-                        label = document.createElement('label');
-                        label.setAttribute('for', settingId);
-                        label.textContent = setting.label;
-                        container.appendChild(label);
-                    }
-
                     const valueToSet = currentValue ?? setting.default ?? '';
 
+                    // Create and configure the input element first
                     if (setting.type === 'textarea') {
                         input = document.createElement('textarea');
                         input.rows = 4;
@@ -302,7 +296,6 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                             optionToSelect = newOption;
                         }
                         if (optionToSelect) optionToSelect.selected = true;
-
                     } else if (setting.type === 'range') {
                         input = document.createElement('input');
                         input.type = 'range';
@@ -310,11 +303,6 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                         input.max = setting.max;
                         input.step = setting.step;
                         input.value = valueToSet;
-                        const valueSpan = document.createElement('span');
-                        valueSpan.id = `${settingId}-value`;
-                        valueSpan.textContent = valueToSet;
-                        container.appendChild(valueSpan);
-                        input.addEventListener('input', () => { valueSpan.textContent = input.value; });
                     } else {
                         input = document.createElement('input');
                         input.type = setting.type || 'text';
@@ -342,8 +330,38 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                         onChange?.(settingPath, newValue, context, target);
                     });
 
-                    if (input) {
-                        container.appendChild(input);
+                    // Now, construct the DOM structure based on the input type
+                    if (input.type === 'checkbox') {
+                        if (setting.label) {
+                            label = document.createElement('label');
+                            label.classList.add('checkbox-label');
+                            label.appendChild(input);
+                            label.appendChild(document.createTextNode(` ${setting.label}`));
+                            container.appendChild(label);
+                        } else {
+                            // If there's no label, just append the input itself
+                            container.appendChild(input);
+                        }
+                    } else {
+                        // Original logic for all other input types
+                        if (setting.label) {
+                            label = document.createElement('label');
+                            label.setAttribute('for', settingId);
+                            label.textContent = setting.label;
+                            container.appendChild(label);
+                        }
+
+                        if (setting.type === 'range') {
+                            const valueSpan = document.createElement('span');
+                            valueSpan.id = `${settingId}-value`;
+                            valueSpan.textContent = valueToSet;
+                            container.appendChild(valueSpan);
+                            input.addEventListener('input', () => { valueSpan.textContent = input.value; });
+                        }
+
+                        if (input) {
+                            container.appendChild(input);
+                        }
                     }
 
             if (setting.actions) {
