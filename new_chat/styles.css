@@ -119,13 +119,22 @@ h2 {
     flex-grow: 1;
     overflow-y: auto;
 }
-/* Generic List Styles for Right Panel */
-#chat-list, #agent-list, #flow-list {
+/* Generic styles for the right-hand panel lists */
+.list-pane {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.item-list {
     list-style: none;
     padding: 0;
     margin: 0;
+    flex-grow: 1;
+    overflow-y: auto;
 }
-#chat-list li, #agent-list li, #flow-list li {
+
+.item-list .list-item {
     padding: 0.75rem;
     border-radius: 4px;
     cursor: pointer;
@@ -134,22 +143,13 @@ h2 {
     justify-content: space-between;
     align-items: center;
 }
-#chat-list li:hover, #agent-list li:hover, #flow-list li:hover {
+
+.item-list .list-item:hover {
     background-color: var(--input-bg-color);
 }
-#chat-list li.active, #agent-list li.active, #flow-list li.active {
-    background-color: var(--accent-color);
-}
 
-/* Chat List Specific Styles */
-#chat-list-pane {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-}
-#chat-list {
-    flex-grow: 1;
-    overflow-y: auto;
+.item-list .list-item.active {
+    background-color: var(--accent-color);
 }
 .add-new-button {
     margin-top: 1rem;
@@ -173,21 +173,6 @@ h2 {
 
 #agent-list-container, #agent-form-container {
     margin-bottom: 1rem;
-}
-#agent-list {
-    list-style: none;
-    padding: 0;
-    margin: 0.5rem 0;
-}
-#agent-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    border-radius: 4px;
-}
-#agent-list li:hover {
-    background-color: var(--input-bg-color);
 }
 #agent-list li button {
     margin-left: 0.5rem;
@@ -213,21 +198,6 @@ h2 {
 }
 #flow-list-container, #flow-form-container {
     margin-bottom: 1rem;
-}
-#flow-list {
-    list-style: none;
-    padding: 0;
-    margin: 0.5rem 0;
-}
-#flow-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem;
-    border-radius: 4px;
-}
-#flow-list li:hover {
-    background-color: var(--input-bg-color);
 }
 #flow-list li button {
     margin-left: 0.5rem;

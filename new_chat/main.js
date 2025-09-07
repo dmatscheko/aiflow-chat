@@ -140,8 +140,10 @@ class App {
             onActivate: () => {
                 const contentEl = document.getElementById('chats-pane');
                 contentEl.innerHTML = `
-                    <ul id="chat-list"></ul>
-                    <button id="new-chat-button" class="add-new-button">New Chat</button>
+                    <div class="list-pane">
+                        <ul id="chat-list" class="item-list"></ul>
+                        <button id="new-chat-button" class="add-new-button">New Chat</button>
+                    </div>
                 `;
                 this.renderChatList();
                 document.getElementById('new-chat-button').addEventListener('click', () => this.createNewChat());

@@ -696,8 +696,10 @@ const flowsPlugin = {
             onActivate: () => {
                 const contentEl = document.getElementById('flows-pane');
                 contentEl.innerHTML = `
-                    <ul id="flow-list"></ul>
-                    <button id="add-flow-btn" class="add-new-button">Add New Flow</button>
+                    <div class="list-pane">
+                        <ul id="flow-list" class="item-list"></ul>
+                        <button id="add-flow-btn" class="add-new-button">Add New Flow</button>
+                    </div>
                 `;
                 renderFlowList();
                 document.getElementById('add-flow-btn').addEventListener('click', () => { const name = prompt('Enter a name for the new flow:'); if (name) { flowManager.addFlow({ name, steps: [], connections: [] }); renderFlowList(); } });

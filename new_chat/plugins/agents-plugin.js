@@ -393,8 +393,10 @@ const agentsPlugin = {
             onActivate: () => {
                 const contentEl = document.getElementById('agents-pane');
                 contentEl.innerHTML = `
-                    <ul id="agent-list"></ul>
-                    <button id="add-agent-btn" class="add-new-button">Add New Agent</button>
+                    <div class="list-pane">
+                        <ul id="agent-list" class="item-list"></ul>
+                        <button id="add-agent-btn" class="add-new-button">Add New Agent</button>
+                    </div>
                 `;
                 renderAgentList();
 
