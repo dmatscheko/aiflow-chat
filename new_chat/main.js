@@ -85,24 +85,23 @@ class App {
         /** @type {SettingsManager} */
         this.settingsManager = null;
 
+        // Synchronous setup
         this.registerCoreViews();
-        this.defineTabs();
         this.initDOM();
-
-        // --- Settings Management ---
         this.settingsManager = new SettingsManager(this);
-        // --- End Settings Management ---
+    }
 
-        pluginManager.trigger('onAppInit', this);
+    async init() {
+        // Asynchronous setup
+        await pluginManager.trigger('onAppInit', this);
 
+        await this.defineTabs();
         this.renderTabs();
 
         this._loadLastActiveIds();
-        this.loadChats();
-
+        await this.loadChats();
         this.activeView.id = this.activeChatId;
-        this.renderMainView();
-
+        await this.renderMainView();
         this.initEventListeners();
     }
 
@@ -118,7 +117,7 @@ class App {
         `);
     }
 
-    defineTabs() {
+    async defineTabs() {
         const coreTabs = [{
             id: 'chats',
             label: 'Chats',
@@ -132,20 +131,22 @@ class App {
                     </div>
                 `;
                 this.renderChatList();
-                document.getElementById('new-chat-button').addEventListener('click', () => this.createNewChat());
-                document.getElementById('chat-list').addEventListener('click', (e) => {
+                document.getElementById('new-chat-button').addEventListener('click', async () => {
+                    await this.createNewChat();
+                });
+                document.getElementById('chat-list').addEventListener('click', async (e) => {
                     const target = e.target;
                     if (target.closest('li')) {
-                        this.setView('chat', target.closest('li').dataset.id);
+                        await this.setView('chat', target.closest('li').dataset.id);
                     }
                     if (target.classList.contains('delete-button')) {
                         e.stopPropagation();
-                        this.deleteChat(target.parentElement.dataset.id);
+                        await this.deleteChat(target.parentElement.dataset.id);
                     }
                 });
             }
         }];
-        this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
+        this.tabs = await pluginManager.trigger('onTabsRegistered', coreTabs);
     }
 
     initDOM() {
@@ -176,7 +177,7 @@ class App {
         this.tabs[0].onActivate();
     }
 
-    setView(type, id) {
+    async setView(type, id) {
         this.activeView = { type, id };
         this.lastActiveIds[type] = id;
         this._saveLastActiveIds();
@@ -188,17 +189,18 @@ class App {
             localStorage.setItem('core_active_chat_id', this.activeChatId);
             this.updateActiveChatInList();
         }
-        this.renderMainView();
+        await this.renderMainView();
     }
 
-    renderMainView() {
+    async renderMainView() {
         const { type, id } = this.activeView;
         const renderer = pluginManager.getViewRenderer(type);
         if (renderer) {
             this.dom.mainPanel.innerHTML = renderer(id);
             if (type === 'chat') {
-                this.initChatView(id);
+                await this.initChatView(id);
             }
+            // This trigger does not need to be awaited as nothing depends on its completion.
             pluginManager.trigger('onViewRendered', this.activeView);
         } else {
             this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
@@ -209,7 +211,7 @@ class App {
      * @param {string} tabId
      * @private
      */
-    showTab(tabId) {
+    async showTab(tabId) {
         if (!tabId) return;
         const tab = this.tabs.find(t => t.id === tabId);
         if (!tab) return;
@@ -230,7 +232,7 @@ class App {
         // Then, if a last active view exists for this tab's type, restore it.
         const lastActiveId = tab.viewType ? this.lastActiveIds[tab.viewType] : null;
         if (lastActiveId) {
-            this.setView(tab.viewType, lastActiveId);
+            await this.setView(tab.viewType, lastActiveId);
         }
     }
 
@@ -238,7 +240,7 @@ class App {
      * @param {string} chatId
      * @private
      */
-    initChatView(chatId) {
+    async initChatView(chatId) {
         const chat = this.chats.find(c => c.id === chatId);
         if (!chat) return;
         this.chatUI = new ChatUI(document.getElementById('chat-container'), this.agentManager);
@@ -255,21 +257,22 @@ class App {
         });
         const chatAreaControls = document.getElementById('chat-area-controls');
         if (chatAreaControls) {
-            chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '');
+            chatAreaControls.innerHTML = await pluginManager.trigger('onChatAreaRender', '');
+            // This trigger does not need to be awaited.
             pluginManager.trigger('onChatSwitched', chat);
         }
     }
 
     initEventListeners() {
-        this.dom.panelTabs.addEventListener('click', (e) => {
+        this.dom.panelTabs.addEventListener('click', async (e) => {
             const tabId = e.target.dataset.tabId;
             if (tabId) {
-                this.showTab(tabId);
+                await this.showTab(tabId);
             }
         });
     }
 
-    loadChats() {
+    async loadChats() {
         const savedChats = JSON.parse(localStorage.getItem('core_chat_logs'));
         if (savedChats && savedChats.length > 0) {
             this.chats = savedChats.map(chatData => {
@@ -284,7 +287,7 @@ class App {
             this.activeChatId = localStorage.getItem('core_active_chat_id') || this.chats[0].id;
             this.renderChatList();
         } else {
-            this.createNewChat();
+            await this.createNewChat();
         }
     }
 
@@ -314,7 +317,7 @@ class App {
         localStorage.setItem('core_last_active_ids', JSON.stringify(this.lastActiveIds));
     }
 
-    createNewChat() {
+    async createNewChat() {
         const newChat = {
             id: `chat-${Date.now()}`,
             title: 'New Chat',
@@ -323,18 +326,18 @@ class App {
         newChat.log.subscribe(this.debouncedSave);
         this.chats.push(newChat);
         this.renderChatList();
-        this.setView('chat', newChat.id);
+        await this.setView('chat', newChat.id);
         this.saveChats();
     }
 
-    deleteChat(chatId) {
+    async deleteChat(chatId) {
         this.chats = this.chats.filter(c => c.id !== chatId);
         if (this.activeChatId === chatId) {
             const newActiveChat = this.chats.length > 0 ? this.chats[0] : null;
             if (newActiveChat) {
-                this.setView('chat', newActiveChat.id);
+                await this.setView('chat', newActiveChat.id);
             } else {
-                this.createNewChat();
+                await this.createNewChat();
                 return;
             }
         }
@@ -392,6 +395,7 @@ class App {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    new App();
+document.addEventListener('DOMContentLoaded', async () => {
+    const app = new App();
+    await app.init();
 });

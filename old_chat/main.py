@@ -32,7 +32,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "application/json")
             self.end_headers()
-            config = {"mcp_endpoint": "http://127.0.0.1:3000/mcp"}
+            config = {"mcp_endpoint": "http://127.0.0.1:3001/mcp"}
             self.wfile.write(json.dumps(config).encode("utf-8"))
         else:
             super().do_GET()
@@ -50,8 +50,8 @@ def run_file_server():
 
         allow_reuse_address = True
 
-    with ReuseTCPServer(("", 8000), CustomHandler) as server:
-        logging.info("WEB: Serving static files at http://localhost:8000")
+    with ReuseTCPServer(("", 8001), CustomHandler) as server:
+        logging.info("WEB: Serving static files at http://localhost:8001")
         server.serve_forever()
 
 
@@ -120,12 +120,12 @@ def main():
     proxy_info = setup_proxy(mcp_servers)
 
     threading.Thread(target=run_file_server, daemon=True).start()
-    webbrowser.open("http://localhost:8000")
+    webbrowser.open("http://localhost:8001")
 
     if proxy_info:
         proxy, cors = proxy_info
-        logging.info("MCP: Starting proxy at http://127.0.0.1:3000/mcp")
-        proxy.run(transport="http", host="127.0.0.1", port=3000, middleware=cors)
+        logging.info("MCP: Starting proxy at http://127.0.0.1:3001/mcp")
+        proxy.run(transport="http", host="127.0.0.1", port=3001, middleware=cors)
 
 
 if __name__ == "__main__":

@@ -255,12 +255,19 @@ const mcpPlugin = {
     },
 
     async beforeApiCall(payload, allSettings, agent) {
+        console.log('[MCP Plugin] Entering beforeApiCall hook...');
         // The agent object is passed directly to this hook. Use its ID.
         const effectiveConfig = appInstance.agentManager.getEffectiveApiConfig(agent?.id);
         const mcpUrl = effectiveConfig.mcpServer;
+        console.log(`[MCP Plugin] Effective MCP URL: ${mcpUrl}`);
+
         const tools = await appInstance.mcp.getTools(mcpUrl);
+        console.log(`[MCP Plugin] Tools received:`, tools);
+        console.log(`[MCP Plugin] Number of tools: ${tools ? tools.length : 'null'}`);
+
 
         if (!mcpUrl || !tools || tools.length === 0) {
+            console.log('[MCP Plugin] No tools to add to prompt. Exiting hook.');
             return payload;
         }
 
