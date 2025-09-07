@@ -401,7 +401,9 @@ function initializeAgentEditor() {
         { id: 'mcpServer', label: 'MCP Server URL', type: 'text', placeholder: 'e.g. http://localhost:3000/mcp' },
     ];
 
-    const tools = appInstance?.mcp?.getTools() || [];
+    const effectiveConfig = agentManager.getEffectiveApiConfig(agent.id);
+    const mcpServerUrl = effectiveConfig.mcpServer;
+    const tools = appInstance?.mcp?.getToolsForUrl(mcpServerUrl) || [];
 
     /** @type {Setting[]} */
     let settingsDefinition = [
