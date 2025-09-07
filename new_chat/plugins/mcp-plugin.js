@@ -58,7 +58,7 @@ const mcpPlugin = {
             id: 'mcpServer',
             label: 'MCP Server URL',
             type: 'text',
-            placeholder: 'e.g., http://localhost:3000/mcp',
+            placeholder: 'e.g. http://localhost:3000/mcp',
             default: ''
         });
         return settings;
@@ -70,13 +70,13 @@ const mcpPlugin = {
      */
     onAppInit(app) {
         appInstance = app;
-        // Expose the plugin's API to the app instance
         app.mcp = {
             getTools: mcpPlugin.getTools
         };
 
-        const savedSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-        mcpUrl = savedSettings.mcpServer || '';
+        // The new settings system in main.js handles changes.
+        // We just need to react to the initial value.
+        mcpUrl = app.currentSettings.mcpServer || '';
         if (mcpUrl) {
             console.log('MCP: URL found, initializing...', mcpUrl);
             initializeMcp();
@@ -84,13 +84,13 @@ const mcpPlugin = {
             console.log('MCP: No URL, skipping initialization.');
         }
 
-        // Re-initialize if the setting changes
-        document.addEventListener('change', (e) => {
-            if (e.target.id === 'setting-mcpServer') {
-                mcpUrl = e.target.value;
+        // Listen for our specific setting change from the centralized system
+        document.body.addEventListener('setting-changed', (e) => {
+            if (e.detail.id === 'mcpServer') {
+                mcpUrl = e.detail.newValue;
+                isInitialized = false; // Reset initialization state
                 if (mcpUrl) {
                     console.log('MCP: URL changed, re-initializing...', mcpUrl);
-                    isInitialized = false; // Reset initialization state
                     initializeMcp();
                 }
             }
@@ -114,7 +114,6 @@ const mcpPlugin = {
         if (dynamicToolsSection) {
             const systemPrompt = payload.messages.find(m => m.role === 'system');
             if (systemPrompt) {
-                // Avoid duplicating the section if it's already there
                 if (!systemPrompt.content.includes(toolsHeader)) {
                     systemPrompt.content += '\n\n' + toolsHeader + dynamicToolsSection;
                 }
@@ -130,7 +129,6 @@ const mcpPlugin = {
      */
     async onResponseComplete(message, activeChat) {
         if (!mcpUrl) return;
-        console.log("MCP: Checking for tool calls in message...", message.value.content);
         await genericProcessToolCalls(
             appInstance,
             activeChat,
@@ -154,7 +152,7 @@ const mcpPlugin = {
 
         tempDiv.querySelectorAll('dma\\:render[type="render_inline_citation"]').forEach(node => {
             const argNode = node.querySelector('argument[name="citation_id"]');
-            const id = argNode ? parseInt(argNode.textContent.trim()) : null;
+            const id = argNode ? parseInt(argNode.textContent.trim(), 10) : null;
             if (!id) {
                 console.warn('MCP: Invalid citation_id, removing node');
                 node.parentNode.removeChild(node);
@@ -172,15 +170,13 @@ const mcpPlugin = {
                 a.style.color = 'red';
             }
             a.textContent = `[${id}]`;
-            a.target = '_blank'; // Open in new tab
+            a.target = '_blank';
             sup.appendChild(a);
             node.parentNode.replaceChild(sup, node);
         });
         contentEl.innerHTML = tempDiv.innerHTML;
     }
 };
-
-// --- MCP Helper Functions (adapted from old_chat/js/plugins/mcp.js) ---
 
 const toolsHeader = `### MCP Tools:
 
@@ -204,7 +200,6 @@ IMPORTANT: Write files only if explicitely instructed to do so.
 
 /**
  * Initializes the MCP connection by fetching the tool list.
- * This is a lightweight initialization that runs on startup.
  * @private
  */
 function initializeMcp() {
@@ -214,14 +209,11 @@ function initializeMcp() {
     mcpJsonRpc('tools/list').then(response => {
         tools = Array.isArray(response.tools) ? response.tools : [];
         console.log('MCP: Tools fetched successfully.');
-        // TODO: Currently, this breaks showing the correct settings in the main panel. From here ...
         if (appInstance) {
-            appInstance.renderSettings();
+            appInstance.settingsManager.render();
         }
-        // ... to here.
     }).catch(error => {
         console.error('MCP: Failed to pre-fetch tools', error);
-        // Optionally, notify the user in the UI
         alert(`Failed to connect to MCP server at ${mcpUrl}. Please check the URL and server status.\n\n${error.message}`);
     });
 }
@@ -233,47 +225,42 @@ function initializeMcp() {
  * @private
  */
 function generateToolsSection(agent) {
-    // Determine the effective tool settings
     let effectiveToolSettings;
-    if (agent && agent.useCustomToolSettings) {
+    if (agent?.useCustomToolSettings) {
         effectiveToolSettings = agent.toolSettings;
     } else {
         effectiveToolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: true, allowed: [] };
     }
 
-    // Filter the tools based on the settings
+    if (!effectiveToolSettings) return '';
+
     const allowedTools = effectiveToolSettings.allowAll
         ? tools
-        : tools.filter(tool => effectiveToolSettings.allowed.includes(tool.name));
+        : tools.filter(tool => effectiveToolSettings.allowed?.includes(tool.name));
 
-    if (allowedTools.length === 0) {
+    if (!allowedTools || allowedTools.length === 0) {
         return '';
     }
 
-    const sections = [];
-    allowedTools.forEach((tool, idx) => {
+    return allowedTools.map((tool, idx) => {
         const desc = tool.description || 'No description provided.';
         const action = tool.name;
         const displayName = action.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-        let argsStr = '';
         const properties = tool.inputSchema?.properties || {};
         const requiredSet = new Set(tool.inputSchema?.required || []);
-        Object.entries(properties).forEach(([name, arg]) => {
+        const argsStr = Object.entries(properties).map(([name, arg]) => {
             const argDesc = arg.description || arg.title || 'No description.';
             const argType = arg.type || 'unknown';
             const required = requiredSet.has(name) ? '(required)' : '(optional)';
             const defaultStr = arg.default !== undefined ? ` (default: ${JSON.stringify(arg.default)})` : '';
-            argsStr += `   - \`${name}\`: ${argDesc} (type: ${argType})${required}${defaultStr}\n`;
-        });
-        const section = `${idx + 1}. **${displayName}**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${action}\`\n - **Arguments** (parameter name): \n${argsStr}`;
-        sections.push(section);
-    });
-    return sections.join('\n');
+            return `   - \`${name}\`: ${argDesc} (type: ${argType})${required}${defaultStr}`;
+        }).join('\n');
+        return `${idx + 1}. **${displayName}**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${action}\`\n - **Arguments** (parameter name): \n${argsStr}`;
+    }).join('\n');
 }
 
 /**
  * Performs the full MCP session initialization handshake.
- * This is only called when a tool is actually executed.
  * @private
  */
 async function initMcpSession() {
@@ -304,22 +291,11 @@ async function initMcpSession() {
 
 /**
  * Sends a raw JSON-RPC request to the MCP server.
- * Handles session ID headers and different response types (JSON, SSE).
- * @param {string} method - The JSON-RPC method name.
- * @param {object} [params={}] - The parameters for the method.
- * @param {boolean} [isInit=false] - True if this is the 'initialize' call.
- * @param {boolean} [isNotification=false] - True if this is a notification (no 'id').
- * @returns {Promise<any>} The result from the JSON-RPC response.
- * @throws {Error} If the request fails or times out.
  * @private
  */
 async function sendMcpRequest(method, params = {}, isInit = false, isNotification = false) {
     if (!mcpUrl) throw new Error('No MCP server URL set');
-    const body = {
-        jsonrpc: '2.0',
-        method,
-        params
-    };
+    const body = { jsonrpc: '2.0', method, params };
     if (!isNotification) {
         body.id = Math.floor(Math.random() * 1000000);
     }
@@ -334,12 +310,7 @@ async function sendMcpRequest(method, params = {}, isInit = false, isNotificatio
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
-        const resp = await fetch(mcpUrl, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body),
-            signal: controller.signal
-        });
+        const resp = await fetch(mcpUrl, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
         clearTimeout(timeoutId);
         if (!resp.ok) {
             const errorText = await resp.text();
@@ -350,16 +321,12 @@ async function sendMcpRequest(method, params = {}, isInit = false, isNotificatio
             mcpSessionId = headerSession;
             localStorage.setItem(`mcpSession_${mcpUrl}`, mcpSessionId);
         }
-        if (isNotification) {
-            return null;
-        }
+        if (isNotification) return null;
 
         const contentType = resp.headers.get('Content-Type') || '';
         if (contentType.includes('application/json')) {
             const data = await resp.json();
-            if (data.error) {
-                throw new Error(data.error.message || 'MCP call failed');
-            }
+            if (data.error) throw new Error(data.error.message || 'MCP call failed');
             return data.result;
         } else if (contentType.includes('text/event-stream')) {
             const reader = resp.body.getReader();
@@ -372,18 +339,12 @@ async function sendMcpRequest(method, params = {}, isInit = false, isNotificatio
                 const lines = buffer.split('\n');
                 buffer = lines.pop(); // Last incomplete line
                 for (const line of lines) {
-                    if (line.startsWith('event: message')) {
-                        // Next line should be data:
-                    } else if (line.startsWith('data: ')) {
-                        const dataStr = line.slice(6);
+                    if (line.startsWith('data: ')) {
                         try {
-                            const partial = JSON.parse(dataStr);
-                            if (partial.jsonrpc) {
-                                result = partial.result; // Assume last message has full result
-                            }
+                            const partial = JSON.parse(line.slice(6));
+                            if (partial.jsonrpc) result = partial.result;
                         } catch (e) {
-                             // Ignore partial JSON
-                             console.warn("MCP: Could not parse event-stream data chunk as JSON.", dataStr);
+                            console.warn("MCP: Could not parse event-stream data chunk as JSON.", line.slice(6));
                         }
                     }
                 }
@@ -393,119 +354,73 @@ async function sendMcpRequest(method, params = {}, isInit = false, isNotificatio
         } else {
             throw new Error(`Unexpected Content-Type: ${contentType}`);
         }
-
     } catch (error) {
         clearTimeout(timeoutId);
-        if (error.name === 'AbortError') {
-            throw new Error('MCP request timed out');
-        }
+        if (error.name === 'AbortError') throw new Error('MCP request timed out');
         throw error;
     }
 }
 
 /**
- * Performs a JSON-RPC call to the MCP server, handling session initialization and retries.
- * @param {string} method - The JSON-RPC method name.
- * @param {object} [params={}] - The parameters for the method.
- * @param {boolean} [retry=false] - Internal flag to prevent infinite retry loops.
- * @returns {Promise<any>} The result from the JSON-RPC response.
- * @throws {AggregateError} If the call fails even after a retry.
+ * Performs a JSON-RPC call to the MCP server.
  * @private
  */
 async function mcpJsonRpc(method, params = {}, retry = false) {
     try {
         await initMcpSession();
-        const result = await sendMcpRequest(method, params);
-        return result;
+        return await sendMcpRequest(method, params);
     } catch (error) {
         console.error('MCP: JSON-RPC failure', error);
-        if (error.message.includes('session')) { // Simplified error check
+        if (error.message.includes('session') && !retry) {
             localStorage.removeItem(`mcpSession_${mcpUrl}`);
             mcpSessionId = null;
             isInitialized = false;
-            if (!retry) {
-                console.log('MCP: Retrying MCP call after session re-init');
-                return mcpJsonRpc(method, params, true);
-            }
+            console.log('MCP: Retrying MCP call after session re-init');
+            return mcpJsonRpc(method, params, true);
         }
-        throw new AggregateError(
-            [error],
-            `Failed to perform MCP JSON-RPC call.\nURL: ${mcpUrl}, Method: ${method}, Params: ${JSON.stringify(params)}.\nOriginal error: ${error.message || 'Unknown'}.`
-        );
+        throw new AggregateError([error], `Failed to perform MCP JSON-RPC call.`);
     }
 }
 
-
-// --- Tool Call Processing Functions ---
-
-/**
- * A filter function for the generic tool processor.
- * In this context, any non-agent call is considered an MCP call.
- * @param {ToolCall} call - The tool call object.
- * @returns {boolean} - True if it's an MCP call.
- * @private
- */
+/** @private */
 function filterMcpCalls(call) {
     return !call.name.endsWith('_agent');
 }
 
-/**
- * An execution function for the generic tool processor.
- * Executes a single MCP tool call after checking permissions.
- * @param {ToolCall} call - The tool call to execute.
- * @param {Message} message - The original assistant message, for context.
- * @returns {Promise<ToolResult>} A promise that resolves to a tool result object.
- * @private
- */
+/** @private */
 async function executeMcpCall(call, message) {
-    // Determine the effective tool settings
-    const agentId = message.value.agent;
+    const agentId = message.agent;
     const agent = agentId ? appInstance.agentManager.getAgent(agentId) : null;
     let effectiveToolSettings;
-
-    if (agent && agent.useCustomToolSettings) {
+    if (agent?.useCustomToolSettings) {
         effectiveToolSettings = agent.toolSettings;
     } else {
-        effectiveToolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: false, allowed: [] };
+        effectiveToolSettings = JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: true, allowed: [] };
     }
 
-    // Check if the tool is allowed
-    const isAllowed = effectiveToolSettings.allowAll || effectiveToolSettings.allowed.includes(call.name);
+    const isAllowed = effectiveToolSettings.allowAll || effectiveToolSettings.allowed?.includes(call.name);
 
     if (!isAllowed) {
-        console.warn(`MCP: Tool call "${call.name}" blocked by settings.`);
         return {
             name: call.name,
             tool_call_id: call.id,
-            content: null,
             error: `Tool "${call.name}" is not enabled in the current settings.`,
         };
     }
 
-    console.log('MCP: Executing tool', call.name, 'with params', call.params);
     try {
         const result = await mcpJsonRpc('tools/call', { name: call.name, arguments: call.params });
-
-        // Add sources to metadata for certain tools
-        if (call.name === 'web_search' || call.name === 'browse_page' || call.name.startsWith('x_')) {
-             if (!message.metadata) message.metadata = {};
-             message.metadata.sources = result.sources || [];
-             console.log('MCP: Added sources to metadata', result.sources?.length || 0);
-        }
-
-        let content = '';
-        let error = null;
-
         if (result.isError) {
-            error = result.content ? JSON.stringify(result.content) : 'Unknown error';
-            content = null;
-        } else {
-            content = result.content ? JSON.stringify(result.content, null, 2) : '{}';
+            return { name: call.name, tool_call_id: call.id, error: JSON.stringify(result.content) };
         }
-        return { name: call.name, tool_call_id: call.id, content, error };
+        if (call.name === 'web_search' || call.name === 'browse_page' || call.name.startsWith('x_')) {
+            if (!message.metadata) message.metadata = {};
+            message.metadata.sources = result.sources || [];
+        }
+        return { name: call.name, tool_call_id: call.id, content: JSON.stringify(result.content, null, 2) };
     } catch (err) {
         console.error('MCP: Tool execution error', err);
-        return { name: call.name, tool_call_id: call.id, content: null, error: err.message || 'Unknown error' };
+        return { name: call.name, tool_call_id: call.id, error: err.message || 'Unknown error' };
     }
 }
 

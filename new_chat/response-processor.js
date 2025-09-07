@@ -125,7 +125,6 @@ class ResponseProcessor {
         app.abortController = new AbortController();
 
         try {
-            let settings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
             // Get the history leading up to the pending message.
             const messages = chat.log.getHistoryBeforeMessage(assistantMsg);
             if (!messages) {
@@ -135,42 +134,33 @@ class ResponseProcessor {
                 return;
             }
 
-            // --- Agent-specific settings override ---
+            // --- Get effective configuration using the new centralized method ---
             const agentId = assistantMsg.value.agent;
             const agent = agentId ? app.agentManager.getAgent(agentId) : null;
+            const effectiveConfig = app.getEffectiveApiConfig(agentId);
 
-            let systemPrompt = settings.systemPrompt;
-            let finalApiUrl = settings.apiUrl;
-            let finalApiKey = settings.apiKey;
-
-            if (agent) {
-                systemPrompt = agent.systemPrompt;
-                if (agent.useCustomModelSettings) {
-                    settings = { ...settings, ...agent.modelSettings };
-                    if(agent.modelSettings.apiUrl) finalApiUrl = agent.modelSettings.apiUrl;
-                    if(agent.modelSettings.apiKey) finalApiKey = agent.modelSettings.apiKey;
-                }
-            }
-
+            // Determine the system prompt (agent's prompt takes precedence)
+            const systemPrompt = agent?.systemPrompt || effectiveConfig.systemPrompt;
             if (systemPrompt) {
                 messages.unshift({ role: 'system', content: systemPrompt });
             }
-            // --- End of agent override ---
+            // --- End of configuration ---
 
             let payload = {
-                model: settings.model,
+                model: effectiveConfig.model,
                 messages: messages,
                 stream: true,
-                temperature: parseFloat(settings.temperature),
-                top_p: settings.top_p ? parseFloat(settings.top_p) : undefined,
+                temperature: parseFloat(effectiveConfig.temperature),
+                top_p: effectiveConfig.top_p ? parseFloat(effectiveConfig.top_p) : undefined,
             };
 
-            payload = pluginManager.trigger('beforeApiCall', payload, settings, agent);
+            // Pass the original agent object and the final effective config to the plugin hook
+            payload = pluginManager.trigger('beforeApiCall', payload, effectiveConfig, agent);
 
             const reader = await app.apiService.streamChat(
                 payload,
-                finalApiUrl,
-                finalApiKey,
+                effectiveConfig.apiUrl,
+                effectiveConfig.apiKey,
                 app.abortController.signal
             );
 
