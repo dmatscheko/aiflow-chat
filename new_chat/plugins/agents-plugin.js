@@ -269,6 +269,10 @@ class AgentManager {
             }
             if (agent.useCustomToolSettings) {
                 effectiveToolSettings = { ...effectiveToolSettings, ...(agent.toolSettings || {}) };
+                // Handle MCP Server URL fallback
+                if (!effectiveToolSettings.mcpServer) {
+                    effectiveToolSettings.mcpServer = defaultAgent.toolSettings?.mcpServer;
+                }
             }
         }
 
