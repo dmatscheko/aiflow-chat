@@ -194,6 +194,21 @@ const agentManager = new AgentManager();
 let appInstance = null;
 
 /**
+ * Highlights the currently active agent in the list.
+ * @private
+ */
+function updateActiveAgentInList() {
+    const agentListEl = document.getElementById('agent-list');
+    if (!agentListEl || !appInstance) return;
+
+    const activeAgentId = appInstance.activeView.type === 'agent-editor' ? appInstance.activeView.id : null;
+
+    agentListEl.querySelectorAll('li').forEach(item => {
+        item.classList.toggle('active', item.dataset.id === activeAgentId);
+    });
+}
+
+/**
  * Renders the list of agents in the "Agents" tab panel.
  * @private
  */
@@ -203,14 +218,15 @@ function renderAgentList() {
     agentListEl.innerHTML = '';
     agentManager.agents.forEach(agent => {
         const li = document.createElement('li');
-        li.className = 'agent-list-item';
+        li.className = 'list-item';
         li.dataset.id = agent.id;
         li.innerHTML = `
             <span>${agent.name}</span>
-            <button class="delete-agent-btn">X</button>
+            <button class="delete-button">X</button>
         `;
         agentListEl.appendChild(li);
     });
+    updateActiveAgentInList();
 }
 
 /**
@@ -379,7 +395,7 @@ const agentsPlugin = {
                 contentEl.innerHTML = `
                     <div class="pane-header">
                         <h3>Agents</h3>
-                        <button id="add-agent-btn" class="primary-btn">Add New Agent</button>
+                        <button id="add-agent-btn">Add New Agent</button>
                     </div>
                     <ul id="agent-list"></ul>
                 `;
@@ -392,11 +408,11 @@ const agentsPlugin = {
                 });
 
                 document.getElementById('agent-list').addEventListener('click', (e) => {
-                    const agentItem = e.target.closest('.agent-list-item');
+                    const agentItem = e.target.closest('.list-item');
                     if (!agentItem) return;
                     const agentId = agentItem.dataset.id;
 
-                    if (e.target.classList.contains('delete-agent-btn')) {
+                    if (e.target.classList.contains('delete-button')) {
                         e.stopPropagation();
                         if (confirm(`Are you sure you want to delete the agent "${agentManager.getAgent(agentId)?.name}"?`)) {
                             agentManager.deleteAgent(agentId);
@@ -458,6 +474,8 @@ const agentsPlugin = {
         if (view.type === 'agent-editor') {
             initializeAgentEditor();
         }
+        // Update the active state in the list whenever any view is rendered
+        updateActiveAgentInList();
     }
 };
 

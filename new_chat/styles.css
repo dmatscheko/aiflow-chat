@@ -119,7 +119,13 @@ h2 {
     flex-grow: 1;
     overflow-y: auto;
 }
-#chat-list li {
+/* Generic List Styles for Right Panel */
+#chat-list, #agent-list, #flow-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+#chat-list li, #agent-list li, #flow-list li {
     padding: 0.75rem;
     border-radius: 4px;
     cursor: pointer;
@@ -128,11 +134,22 @@ h2 {
     justify-content: space-between;
     align-items: center;
 }
-#chat-list li:hover {
+#chat-list li:hover, #agent-list li:hover, #flow-list li:hover {
     background-color: var(--input-bg-color);
 }
-#chat-list li.active {
+#chat-list li.active, #agent-list li.active, #flow-list li.active {
     background-color: var(--accent-color);
+}
+
+/* Chat List Specific Styles */
+#chat-list-pane {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+#chat-list {
+    flex-grow: 1;
+    overflow-y: auto;
 }
 #chat-list .delete-chat-button {
     background: none;
