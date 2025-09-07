@@ -44,6 +44,7 @@ import './plugins/formatting-plugin.js';
  * @typedef {object} Tab
  * @property {string} id - The unique identifier for the tab.
  * @property {string} label - The display label for the tab.
+ * @property {string} [viewType] - The associated view type to restore.
  * @property {() => void} onActivate - A function to call when the tab is activated.
  */
 
@@ -70,6 +71,8 @@ class App {
         this.abortController = null;
         /** @type {string | null} */
         this.activeChatId = null;
+        /** @type {Object.<string, string>} */
+        this.lastActiveIds = {};
         /** @type {ChatUI | null} */
         this.chatUI = null;
         /** @type {() => void} */
@@ -107,6 +110,7 @@ class App {
         this.settingsManager.render();
         this.renderTabs();
 
+        this._loadLastActiveIds();
         this.loadChats();
 
         this.activeView.id = this.activeChatId;
@@ -132,6 +136,7 @@ class App {
         const coreTabs = [{
             id: 'chats',
             label: 'Chats',
+            viewType: 'chat',
             onActivate: () => {
                 const contentEl = document.getElementById('chats-pane');
                 contentEl.innerHTML = `
@@ -186,8 +191,13 @@ class App {
 
     setView(type, id) {
         this.activeView = { type, id };
+        this.lastActiveIds[type] = id;
+        this._saveLastActiveIds();
+
         if (type === 'chat') {
             this.activeChatId = id;
+            // The active chat ID is also saved in saveChats, but we save here
+            // to ensure it's updated immediately on view change.
             localStorage.setItem('core_active_chat_id', this.activeChatId);
             this.updateActiveChatInList();
         }
@@ -216,13 +226,21 @@ class App {
         if (!tabId) return;
         const tab = this.tabs.find(t => t.id === tabId);
         if (!tab) return;
+
+        // Update button and pane visibility first
         this.dom.panelTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         this.dom.panelContent.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
         const tabBtn = document.getElementById(`tab-btn-${tabId}`);
         const tabPane = document.getElementById(`${tabId}-pane`);
         if (tabBtn) tabBtn.classList.add('active');
         if (tabPane) tabPane.classList.add('active');
-        if (tab.onActivate) {
+
+        // Now, decide what content to show
+        const lastActiveId = tab.viewType ? this.lastActiveIds[tab.viewType] : null;
+
+        if (lastActiveId) {
+            this.setView(tab.viewType, lastActiveId);
+        } else if (tab.onActivate) {
             tab.onActivate();
         }
     }
@@ -288,6 +306,22 @@ class App {
         }));
         localStorage.setItem('core_chat_logs', JSON.stringify(chatsToSave));
         localStorage.setItem('core_active_chat_id', this.activeChatId);
+    }
+
+    /** @private */
+    _loadLastActiveIds() {
+        try {
+            const ids = localStorage.getItem('core_last_active_ids');
+            this.lastActiveIds = ids ? JSON.parse(ids) : {};
+        } catch (e) {
+            console.error('Failed to load last active IDs:', e);
+            this.lastActiveIds = {};
+        }
+    }
+
+    /** @private */
+    _saveLastActiveIds() {
+        localStorage.setItem('core_last_active_ids', JSON.stringify(this.lastActiveIds));
     }
 
     createNewChat() {

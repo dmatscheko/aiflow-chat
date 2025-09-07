@@ -373,6 +373,7 @@ const agentsPlugin = {
         tabs.push({
             id: 'agents',
             label: 'Agents',
+            viewType: 'agent-editor',
             onActivate: () => {
                 const contentEl = document.getElementById('agents-pane');
                 contentEl.innerHTML = `

@@ -674,7 +674,10 @@ const flowsPlugin = {
     },
     onTabsRegistered(tabs) {
         tabs.push({
-            id: 'flows', label: 'Flows', onActivate: () => {
+            id: 'flows',
+            label: 'Flows',
+            viewType: 'flow-editor',
+            onActivate: () => {
                 const contentEl = document.getElementById('flows-pane');
                 contentEl.innerHTML = `<div class="pane-header"><h3>Flows</h3><button id="add-flow-btn" class="primary-btn">Add New Flow</button></div><ul id="flow-list"></ul>`;
                 renderFlowList();
