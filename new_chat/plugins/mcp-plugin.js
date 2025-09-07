@@ -210,7 +210,13 @@ function initializeMcp() {
         tools = Array.isArray(response.tools) ? response.tools : [];
         console.log('MCP: Tools fetched successfully.');
         if (appInstance) {
-            appInstance.settingsManager.render();
+            // Only re-render settings if the settings tab is currently active
+            if (appInstance.dom.panelTabs.querySelector('#tab-btn-settings.active')) {
+                const settingsPane = document.getElementById('settings-pane');
+                if (settingsPane) {
+                    appInstance.settingsManager.render(settingsPane);
+                }
+            }
         }
     }).catch(error => {
         console.error('MCP: Failed to pre-fetch tools', error);
