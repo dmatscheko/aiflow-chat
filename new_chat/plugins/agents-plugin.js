@@ -35,6 +35,8 @@ import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
  * @property {AgentToolSettings} toolSettings - The custom tool settings.
  */
 
+const DEFAULT_AGENT_ID = 'agent-default';
+
 /**
  * Manages the lifecycle and storage of agents.
  * @class
@@ -42,32 +44,75 @@ import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 class AgentManager {
     constructor() {
         /** @type {Agent[]} */
-        this.agents = this._loadAgents();
+        this.agents = [];
+        this._loadAgents(); // Populates this.agents
+
         /** @type {Object.<string, string>} */
         this.chatAgentMap = this._loadChatAgentMap();
         this.debouncedSave = debounce(() => this._saveAgents(), 500);
     }
 
     /**
-     * @returns {Agent[]} The loaded agents.
+     * Loads agents from storage, creating and migrating a 'Default Agent' if necessary.
      * @private
      */
     _loadAgents() {
+        let userAgents = [];
         try {
             const agentsJson = localStorage.getItem('core_agents_v2');
-            return agentsJson ? JSON.parse(agentsJson) : [];
+            if (agentsJson) {
+                userAgents = JSON.parse(agentsJson);
+            }
         } catch (e) {
-            console.error('Failed to load agents:', e);
-            return [];
+            console.error('Failed to load user agents:', e);
+            userAgents = [];
         }
+
+        let defaultAgent = userAgents.find(a => a.id === DEFAULT_AGENT_ID);
+
+        if (!defaultAgent) {
+            // Try to migrate from old global settings
+            const oldGlobalSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
+
+            defaultAgent = {
+                id: DEFAULT_AGENT_ID,
+                name: 'Default Agent',
+                systemPrompt: oldGlobalSettings.systemPrompt || 'You are a helpful assistant.',
+                useCustomModelSettings: true, // Always true for default
+                modelSettings: {
+                    apiUrl: oldGlobalSettings.apiUrl || '',
+                    apiKey: oldGlobalSettings.apiKey || '',
+                    model: oldGlobalSettings.model || '',
+                    temperature: oldGlobalSettings.temperature ?? 1,
+                    // mcpServer will be added here later
+                },
+                useCustomToolSettings: true, // Always true for default
+                toolSettings: { allowAll: true, allowed: [] }
+            };
+
+            // If we migrated, remove the old settings key
+            if (Object.keys(oldGlobalSettings).length > 0) {
+                localStorage.removeItem('core_chat_settings');
+            }
+            // Add the new default agent to the list to be saved
+            userAgents.unshift(defaultAgent);
+            this._saveAgents(userAgents); // Save immediately
+        }
+
+        // Ensure Default Agent is always first.
+        this.agents = [
+            defaultAgent,
+            ...userAgents.filter(a => a.id !== DEFAULT_AGENT_ID)
+        ];
     }
 
     /**
      * Saves the current list of agents to localStorage.
+     * @param {Agent[]} [agents=this.agents] - The array of agents to save.
      * @private
      */
-    _saveAgents() {
-        localStorage.setItem('core_agents_v2', JSON.stringify(this.agents));
+    _saveAgents(agents = this.agents) {
+        localStorage.setItem('core_agents_v2', JSON.stringify(agents));
     }
 
     /**
@@ -157,6 +202,10 @@ class AgentManager {
      * @param {string} id
      */
     deleteAgent(id) {
+        if (id === DEFAULT_AGENT_ID) {
+            console.error("Cannot delete the Default Agent.");
+            return;
+        }
         this.agents = this.agents.filter(a => a.id !== id);
         this._saveAgents();
         for (const chatId in this.chatAgentMap) {
@@ -220,9 +269,12 @@ function renderAgentList() {
         const li = document.createElement('li');
         li.className = 'list-item';
         li.dataset.id = agent.id;
+        const deleteButtonHtml = agent.id === DEFAULT_AGENT_ID
+            ? ''
+            : '<button class="delete-button">X</button>';
         li.innerHTML = `
             <span>${agent.name}</span>
-            <button class="delete-button">X</button>
+            ${deleteButtonHtml}
         `;
         agentListEl.appendChild(li);
     });
@@ -259,66 +311,77 @@ function initializeAgentEditor() {
     const agent = agentManager.getAgent(agentId);
     if (!agent) return;
 
-    const modelSettingDefs = (appInstance?.settings || [])
-        .filter(s => !['systemPrompt', 'mcpServer'].includes(s.id)) // TODO: filtering out the systemPrompt here is OK, but mcpServer should be marked as not being a model setting and filtered because of that
-        .map(s => {
-            if (s.id === 'model') {
-                return {
-                    ...s,
-                    actions: [{
-                        id: 'agent-refresh-models',
-                        label: 'Refresh',
-                        onClick: (e, modelInput) => {
-                            if (!modelInput || !appInstance.fetchModels) return;
-                            appInstance.fetchModels(modelInput, agentId);
-                        }
-                    }]
-                };
-            }
-            return s;
-        })
-        .map(s => {
-            const { required, ...rest } = s;
-            return rest;
-        });
+    const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
+
+    // Define the settings structure locally, as global settings are deprecated.
+    const modelSettingDefs = [
+        { id: 'apiUrl', label: 'API URL', type: 'text', placeholder: 'e.g. https://api.someai.com/' },
+        { id: 'apiKey', label: 'API Key', type: 'password' },
+        { id: 'model', label: 'Model', type: 'select', options: [] },
+        { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1 },
+        { id: 'mcpServer', label: 'MCP Server URL', type: 'text', placeholder: 'e.g. http://localhost:3000/mcp' },
+    ];
 
     const tools = appInstance?.mcp?.getTools() || [];
 
     /** @type {Setting[]} */
-    const settingsDefinition = [
-        { id: 'name', label: 'Name', type: 'text', required: true },
+    let settingsDefinition = [
+        { id: 'name', label: 'Name', type: 'text', required: true, readonly: isDefaultAgent },
         { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', required: true },
         { type: 'divider' },
-        { id: 'useCustomModelSettings', label: 'Use Custom Model Settings', type: 'checkbox' },
-        {
-            id: 'modelSettings',
-            type: 'fieldset',
-            label: 'Model Settings',
-            children: modelSettingDefs,
-            dependsOn: 'useCustomModelSettings',
-            dependsOnValue: true
-        },
-        { type: 'divider' },
-        { id: 'useCustomToolSettings', label: 'Use Custom Tool Settings', type: 'checkbox' },
-        {
-            id: 'toolSettings',
-            type: 'fieldset',
-            label: 'Tool Settings',
-            children: [
-                { id: 'allowAll', label: 'Allow all available tools', type: 'checkbox' },
-                {
-                    id: 'allowed',
-                    type: 'checkbox-list',
-                    label: '',
-                    options: tools.map(t => ({ value: t.name, label: t.name })),
-                    dependsOn: 'allowAll',
-                    dependsOnValue: false
-                }
-            ],
-            dependsOn: 'useCustomToolSettings',
-            dependsOnValue: true
-        }
     ];
+
+    // --- Conditional Model Settings ---
+    if (!isDefaultAgent) {
+        settingsDefinition.push({ id: 'useCustomModelSettings', label: 'Use Custom Model Settings', type: 'checkbox' });
+    }
+    settingsDefinition.push({
+        id: 'modelSettings',
+        type: 'fieldset',
+        label: 'Model Settings',
+        children: modelSettingDefs,
+        // Only add dependency if it's not the default agent
+        ...(isDefaultAgent ? {} : { dependsOn: 'useCustomModelSettings', dependsOnValue: true })
+    });
+    settingsDefinition.push({ type: 'divider' });
+
+    // --- Conditional Tool Settings ---
+    if (!isDefaultAgent) {
+        settingsDefinition.push({ id: 'useCustomToolSettings', label: 'Use Custom Tool Settings', type: 'checkbox' });
+    }
+    settingsDefinition.push({
+        id: 'toolSettings',
+        type: 'fieldset',
+        label: 'Tool Settings',
+        children: [
+            { id: 'allowAll', label: 'Allow all available tools', type: 'checkbox' },
+            {
+                id: 'allowed',
+                type: 'checkbox-list',
+                label: '',
+                    options: (appInstance.mcp.getToolsForUrl(agent.modelSettings.mcpServer) || []).map(t => ({ value: t.name, label: t.name })),
+                dependsOn: 'allowAll',
+                dependsOnValue: false
+            }
+        ],
+        // Only add dependency if it's not the default agent
+            ...(isDefaultAgent ? {} : { dependsOn: 'useCustomToolSettings', dependsOnValue: true }),
+            actions: [
+                {
+                    id: 'agent-refresh-tools',
+                    label: 'Refresh Tools',
+                    onClick: () => {
+                        const mcpServerUrl = agent.modelSettings.mcpServer;
+                        if (mcpServerUrl) {
+                            appInstance.mcp.fetchToolsForUrl(mcpServerUrl);
+                        } else {
+                            alert('Please set an MCP Server URL first.');
+                        }
+                    }
+                }
+            ]
+    });
+
 
     const onSettingChanged = (path, value) => {
         agentManager.updateAgentProperty(agentId, path, value);
@@ -347,12 +410,15 @@ function populateAgentSelector() {
     const currentChatId = appInstance.activeChatId;
     const activeAgentId = currentChatId ? agentManager.getActiveAgentForChat(currentChatId) : null;
 
-    selector.innerHTML = '<option value="">Default AI</option>';
+    selector.innerHTML = ''; // Clear existing options
     agentManager.agents.forEach(agent => {
         const option = document.createElement('option');
         option.value = agent.id;
         option.textContent = agent.name;
-        if (agent.id === activeAgentId) {
+        // The default agent is selected if no specific agent is active for the chat.
+        if (agent.id === DEFAULT_AGENT_ID && !activeAgentId) {
+            option.selected = true;
+        } else if (agent.id === activeAgentId) {
             option.selected = true;
         }
         selector.appendChild(option);
@@ -379,6 +445,18 @@ const agentsPlugin = {
         appInstance = app;
         pluginManager.registerView('agent-editor', renderAgentEditor);
         app.agentManager = agentManager;
+
+        // Add a listener to refresh the editor UI when tools are updated
+        document.body.addEventListener('mcp-tools-updated', (e) => {
+            if (appInstance.activeView.type === 'agent-editor') {
+                const agent = agentManager.getAgent(appInstance.activeView.id);
+                // Check if the updated URL matches the current agent's URL
+                if (agent && agent.modelSettings.mcpServer === e.detail.url) {
+                    console.log('Refreshing agent editor due to tool update...');
+                    initializeAgentEditor();
+                }
+            }
+        });
     },
 
     /**
@@ -460,7 +538,8 @@ const agentsPlugin = {
             newSelector.addEventListener('change', (e) => {
                 const selectedAgentId = e.target.value;
                 if (appInstance.activeChatId) {
-                    agentManager.setActiveAgentForChat(appInstance.activeChatId, selectedAgentId || null);
+                    const agentIdToSet = selectedAgentId === DEFAULT_AGENT_ID ? null : selectedAgentId;
+                    agentManager.setActiveAgentForChat(appInstance.activeChatId, agentIdToSet);
                 }
             });
         }

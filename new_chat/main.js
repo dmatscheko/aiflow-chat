@@ -82,9 +82,6 @@ class App {
         /** @type {Tab[]} */
         this.tabs = [];
         /** @type {Object.<string, any>} */
-        this.currentSettings = {}; // Managed by SettingsManager, but app needs a reference
-        /** @type {Setting[]} */
-        this.settings = []; // Definitions managed by SettingsManager
         /** @type {SettingsManager} */
         this.settingsManager = null;
 
@@ -94,15 +91,6 @@ class App {
 
         // --- Settings Management ---
         this.settingsManager = new SettingsManager(this);
-        this.settingsManager.load();
-        const coreSettings = [
-            { id: 'apiUrl', label: 'API URL', type: 'text', default: '', placeholder: 'e.g. https://api.someai.com/', required: true },
-            { id: 'apiKey', label: 'API Key', type: 'password', default: '' },
-            { id: 'model', label: 'Model', type: 'select', options: [], required: true },
-            { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.', required: true },
-            { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1 },
-        ];
-        this.settingsManager.define(coreSettings);
         // --- End Settings Management ---
 
         pluginManager.trigger('onAppInit', this);
@@ -156,13 +144,6 @@ class App {
                         this.deleteChat(target.parentElement.dataset.id);
                     }
                 });
-            }
-        }, {
-            id: 'settings',
-            label: 'Settings',
-            onActivate: () => {
-                const contentEl = document.getElementById('settings-pane');
-                this.settingsManager.render(contentEl);
             }
         }];
         this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
@@ -386,83 +367,6 @@ class App {
 
     getActiveChat() {
         return this.chats.find(c => c.id === this.activeChatId);
-    }
-
-    /**
-     * Gets the effective API and model configuration based on the active agent.
-     * If an agent is active and has custom model settings, they override the global settings.
-     * The API URL and key are handled specially: if the agent defines a custom API URL,
-     * only the agent's API key is used, even if it's empty.
-     * @param {string|null} [agentId=null] - The ID of a specific agent to check. If null, checks the active agent for the current chat.
-     * @returns {object} An object containing the effective settings (apiUrl, apiKey, model, temperature, etc.).
-     */
-    getEffectiveApiConfig(agentId = null) {
-        const baseConfig = { ...this.currentSettings };
-        const finalAgentId = agentId || this.agentManager?.getActiveAgentForChat(this.activeChatId);
-
-        if (!finalAgentId || !this.agentManager) {
-            return baseConfig;
-        }
-
-        const agent = this.agentManager.getAgent(finalAgentId);
-
-        if (agent && agent.useCustomModelSettings) {
-            const mergedConfig = { ...baseConfig, ...agent.modelSettings };
-
-            // If the agent does NOT have a custom URL, we must revert to the base URL and key.
-            // This prevents using the agent's key with the global URL.
-            if (!agent.modelSettings.apiUrl) {
-                mergedConfig.apiUrl = baseConfig.apiUrl;
-                mergedConfig.apiKey = baseConfig.apiKey;
-            }
-            // If the agent DOES have a custom URL, the merged config is already correct,
-            // as it will have the agent's apiUrl and apiKey (which could be undefined).
-
-            return mergedConfig;
-        }
-
-        return baseConfig;
-    }
-
-    async fetchModels(targetSelectElement = null, agentId = null) {
-        const effectiveConfig = this.getEffectiveApiConfig(agentId);
-        const { apiUrl, apiKey } = effectiveConfig;
-
-        if (!apiUrl) return;
-        try {
-            const models = await this.apiService.getModels(apiUrl, apiKey);
-            const modelSelect = targetSelectElement || document.getElementById('setting-model');
-            if (!modelSelect) return;
-
-            const currentModelValue = modelSelect.value;
-            modelSelect.innerHTML = '';
-            models.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model.id;
-                option.textContent = model.id;
-                modelSelect.appendChild(option);
-            });
-
-            let optionToSelect = Array.from(modelSelect.options).find(opt => opt.value === currentModelValue);
-            if (!optionToSelect && currentModelValue) {
-                const newOption = document.createElement('option');
-                newOption.value = currentModelValue;
-                newOption.textContent = `${currentModelValue} (saved)`;
-                modelSelect.appendChild(newOption);
-                optionToSelect = newOption;
-            }
-
-            // After repopulating, try to set the correct value
-            if (optionToSelect) {
-                optionToSelect.selected = true;
-            } else if (effectiveConfig.model && Array.from(modelSelect.options).some(opt => opt.value === effectiveConfig.model)) {
-                // If the config's model exists in the new list, select it
-                modelSelect.value = effectiveConfig.model;
-            }
-
-        } catch (error) {
-            alert(`Failed to fetch models: ${error.message}`);
-        }
     }
 
     /**
