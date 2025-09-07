@@ -336,7 +336,7 @@ class App {
             log: new ChatLog(),
         };
         newChat.log.subscribe(this.debouncedSave);
-        this.chats.unshift(newChat);
+        this.chats.push(newChat);
         this.renderChatList();
         this.setView('chat', newChat.id);
         this.saveChats();
