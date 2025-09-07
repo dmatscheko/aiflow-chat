@@ -22,16 +22,6 @@
       "run",
       "../_mcp_servers/filesystem_read-mcp/filesystem_read-mcp.py",
       "--",
-      "./_mcp_filesystem/read_write"
-    ]
-  },
-  "filesystem-write": {
-    "command": "uvx",
-    "args": [
-      "fastmcp",
-      "run",
-      "../_mcp_servers/filesystem_write-mcp/filesystem_write-mcp.py",
-      "--",
       "../_mcp_filesystem/read_write"
     ]
   },

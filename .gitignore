@@ -1,8 +1,7 @@
-/_test/
+.venv/
+uv.lock
+__pycache__/
 
-/.venv/
-/uv.lock
+_test/
 
 .DS_Store
-
-__pycache__/

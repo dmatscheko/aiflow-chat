@@ -170,8 +170,6 @@ async function sendMcpRequest(url, method, params, isNotification = false, retur
 
         // Clone the response so we can read the body twice if needed
         const clonedResp = resp.clone();
-        const rawText = await clonedResp.text();
-        console.log(`DEBUG: Raw response from ${url} for method ${method}:`, rawText);
 
         try {
             // First, optimistically try to parse as JSON
