@@ -161,7 +161,7 @@ h2 {
 #chat-list .delete-chat-button:hover {
     opacity: 1;
 }
-#new-chat-button {
+.add-new-button {
     margin-top: 1rem;
 }
 

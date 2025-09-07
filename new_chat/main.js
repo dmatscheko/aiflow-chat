@@ -141,7 +141,7 @@ class App {
                 const contentEl = document.getElementById('chats-pane');
                 contentEl.innerHTML = `
                     <ul id="chat-list"></ul>
-                    <button id="new-chat-button">New Chat</button>
+                    <button id="new-chat-button" class="add-new-button">New Chat</button>
                 `;
                 this.renderChatList();
                 document.getElementById('new-chat-button').addEventListener('click', () => this.createNewChat());
