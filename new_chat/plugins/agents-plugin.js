@@ -392,7 +392,7 @@ function renderAgentEditor(agentId) {
  * It builds the settings definition and uses createSettingsUI to render the form.
  * @private
  */
-function initializeAgentEditor() {
+async function initializeAgentEditor() {
     const editorView = document.getElementById('agent-editor-view');
     if (!editorView || !editorView.dataset.agentId) return;
 
@@ -422,20 +422,8 @@ function initializeAgentEditor() {
     console.log(`DEBUG: Effective MCP URL for ${agentId}: '${mcpServerUrl}'`);
 
     // Get tools from cache, or fetch if not available for a valid URL
-    let tools = [];
-    if (mcpServerUrl && appInstance.mcp) {
-        const cachedTools = appInstance.mcp.getToolsForUrl(mcpServerUrl);
-        // A non-empty array in the cache means we have successfully fetched before.
-        // An undefined value means we haven't tried yet.
-        if (cachedTools) {
-            tools = cachedTools;
-        } else {
-            // URL is present, but no tools in cache. Fetch them.
-            // The UI will be updated by the 'mcp-tools-updated' event listener.
-            appInstance.mcp.fetchToolsForUrl(mcpServerUrl);
-        }
-    }
-    console.log(`DEBUG: Tools found for URL '${mcpServerUrl}':`, tools.length);
+    const tools = await appInstance.mcp.getTools(mcpServerUrl);
+    console.log(`DEBUG: Tools now found for URL '${mcpServerUrl}':`, tools.length);
 
     /** @type {Setting[]} */
     let settingsDefinition = [];

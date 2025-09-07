@@ -39,6 +39,23 @@ let appInstance = null;
 // --- Helper Functions ---
 
 /**
+ * Gets tools for a URL, fetching them from the network if they are not already cached.
+ * This is the primary method consumers should use to get tools.
+ * @param {string} url The MCP server URL.
+ * @returns {Promise<ToolSchema[]>} A promise that resolves to the list of tools.
+ */
+async function getOrFetchTools(url) {
+    if (!url) return [];
+    // Check cache. A result of 'undefined' means we haven't fetched for this URL yet.
+    const cachedTools = mcpToolCache.get(url);
+    if (cachedTools !== undefined) {
+        return cachedTools;
+    }
+    // Not in cache, so fetch, which will also populate the cache.
+    return await fetchToolsForUrl(url);
+}
+
+/**
  * Fetches the tool list for a given MCP server URL and updates the cache.
  * @param {string} url - The MCP server URL to fetch tools from.
  * @returns {Promise<ToolSchema[]>}
@@ -211,22 +228,26 @@ async function sendMcpRequest(url, method, params, isNotification = false, retur
 
 /**
  * Plugin for integrating with an MCP (Model Context Protocol) server.
- * @type {import('../plugin-manager.js').Plugin & {getToolsForUrl: (url: string) => ToolSchema[], fetchToolsForUrl: (url: string) => Promise<ToolSchema[]>}}
+ * @type {import('../plugin-manager.js').Plugin & {getToolsForUrl: (url: string) => ToolSchema[], fetchToolsForUrl: (url: string) => Promise<ToolSchema[]>, getTools: (url: string) => Promise<ToolSchema[]>}}
  */
 const mcpPlugin = {
     name: 'MCP',
-    getToolsForUrl: (url) => mcpToolCache.get(url) || [],
+    getToolsForUrl: (url) => mcpToolCache.get(url),
     fetchToolsForUrl,
+    getTools: getOrFetchTools,
 
     onAppInit(app) {
         appInstance = app;
         app.mcp = {
             getToolsForUrl: mcpPlugin.getToolsForUrl,
             fetchToolsForUrl: mcpPlugin.fetchToolsForUrl,
+            getTools: mcpPlugin.getTools,
         };
         // On startup, pre-fetch tools for the default agent.
         const { mcpServer: mcpUrl } = appInstance.agentManager.getEffectiveApiConfig('agent-default');
         if (mcpUrl) {
+            // We use fetch directly here because we don't need the return value,
+            // and we don't want to block app init.
             fetchToolsForUrl(mcpUrl);
         }
     },
