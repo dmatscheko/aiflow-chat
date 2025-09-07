@@ -236,11 +236,84 @@ class AgentManager {
         }
         this._saveChatAgentMap();
     }
+
+    /**
+     * Gets the effective API and model configuration for a given agent.
+     * If the agent doesn't have custom settings, it falls back to the Default Agent.
+     * @param {string|null} [agentId=null] - The ID of the agent. If null, uses the active agent for the current chat.
+     * @returns {object} An object containing the effective settings.
+     */
+    getEffectiveApiConfig(agentId = null) {
+        const finalAgentId = agentId || this.getActiveAgentForChat(appInstance.activeChatId);
+        const agent = this.getAgent(finalAgentId);
+        const defaultAgent = this.getAgent(DEFAULT_AGENT_ID);
+
+        // Start with the default agent's settings
+        const baseConfig = defaultAgent.modelSettings || {};
+
+        // If a specific agent is active and uses custom settings, merge them
+        if (agent && agent.id !== DEFAULT_AGENT_ID && agent.useCustomModelSettings) {
+            const agentConfig = agent.modelSettings || {};
+            const mergedConfig = { ...baseConfig, ...agentConfig };
+
+            // If the agent does NOT have a custom URL, we must revert to the base URL and key.
+            if (!agentConfig.apiUrl) {
+                mergedConfig.apiUrl = baseConfig.apiUrl;
+                mergedConfig.apiKey = baseConfig.apiKey;
+            }
+            return mergedConfig;
+        }
+
+        return baseConfig;
+    }
 }
 
 const agentManager = new AgentManager();
 /** @type {import('../main.js').App | null} */
 let appInstance = null;
+/** @type {Map<string, {id: string}[]>} */
+const modelCache = new Map();
+
+async function fetchModels(agentId = null, targetSelectElement = null) {
+    const effectiveConfig = agentManager.getEffectiveApiConfig(agentId);
+    const { apiUrl, apiKey, model: currentModelValue } = effectiveConfig;
+
+    if (!apiUrl) {
+        console.warn("Cannot fetch models without an API URL.");
+        return;
+    }
+
+    const populateSelect = (models) => {
+        const modelSelect = targetSelectElement || document.querySelector(`#agent-${agentId}-modelSettings-model`);
+        if (!modelSelect) return;
+
+        modelSelect.innerHTML = '';
+        models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.id;
+            modelSelect.appendChild(option);
+        });
+
+        // Try to re-select the agent's current model
+        if (currentModelValue && models.some(m => m.id === currentModelValue)) {
+            modelSelect.value = currentModelValue;
+        }
+    };
+
+    if (modelCache.has(apiUrl)) {
+        populateSelect(modelCache.get(apiUrl));
+        return;
+    }
+
+    try {
+        const models = await appInstance.apiService.getModels(apiUrl, apiKey);
+        modelCache.set(apiUrl, models);
+        populateSelect(models);
+    } catch (error) {
+        alert(`Failed to fetch models: ${error.message}`);
+    }
+}
 
 /**
  * Highlights the currently active agent in the list.
@@ -317,7 +390,13 @@ function initializeAgentEditor() {
     const modelSettingDefs = [
         { id: 'apiUrl', label: 'API URL', type: 'text', placeholder: 'e.g. https://api.someai.com/' },
         { id: 'apiKey', label: 'API Key', type: 'password' },
-        { id: 'model', label: 'Model', type: 'select', options: [] },
+        {
+            id: 'model', label: 'Model', type: 'select', options: [], actions: [{
+                id: 'agent-refresh-models',
+                label: 'Refresh',
+                onClick: (e, modelInput) => fetchModels(agentId, modelInput)
+            }]
+        },
         { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1 },
         { id: 'mcpServer', label: 'MCP Server URL', type: 'text', placeholder: 'e.g. http://localhost:3000/mcp' },
     ];
@@ -397,6 +476,9 @@ function initializeAgentEditor() {
 
     editorView.innerHTML = `<h2>Edit Agent</h2>`;
     editorView.appendChild(settingsFragment);
+
+    // Fetch models for the current agent when the editor is opened.
+    fetchModels(agentId);
 }
 
 /**
@@ -445,6 +527,9 @@ const agentsPlugin = {
         appInstance = app;
         pluginManager.registerView('agent-editor', renderAgentEditor);
         app.agentManager = agentManager;
+
+        // Pre-fetch models for the default agent on startup
+        fetchModels(DEFAULT_AGENT_ID);
 
         // Add a listener to refresh the editor UI when tools are updated
         document.body.addEventListener('mcp-tools-updated', (e) => {

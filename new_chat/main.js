@@ -104,7 +104,6 @@ class App {
         this.renderMainView();
 
         this.initEventListeners();
-        this.fetchModels();
     }
 
     registerCoreViews() {
