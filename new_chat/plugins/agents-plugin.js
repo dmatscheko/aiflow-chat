@@ -238,8 +238,8 @@ class AgentManager {
     }
 
     /**
-     * Gets the effective API and model configuration for a given agent.
-     * If the agent doesn't have custom settings, it falls back to the Default Agent.
+     * Gets the effective combined configuration for a given agent.
+     * It merges model and tool settings, and handles fallbacks to the Default Agent.
      * @param {string|null} [agentId=null] - The ID of the agent. If null, uses the active agent for the current chat.
      * @returns {object} An object containing the effective settings.
      */
@@ -248,23 +248,39 @@ class AgentManager {
         const agent = this.getAgent(finalAgentId);
         const defaultAgent = this.getAgent(DEFAULT_AGENT_ID);
 
-        // Start with the default agent's settings
-        const baseConfig = defaultAgent.modelSettings || {};
-
-        // If a specific agent is active and uses custom settings, merge them
-        if (agent && agent.id !== DEFAULT_AGENT_ID && agent.useCustomModelSettings) {
-            const agentConfig = agent.modelSettings || {};
-            const mergedConfig = { ...baseConfig, ...agentConfig };
-
-            // If the agent does NOT have a custom URL, we must revert to the base URL and key.
-            if (!agentConfig.apiUrl) {
-                mergedConfig.apiUrl = baseConfig.apiUrl;
-                mergedConfig.apiKey = baseConfig.apiKey;
-            }
-            return mergedConfig;
+        if (!defaultAgent) {
+            console.error("Default Agent not found!");
+            return {};
         }
 
-        return baseConfig;
+        // Start with the default agent's settings
+        const baseModelConfig = defaultAgent.modelSettings || {};
+        const baseToolConfig = defaultAgent.toolSettings || {};
+        let finalModelConfig = baseModelConfig;
+        let finalToolConfig = baseToolConfig;
+
+        // If a specific agent is active, check for overrides
+        if (agent && agent.id !== DEFAULT_AGENT_ID) {
+            if (agent.useCustomModelSettings) {
+                finalModelConfig = { ...baseModelConfig, ...(agent.modelSettings || {}) };
+                // If the agent provides a custom model config but no custom API URL,
+                // it should still use the base API URL and key.
+                if (!agent.modelSettings?.apiUrl) {
+                    finalModelConfig.apiUrl = baseModelConfig.apiUrl;
+                    finalModelConfig.apiKey = baseModelConfig.apiKey;
+                }
+            }
+            if (agent.useCustomToolSettings) {
+                finalToolConfig = { ...baseToolConfig, ...(agent.toolSettings || {}) };
+            }
+        }
+
+        // Combine the effective model and tool settings
+        return {
+            ...finalModelConfig,
+            mcpServer: finalToolConfig.mcpServer,
+            // We can add other tool settings here if needed in the future
+        };
     }
 }
 
@@ -385,6 +401,7 @@ function initializeAgentEditor() {
     if (!agent) return;
 
     const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
+    console.log(`DEBUG: Initializing editor for agentId: ${agentId}, isDefault: ${isDefaultAgent}`);
 
     // Define the settings structure locally, as global settings are deprecated.
     const modelSettingDefs = [
@@ -402,7 +419,10 @@ function initializeAgentEditor() {
 
     const effectiveConfig = agentManager.getEffectiveApiConfig(agent.id);
     const mcpServerUrl = effectiveConfig.mcpServer;
+    console.log(`DEBUG: Effective MCP URL for ${agentId}: '${mcpServerUrl}'`);
+
     const tools = appInstance?.mcp?.getToolsForUrl(mcpServerUrl) || [];
+    console.log(`DEBUG: Tools found for URL '${mcpServerUrl}':`, tools.length);
 
     /** @type {Setting[]} */
     let settingsDefinition = [];

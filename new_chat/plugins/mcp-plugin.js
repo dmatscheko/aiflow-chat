@@ -72,6 +72,7 @@ function getEffectiveMcpConfig(agent) {
  * @returns {Promise<ToolSchema[]>}
  */
 async function fetchToolsForUrl(url) {
+    console.log(`DEBUG: fetchToolsForUrl called with url: '${url}'`);
     if (!url) {
         mcpToolCache.set(url, []);
         return [];
@@ -79,9 +80,9 @@ async function fetchToolsForUrl(url) {
     console.log('MCP: Fetching tools from', url);
     try {
         const response = await mcpJsonRpc(url, 'tools/list');
-        const tools = Array.isArray(response.tools) ? response.tools : [];
+        const tools = Array.isArray(response?.tools) ? response.tools : [];
         mcpToolCache.set(url, tools);
-        console.log(`MCP: Tools fetched successfully for ${url}.`);
+        console.log(`DEBUG: Successfully fetched and cached ${tools.length} tools for ${url}.`);
         // Trigger a UI update for any visible agent editor that uses this URL
         document.body.dispatchEvent(new CustomEvent('mcp-tools-updated', { detail: { url } }));
         return tools;
@@ -197,6 +198,8 @@ async function sendMcpRequest(url, method, params, isNotification = false, retur
 
         // Clone the response so we can read the body twice if needed
         const clonedResp = resp.clone();
+        const rawText = await clonedResp.text();
+        console.log(`DEBUG: Raw response from ${url} for method ${method}:`, rawText);
 
         try {
             // First, optimistically try to parse as JSON
