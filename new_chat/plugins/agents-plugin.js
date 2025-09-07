@@ -244,7 +244,7 @@ class AgentManager {
      * @returns {object} An object containing the effective settings.
      */
     getEffectiveApiConfig(agentId = null) {
-        const finalAgentId = agentId || this.getActiveAgentForChat(appInstance.activeChatId);
+        const finalAgentId = agentId || this.getActiveAgentForChat(appInstance.activeChatId) || DEFAULT_AGENT_ID;
         const agent = this.getAgent(finalAgentId);
         const defaultAgent = this.getAgent(DEFAULT_AGENT_ID);
 
@@ -253,33 +253,29 @@ class AgentManager {
             return {};
         }
 
-        // Start with the default agent's settings
-        const baseModelConfig = defaultAgent.modelSettings || {};
-        const baseToolConfig = defaultAgent.toolSettings || {};
-        let finalModelConfig = baseModelConfig;
-        let finalToolConfig = baseToolConfig;
+        // Start with default settings as the base
+        let effectiveModelSettings = { ...(defaultAgent.modelSettings || {}) };
+        let effectiveToolSettings = { ...(defaultAgent.toolSettings || {}) };
 
-        // If a specific agent is active, check for overrides
+        // If we're looking at a specific, non-default agent, layer its settings on top
         if (agent && agent.id !== DEFAULT_AGENT_ID) {
             if (agent.useCustomModelSettings) {
-                finalModelConfig = { ...baseModelConfig, ...(agent.modelSettings || {}) };
-                // If the agent provides a custom model config but no custom API URL,
-                // it should still use the base API URL and key.
+                effectiveModelSettings = { ...effectiveModelSettings, ...(agent.modelSettings || {}) };
+                // Handle API URL fallback
                 if (!agent.modelSettings?.apiUrl) {
-                    finalModelConfig.apiUrl = baseModelConfig.apiUrl;
-                    finalModelConfig.apiKey = baseModelConfig.apiKey;
+                    effectiveModelSettings.apiUrl = defaultAgent.modelSettings.apiUrl;
+                    effectiveModelSettings.apiKey = defaultAgent.modelSettings.apiKey;
                 }
             }
             if (agent.useCustomToolSettings) {
-                finalToolConfig = { ...baseToolConfig, ...(agent.toolSettings || {}) };
+                effectiveToolSettings = { ...effectiveToolSettings, ...(agent.toolSettings || {}) };
             }
         }
 
-        // Combine the effective model and tool settings
+        // Return the combined effective settings
         return {
-            ...finalModelConfig,
-            mcpServer: finalToolConfig.mcpServer,
-            // We can add other tool settings here if needed in the future
+            ...effectiveModelSettings,
+            ...effectiveToolSettings
         };
     }
 }
