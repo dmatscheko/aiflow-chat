@@ -398,7 +398,6 @@ function initializeAgentEditor() {
             }]
         },
         { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1 },
-        { id: 'mcpServer', label: 'MCP Server URL', type: 'text', placeholder: 'e.g. http://localhost:3000/mcp' },
     ];
 
     const effectiveConfig = agentManager.getEffectiveApiConfig(agent.id);
@@ -406,11 +405,17 @@ function initializeAgentEditor() {
     const tools = appInstance?.mcp?.getToolsForUrl(mcpServerUrl) || [];
 
     /** @type {Setting[]} */
-    let settingsDefinition = [
-        { id: 'name', label: 'Name', type: 'text', required: true, readonly: isDefaultAgent },
+    let settingsDefinition = [];
+
+    if (!isDefaultAgent) {
+        settingsDefinition.push({ id: 'name', label: 'Name', type: 'text', required: true });
+    }
+
+    settingsDefinition.push(
         { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', required: true },
-        { type: 'divider' },
-    ];
+        { type: 'divider' }
+    );
+
 
     // --- Conditional Model Settings ---
     if (!isDefaultAgent) {
@@ -435,6 +440,7 @@ function initializeAgentEditor() {
         type: 'fieldset',
         label: 'Tool Settings',
         children: [
+            { id: 'mcpServer', label: 'MCP Server URL', type: 'text', placeholder: 'e.g. http://localhost:3000/mcp' },
             { id: 'allowAll', label: 'Allow all available tools', type: 'checkbox' },
             {
                 id: 'allowed',

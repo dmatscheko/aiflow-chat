@@ -363,7 +363,9 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
     // Only process dependencies at the top-level call, after the whole fragment is built.
     if (isTopLevel) {
         dependencyMap.forEach((dependents, controllerId) => {
-            const controllerElement = fragment.querySelector(`#${controllerId}`);
+            // The controller might not be in the fragment if it's in a different part of a complex form,
+            // so we check the whole document as a fallback.
+            const controllerElement = fragment.querySelector(`#${controllerId}`) || document.querySelector(`#${controllerId}`);
             if (controllerElement) {
                 const updateDependents = () => {
                     const currentValue = controllerElement.type === 'checkbox' ? controllerElement.checked : controllerElement.value;
