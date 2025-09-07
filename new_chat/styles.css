@@ -151,16 +151,6 @@ h2 {
     flex-grow: 1;
     overflow-y: auto;
 }
-#chat-list .delete-chat-button {
-    background: none;
-    border: none;
-    color: var(--text-color);
-    cursor: pointer;
-    opacity: 0.5;
-}
-#chat-list .delete-chat-button:hover {
-    opacity: 1;
-}
 .add-new-button {
     margin-top: 1rem;
 }
@@ -331,19 +321,16 @@ button:hover {
     cursor: pointer;
 }
 
-/* Style delete buttons for consistency */
-.delete-agent-btn, .delete-flow-btn {
+/* Unified style for all delete buttons in lists */
+.list-item .delete-button {
     background: none;
     border: none;
     color: var(--text-color);
     cursor: pointer;
     opacity: 0.5;
-    font-size: 1.2rem;
-    line-height: 1;
-    padding: 0 0.25rem;
 }
 
-.delete-agent-btn:hover, .delete-flow-btn:hover {
+.list-item .delete-button:hover {
     opacity: 1;
 }
 

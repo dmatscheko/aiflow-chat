@@ -150,7 +150,7 @@ class App {
                     if (target.closest('li')) {
                         this.setView('chat', target.closest('li').dataset.id);
                     }
-                    if (target.classList.contains('delete-chat-button')) {
+                    if (target.classList.contains('delete-button')) {
                         e.stopPropagation();
                         this.deleteChat(target.parentElement.dataset.id);
                     }
@@ -361,8 +361,9 @@ class App {
         chatListEl.innerHTML = '';
         this.chats.forEach(chat => {
             const li = document.createElement('li');
+            li.className = 'list-item';
             li.dataset.id = chat.id;
-            li.innerHTML = `<span>${chat.title}</span><button class="delete-chat-button">X</button>`;
+            li.innerHTML = `<span>${chat.title}</span><button class="delete-button">X</button>`;
             chatListEl.appendChild(li);
         });
         this.updateActiveChatInList();
