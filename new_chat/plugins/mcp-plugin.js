@@ -185,12 +185,14 @@ async function sendMcpRequest(url, method, params, isNotification = false, retur
 
         if (isNotification) return null;
 
-        const rawText = await resp.text();
+        // Clone the response so we can read the body twice if needed
+        const clonedResp = resp.clone();
+        const rawText = await clonedResp.text();
         console.log(`DEBUG: Raw response from ${url} for method ${method}:`, rawText);
 
         try {
-            // First, try to parse as JSON
-            const data = JSON.parse(rawText);
+            // First, optimistically try to parse as JSON
+            const data = await resp.json();
             if (data.error) throw new Error(data.error.message || 'MCP call failed');
             return data.result;
         } catch (error) {
@@ -252,13 +254,13 @@ const mcpPlugin = {
         }
     },
 
-    beforeApiCall(payload, allSettings, agent) {
+    async beforeApiCall(payload, allSettings, agent) {
         // The agent object is passed directly to this hook. Use its ID.
         const effectiveConfig = appInstance.agentManager.getEffectiveApiConfig(agent?.id);
         const mcpUrl = effectiveConfig.mcpServer;
-        const tools = mcpUrl ? mcpToolCache.get(mcpUrl) || [] : [];
+        const tools = await appInstance.mcp.getTools(mcpUrl);
 
-        if (!mcpUrl || tools.length === 0) {
+        if (!mcpUrl || !tools || tools.length === 0) {
             return payload;
         }
 
@@ -277,7 +279,7 @@ const mcpPlugin = {
         const agentId = message.agent || null;
         const effectiveConfig = appInstance.agentManager.getEffectiveApiConfig(agentId);
         const mcpUrl = effectiveConfig.mcpServer;
-        const tools = mcpUrl ? mcpToolCache.get(mcpUrl) || [] : [];
+        const tools = await appInstance.mcp.getTools(mcpUrl);
 
         if (!mcpUrl || !tools || tools.length === 0) return;
 
