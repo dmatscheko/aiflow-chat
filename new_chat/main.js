@@ -235,13 +235,15 @@ class App {
         if (tabBtn) tabBtn.classList.add('active');
         if (tabPane) tabPane.classList.add('active');
 
-        // Now, decide what content to show
-        const lastActiveId = tab.viewType ? this.lastActiveIds[tab.viewType] : null;
+        // Always call onActivate to ensure the pane's HTML is created.
+        if (tab.onActivate) {
+            tab.onActivate();
+        }
 
+        // Then, if a last active view exists for this tab's type, restore it.
+        const lastActiveId = tab.viewType ? this.lastActiveIds[tab.viewType] : null;
         if (lastActiveId) {
             this.setView(tab.viewType, lastActiveId);
-        } else if (tab.onActivate) {
-            tab.onActivate();
         }
     }
 
@@ -293,6 +295,7 @@ class App {
                 return chat;
             });
             this.activeChatId = localStorage.getItem('core_active_chat_id') || this.chats[0].id;
+            this.renderChatList();
         } else {
             this.createNewChat();
         }
