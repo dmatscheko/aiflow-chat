@@ -396,6 +396,21 @@ let activeFlowRunner = null;
 
 // --- UI Rendering ---
 /**
+ * Highlights the currently active flow in the list.
+ * @private
+ */
+function updateActiveFlowInList() {
+    const flowListEl = document.getElementById('flow-list');
+    if (!flowListEl || !appInstance) return;
+
+    const activeFlowId = appInstance.activeView.type === 'flow-editor' ? appInstance.activeView.id : null;
+
+    flowListEl.querySelectorAll('li').forEach(item => {
+        item.classList.toggle('active', item.dataset.id === activeFlowId);
+    });
+}
+
+/**
  * Renders the list of flows in the 'Flows' tab.
  * @private
  */
@@ -405,11 +420,12 @@ function renderFlowList() {
     listEl.innerHTML = '';
     flowManager.flows.forEach(flow => {
         const li = document.createElement('li');
-        li.className = 'flow-list-item';
+        li.className = 'list-item';
         li.dataset.id = flow.id;
-        li.innerHTML = `<span>${flow.name}</span><button class="delete-flow-btn">X</button>`;
+        li.innerHTML = `<span>${flow.name}</span><button class="delete-button">X</button>`;
         listEl.appendChild(li);
     });
+    updateActiveFlowInList();
 }
 
 /**
@@ -674,15 +690,23 @@ const flowsPlugin = {
     },
     onTabsRegistered(tabs) {
         tabs.push({
-            id: 'flows', label: 'Flows', onActivate: () => {
+            id: 'flows',
+            label: 'Flows',
+            viewType: 'flow-editor',
+            onActivate: () => {
                 const contentEl = document.getElementById('flows-pane');
-                contentEl.innerHTML = `<div class="pane-header"><h3>Flows</h3><button id="add-flow-btn" class="primary-btn">Add New Flow</button></div><ul id="flow-list"></ul>`;
+                contentEl.innerHTML = `
+                    <div class="list-pane">
+                        <ul id="flow-list" class="item-list"></ul>
+                        <button id="add-flow-btn" class="add-new-button">Add New Flow</button>
+                    </div>
+                `;
                 renderFlowList();
                 document.getElementById('add-flow-btn').addEventListener('click', () => { const name = prompt('Enter a name for the new flow:'); if (name) { flowManager.addFlow({ name, steps: [], connections: [] }); renderFlowList(); } });
                 document.getElementById('flow-list').addEventListener('click', (e) => {
-                    const item = e.target.closest('.flow-list-item'); if (!item) return;
+                    const item = e.target.closest('.list-item'); if (!item) return;
                     const id = item.dataset.id;
-                    if (e.target.classList.contains('delete-flow-btn')) {
+                    if (e.target.classList.contains('delete-button')) {
                         e.stopPropagation();
                         if (confirm('Delete this flow?')) {
                             flowManager.deleteFlow(id);
@@ -751,6 +775,7 @@ const flowsPlugin = {
                 });
             }
         }
+        updateActiveFlowInList();
     },
     onResponseComplete(message, chat) { if (activeFlowRunner) activeFlowRunner.continue(); }
 };

@@ -137,7 +137,7 @@ class ResponseProcessor {
             // --- Get effective configuration using the new centralized method ---
             const agentId = assistantMsg.value.agent;
             const agent = agentId ? app.agentManager.getAgent(agentId) : null;
-            const effectiveConfig = app.getEffectiveApiConfig(agentId);
+            const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
 
             // Determine the system prompt (agent's prompt takes precedence)
             const systemPrompt = agent?.systemPrompt || effectiveConfig.systemPrompt;

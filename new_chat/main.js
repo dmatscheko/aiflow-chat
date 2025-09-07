@@ -44,6 +44,7 @@ import './plugins/formatting-plugin.js';
  * @typedef {object} Tab
  * @property {string} id - The unique identifier for the tab.
  * @property {string} label - The display label for the tab.
+ * @property {string} [viewType] - The associated view type to restore.
  * @property {() => void} onActivate - A function to call when the tab is activated.
  */
 
@@ -70,6 +71,8 @@ class App {
         this.abortController = null;
         /** @type {string | null} */
         this.activeChatId = null;
+        /** @type {Object.<string, string>} */
+        this.lastActiveIds = {};
         /** @type {ChatUI | null} */
         this.chatUI = null;
         /** @type {() => void} */
@@ -79,9 +82,6 @@ class App {
         /** @type {Tab[]} */
         this.tabs = [];
         /** @type {Object.<string, any>} */
-        this.currentSettings = {}; // Managed by SettingsManager, but app needs a reference
-        /** @type {Setting[]} */
-        this.settings = []; // Definitions managed by SettingsManager
         /** @type {SettingsManager} */
         this.settingsManager = null;
 
@@ -91,29 +91,19 @@ class App {
 
         // --- Settings Management ---
         this.settingsManager = new SettingsManager(this);
-        this.settingsManager.load();
-        const coreSettings = [
-            { id: 'apiUrl', label: 'API URL', type: 'text', default: '', placeholder: 'e.g. https://api.someai.com/', required: true },
-            { id: 'apiKey', label: 'API Key', type: 'password', default: '' },
-            { id: 'model', label: 'Model', type: 'select', options: [], required: true },
-            { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.', required: true },
-            { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1 },
-        ];
-        this.settingsManager.define(coreSettings);
         // --- End Settings Management ---
 
         pluginManager.trigger('onAppInit', this);
 
-        this.settingsManager.render();
         this.renderTabs();
 
+        this._loadLastActiveIds();
         this.loadChats();
 
         this.activeView.id = this.activeChatId;
         this.renderMainView();
 
         this.initEventListeners();
-        this.fetchModels();
     }
 
     registerCoreViews() {
@@ -132,11 +122,14 @@ class App {
         const coreTabs = [{
             id: 'chats',
             label: 'Chats',
+            viewType: 'chat',
             onActivate: () => {
                 const contentEl = document.getElementById('chats-pane');
                 contentEl.innerHTML = `
-                    <ul id="chat-list"></ul>
-                    <button id="new-chat-button">New Chat</button>
+                    <div class="list-pane">
+                        <ul id="chat-list" class="item-list"></ul>
+                        <button id="new-chat-button" class="add-new-button">New Chat</button>
+                    </div>
                 `;
                 this.renderChatList();
                 document.getElementById('new-chat-button').addEventListener('click', () => this.createNewChat());
@@ -145,7 +138,7 @@ class App {
                     if (target.closest('li')) {
                         this.setView('chat', target.closest('li').dataset.id);
                     }
-                    if (target.classList.contains('delete-chat-button')) {
+                    if (target.classList.contains('delete-button')) {
                         e.stopPropagation();
                         this.deleteChat(target.parentElement.dataset.id);
                     }
@@ -157,7 +150,6 @@ class App {
 
     initDOM() {
         this.dom = {
-            settingsContainer: document.getElementById('settings-container'),
             mainPanel: document.getElementById('main-panel'),
             panelTabs: document.getElementById('panel-tabs'),
             panelContent: document.getElementById('panel-content'),
@@ -186,8 +178,13 @@ class App {
 
     setView(type, id) {
         this.activeView = { type, id };
+        this.lastActiveIds[type] = id;
+        this._saveLastActiveIds();
+
         if (type === 'chat') {
             this.activeChatId = id;
+            // The active chat ID is also saved in saveChats, but we save here
+            // to ensure it's updated immediately on view change.
             localStorage.setItem('core_active_chat_id', this.activeChatId);
             this.updateActiveChatInList();
         }
@@ -216,14 +213,24 @@ class App {
         if (!tabId) return;
         const tab = this.tabs.find(t => t.id === tabId);
         if (!tab) return;
+
+        // Update button and pane visibility first
         this.dom.panelTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         this.dom.panelContent.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
         const tabBtn = document.getElementById(`tab-btn-${tabId}`);
         const tabPane = document.getElementById(`${tabId}-pane`);
         if (tabBtn) tabBtn.classList.add('active');
         if (tabPane) tabPane.classList.add('active');
+
+        // Always call onActivate to ensure the pane's HTML is created.
         if (tab.onActivate) {
             tab.onActivate();
+        }
+
+        // Then, if a last active view exists for this tab's type, restore it.
+        const lastActiveId = tab.viewType ? this.lastActiveIds[tab.viewType] : null;
+        if (lastActiveId) {
+            this.setView(tab.viewType, lastActiveId);
         }
     }
 
@@ -275,6 +282,7 @@ class App {
                 return chat;
             });
             this.activeChatId = localStorage.getItem('core_active_chat_id') || this.chats[0].id;
+            this.renderChatList();
         } else {
             this.createNewChat();
         }
@@ -290,6 +298,22 @@ class App {
         localStorage.setItem('core_active_chat_id', this.activeChatId);
     }
 
+    /** @private */
+    _loadLastActiveIds() {
+        try {
+            const ids = localStorage.getItem('core_last_active_ids');
+            this.lastActiveIds = ids ? JSON.parse(ids) : {};
+        } catch (e) {
+            console.error('Failed to load last active IDs:', e);
+            this.lastActiveIds = {};
+        }
+    }
+
+    /** @private */
+    _saveLastActiveIds() {
+        localStorage.setItem('core_last_active_ids', JSON.stringify(this.lastActiveIds));
+    }
+
     createNewChat() {
         const newChat = {
             id: `chat-${Date.now()}`,
@@ -297,7 +321,7 @@ class App {
             log: new ChatLog(),
         };
         newChat.log.subscribe(this.debouncedSave);
-        this.chats.unshift(newChat);
+        this.chats.push(newChat);
         this.renderChatList();
         this.setView('chat', newChat.id);
         this.saveChats();
@@ -324,8 +348,9 @@ class App {
         chatListEl.innerHTML = '';
         this.chats.forEach(chat => {
             const li = document.createElement('li');
+            li.className = 'list-item';
             li.dataset.id = chat.id;
-            li.innerHTML = `<span>${chat.title}</span><button class="delete-chat-button">X</button>`;
+            li.innerHTML = `<span>${chat.title}</span><button class="delete-button">X</button>`;
             chatListEl.appendChild(li);
         });
         this.updateActiveChatInList();
@@ -341,83 +366,6 @@ class App {
 
     getActiveChat() {
         return this.chats.find(c => c.id === this.activeChatId);
-    }
-
-    /**
-     * Gets the effective API and model configuration based on the active agent.
-     * If an agent is active and has custom model settings, they override the global settings.
-     * The API URL and key are handled specially: if the agent defines a custom API URL,
-     * only the agent's API key is used, even if it's empty.
-     * @param {string|null} [agentId=null] - The ID of a specific agent to check. If null, checks the active agent for the current chat.
-     * @returns {object} An object containing the effective settings (apiUrl, apiKey, model, temperature, etc.).
-     */
-    getEffectiveApiConfig(agentId = null) {
-        const baseConfig = { ...this.currentSettings };
-        const finalAgentId = agentId || this.agentManager?.getActiveAgentForChat(this.activeChatId);
-
-        if (!finalAgentId || !this.agentManager) {
-            return baseConfig;
-        }
-
-        const agent = this.agentManager.getAgent(finalAgentId);
-
-        if (agent && agent.useCustomModelSettings) {
-            const mergedConfig = { ...baseConfig, ...agent.modelSettings };
-
-            // If the agent does NOT have a custom URL, we must revert to the base URL and key.
-            // This prevents using the agent's key with the global URL.
-            if (!agent.modelSettings.apiUrl) {
-                mergedConfig.apiUrl = baseConfig.apiUrl;
-                mergedConfig.apiKey = baseConfig.apiKey;
-            }
-            // If the agent DOES have a custom URL, the merged config is already correct,
-            // as it will have the agent's apiUrl and apiKey (which could be undefined).
-
-            return mergedConfig;
-        }
-
-        return baseConfig;
-    }
-
-    async fetchModels(targetSelectElement = null, agentId = null) {
-        const effectiveConfig = this.getEffectiveApiConfig(agentId);
-        const { apiUrl, apiKey } = effectiveConfig;
-
-        if (!apiUrl) return;
-        try {
-            const models = await this.apiService.getModels(apiUrl, apiKey);
-            const modelSelect = targetSelectElement || document.getElementById('setting-model');
-            if (!modelSelect) return;
-
-            const currentModelValue = modelSelect.value;
-            modelSelect.innerHTML = '';
-            models.forEach(model => {
-                const option = document.createElement('option');
-                option.value = model.id;
-                option.textContent = model.id;
-                modelSelect.appendChild(option);
-            });
-
-            let optionToSelect = Array.from(modelSelect.options).find(opt => opt.value === currentModelValue);
-            if (!optionToSelect && currentModelValue) {
-                const newOption = document.createElement('option');
-                newOption.value = currentModelValue;
-                newOption.textContent = `${currentModelValue} (saved)`;
-                modelSelect.appendChild(newOption);
-                optionToSelect = newOption;
-            }
-
-            // After repopulating, try to set the correct value
-            if (optionToSelect) {
-                optionToSelect.selected = true;
-            } else if (effectiveConfig.model && Array.from(modelSelect.options).some(opt => opt.value === effectiveConfig.model)) {
-                // If the config's model exists in the new list, select it
-                modelSelect.value = effectiveConfig.model;
-            }
-
-        } catch (error) {
-            alert(`Failed to fetch models: ${error.message}`);
-        }
     }
 
     /**

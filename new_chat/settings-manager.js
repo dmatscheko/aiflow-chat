@@ -54,131 +54,6 @@ export class SettingsManager {
     constructor(app) {
         /** @type {App} */
         this.app = app;
-        /** @private */
-        this.container = app.dom.settingsContainer;
-        /** @type {Setting[]} */
-        this.settings = [];
-        /** @type {Object.<string, any>} */
-        this.currentValues = {};
-    }
-
-    /**
-     * Loads settings from localStorage and applies them to the app.
-     */
-    load() {
-        this.currentValues = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
-        this.app.currentSettings = this.currentValues;
-    }
-
-    /**
-     * Saves the current settings to localStorage.
-     */
-    save() {
-        localStorage.setItem('core_chat_settings', JSON.stringify(this.currentValues));
-    }
-
-    /**
-     * Defines the settings structure, including core and plugin-registered settings.
-     * @param {Setting[]} coreSettings - The base settings of the application.
-     */
-    define(coreSettings) {
-        this.settings = pluginManager.trigger('onSettingsRegistered', coreSettings);
-        this.app.settings = this.settings;
-    }
-
-    /**
-     * Renders the entire settings UI, including main and tool settings.
-     */
-    render() {
-        this.container.innerHTML = ''; // Clear previous content
-
-        const onSettingChange = (id, newValue) => {
-            this.currentValues[id] = newValue;
-            this.save();
-            this.app.currentSettings = this.currentValues; // Keep app's copy in sync
-
-            document.body.dispatchEvent(new CustomEvent('setting-changed', {
-                detail: { id, newValue }
-            }));
-
-            if (id === 'apiUrl' || id === 'apiKey') {
-                this.app.fetchModels();
-            }
-        };
-
-        const settingsFragment = createSettingsUI(
-            this.settings,
-            this.currentValues,
-            onSettingChange,
-            'setting-',
-            'main-settings'
-        );
-        this.container.appendChild(settingsFragment);
-
-        const modelSettingEl = this.container.querySelector('#setting-model');
-        if (modelSettingEl) {
-            const refreshBtn = document.createElement('button');
-            refreshBtn.id = 'refresh-models';
-            refreshBtn.textContent = 'Refresh';
-            refreshBtn.addEventListener('click', () => this.app.fetchModels());
-            modelSettingEl.parentElement.appendChild(refreshBtn);
-        }
-
-        this.renderToolSettings();
-    }
-
-    /**
-     * Renders the tool settings section.
-     * @private
-     */
-    renderToolSettings() {
-        const existingContainer = this.container.querySelector('#tool-settings-container');
-        if (existingContainer) {
-            existingContainer.remove();
-        }
-
-        if (!this.app.mcp?.getTools) return;
-        const tools = this.app.mcp.getTools();
-        if (tools.length === 0) return;
-
-        /** @type {Setting} */
-        const toolSettingsDef = {
-            id: 'toolSettings',
-            type: 'fieldset',
-            label: 'Tool Settings',
-            children: [
-                { id: 'allowAll', label: 'Allow all available tools', type: 'checkbox' },
-                {
-                    id: 'allowed',
-                    type: 'checkbox-list',
-                    label: '',
-                    options: tools.map(t => ({ value: t.name, label: t.name })),
-                    dependsOn: 'allowAll',
-                    dependsOnValue: false,
-                }
-            ]
-        };
-
-        const currentData = {
-            toolSettings: JSON.parse(localStorage.getItem('core_tool_settings')) || { allowAll: true, allowed: [] }
-        };
-
-        const onToolSettingChange = (path, value) => {
-            setPropertyByPath(currentData, path, value);
-            localStorage.setItem('core_tool_settings', JSON.stringify(currentData.toolSettings));
-        };
-
-        const container = document.createElement('div');
-        container.id = 'tool-settings-container';
-        const fragment = createSettingsUI(
-            [toolSettingsDef],
-            currentData,
-            onToolSettingChange,
-            'main-tool-settings-', // More specific ID prefix
-            'main-settings'      // Context
-        );
-        container.appendChild(fragment);
-        this.container.appendChild(container);
     }
 }
 
@@ -488,7 +363,9 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
     // Only process dependencies at the top-level call, after the whole fragment is built.
     if (isTopLevel) {
         dependencyMap.forEach((dependents, controllerId) => {
-            const controllerElement = fragment.querySelector(`#${controllerId}`);
+            // The controller might not be in the fragment if it's in a different part of a complex form,
+            // so we check the whole document as a fallback.
+            const controllerElement = fragment.querySelector(`#${controllerId}`) || document.querySelector(`#${controllerId}`);
             if (controllerElement) {
                 const updateDependents = () => {
                     const currentValue = controllerElement.type === 'checkbox' ? controllerElement.checked : controllerElement.value;
