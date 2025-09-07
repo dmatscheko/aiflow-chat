@@ -93,10 +93,10 @@ class App {
         this.settingsManager = new SettingsManager(this);
         this.settingsManager.load();
         const coreSettings = [
-            { id: 'apiUrl', label: 'API URL', type: 'text', default: '', placeholder: 'e.g. https://api.someai.com/' },
+            { id: 'apiUrl', label: 'API URL', type: 'text', default: '', placeholder: 'e.g. https://api.someai.com/', required: true },
             { id: 'apiKey', label: 'API Key', type: 'password', default: '' },
-            { id: 'model', label: 'Model', type: 'select', options: [] },
-            { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.' },
+            { id: 'model', label: 'Model', type: 'select', options: [], required: true },
+            { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', default: 'You are a helpful assistant.', required: true },
             { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1 },
         ];
         this.settingsManager.define(coreSettings);

@@ -244,7 +244,7 @@ function initializeAgentEditor() {
     if (!agent) return;
 
     const modelSettingDefs = (appInstance?.settings || [])
-        .filter(s => s.id !== 'systemPrompt')
+        .filter(s => !['systemPrompt', 'mcpServer'].includes(s.id)) // TODO: filtering out the systemPrompt here is OK, but mcpServer should be marked as not being a model setting and filtered because of that
         .map(s => {
             if (s.id === 'model') {
                 return {
@@ -254,21 +254,24 @@ function initializeAgentEditor() {
                         label: 'Refresh',
                         onClick: (e, modelInput) => {
                             if (!modelInput || !appInstance.fetchModels) return;
-                            // The new fetchModels function can take an agentId directly.
                             appInstance.fetchModels(modelInput, agentId);
                         }
                     }]
                 };
             }
             return s;
+        })
+        .map(s => {
+            const { required, ...rest } = s;
+            return rest;
         });
 
     const tools = appInstance?.mcp?.getTools() || [];
 
     /** @type {Setting[]} */
     const settingsDefinition = [
-        { id: 'name', label: 'Name', type: 'text' },
-        { id: 'systemPrompt', label: 'System Prompt', type: 'textarea' },
+        { id: 'name', label: 'Name', type: 'text', required: true },
+        { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', required: true },
         { type: 'divider' },
         { id: 'useCustomModelSettings', label: 'Use Custom Model Settings', type: 'checkbox' },
         {

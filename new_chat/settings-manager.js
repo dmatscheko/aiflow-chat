@@ -295,46 +295,77 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     });
                     break;
 
+                // Support for custom renderers
+                case 'custom':
+                    if (typeof setting.render === 'function') {
+                        container = document.createElement('div');
+                        container.classList.add('setting');
+                        container.id = settingId;
+                        const customContent = setting.render({ setting, currentValue, onChange, settingPath, context });
+                        if (customContent) container.appendChild(customContent);
+                    } else {
+                        console.warn('Custom setting missing render function:', setting);
+                        return;
+                    }
+                    break;
+
                 default:
                     container = document.createElement('div');
                     container.classList.add('setting');
+                    // Add custom class if provided
+                    if (setting.className) container.classList.add(setting.className);
 
                     const valueToSet = currentValue ?? setting.default ?? '';
 
                     // Create and configure the input element first
                     if (setting.type === 'textarea') {
                         input = document.createElement('textarea');
-                        input.rows = 4;
+                        input.rows = setting.rows || 4; // Allow custom rows
                         input.value = valueToSet;
                     } else if (setting.type === 'select') {
                         input = document.createElement('select');
-                        if (setting.options) {
-                            setting.options.forEach(opt => {
-                                const option = document.createElement('option');
-                                option.value = typeof opt === 'string' ? opt : opt.value;
-                                option.textContent = typeof opt === 'string' ? opt : opt.label;
-                                input.appendChild(option);
-                            });
+                        // Support multiple select
+                        if (setting.multiple) {
+                            input.multiple = true;
+                            const selectedSet = new Set(Array.isArray(valueToSet) ? valueToSet : [valueToSet]);
+                            if (setting.options) {
+                                setting.options.forEach(opt => {
+                                    const option = document.createElement('option');
+                                    option.value = typeof opt === 'string' ? opt : opt.value;
+                                    option.textContent = typeof opt === 'string' ? opt : opt.label;
+                                    option.selected = selectedSet.has(option.value);
+                                    input.appendChild(option);
+                                });
+                            }
+                        } else {
+                            if (setting.options) {
+                                setting.options.forEach(opt => {
+                                    const option = document.createElement('option');
+                                    option.value = typeof opt === 'string' ? opt : opt.value;
+                                    option.textContent = typeof opt === 'string' ? opt : opt.label;
+                                    input.appendChild(option);
+                                });
+                            }
+                            let optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
+                            if (!optionToSelect && valueToSet) {
+                                const newOption = document.createElement('option');
+                                newOption.value = valueToSet;
+                                newOption.textContent = `${valueToSet} (saved)`;
+                                input.appendChild(newOption);
+                                optionToSelect = newOption;
+                            }
+                            if (optionToSelect) optionToSelect.selected = true;
                         }
-                        let optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
-                        if (!optionToSelect && valueToSet) {
-                            const newOption = document.createElement('option');
-                            newOption.value = valueToSet;
-                            newOption.textContent = `${valueToSet} (saved)`;
-                            input.appendChild(newOption);
-                            optionToSelect = newOption;
-                        }
-                        if (optionToSelect) optionToSelect.selected = true;
                     } else if (setting.type === 'range') {
                         input = document.createElement('input');
                         input.type = 'range';
-                        input.min = setting.min;
-                        input.max = setting.max;
-                        input.step = setting.step;
+                        input.min = setting.min ?? 0;
+                        input.max = setting.max ?? 100;
+                        input.step = setting.step ?? 1;
                         input.value = valueToSet;
                     } else {
                         input = document.createElement('input');
-                        input.type = setting.type || 'text';
+                        input.type = setting.type || 'text'; // Handles 'color', 'date', 'file', 'email', etc.
                         if (setting.placeholder) input.placeholder = setting.placeholder;
                         if (['checkbox', 'radio'].includes(input.type)) {
                             input.checked = !!valueToSet;
@@ -346,11 +377,16 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     input.id = settingId;
                     input.dataset.path = settingPath;
 
+                    // Required attribute
+                    if (setting.required) input.required = true;
+
                     input.addEventListener('change', (e) => {
                         const target = e.target;
                         let newValue;
                         if (['checkbox', 'radio'].includes(target.type)) {
                             newValue = target.checked;
+                        } else if (target.type === 'select-multiple') { // Handle multi-select
+                            newValue = Array.from(target.selectedOptions).map(opt => opt.value);
                         } else if (target.type === 'range' || target.type === 'number') {
                             newValue = parseFloat(target.value);
                         } else {
@@ -364,19 +400,24 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                         if (setting.label) {
                             label = document.createElement('label');
                             label.classList.add(`${input.type}-label`);
+                            // Asterisk for required
+                            label.appendChild(document.createTextNode(setting.required ? `${setting.label} *` : setting.label));
                             label.appendChild(input);
-                            label.appendChild(document.createTextNode(` ${setting.label}`));
                             container.appendChild(label);
                         } else {
                             // If there's no label, just append the input itself
                             container.appendChild(input);
+                            // Aria-label for accessibility
+                            if (setting.description) input.setAttribute('aria-label', setting.description);
                         }
                     } else {
                         // Original logic for all other input types
                         if (setting.label) {
                             label = document.createElement('label');
                             label.setAttribute('for', settingId);
-                            label.textContent = setting.label;
+                            // Optional required asterisk
+                            const requiredMark = setting.required ? ' *' : '';
+                            label.textContent = `${setting.label}${requiredMark}`;
                             container.appendChild(label);
                         }
 
@@ -391,6 +432,21 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                             container.appendChild(valueSpan);
                             input.addEventListener('input', () => { valueSpan.textContent = input.value; });
                         }
+                    }
+
+                    // Description/help text
+                    if (setting.description) {
+                        const help = document.createElement('small');
+                        help.classList.add('help-text');
+                        help.textContent = setting.description;
+                        container.appendChild(help);
+                    }
+
+                    // Error placeholder
+                    if (setting.errorSpan) {
+                        const errorSpan = document.createElement('span');
+                        errorSpan.classList.add('error');
+                        container.appendChild(errorSpan);
                     }
 
             if (setting.actions) {
