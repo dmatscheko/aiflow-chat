@@ -87,7 +87,6 @@ class App {
 
         // Synchronous setup
         this.registerCoreViews();
-        this.defineTabs();
         this.initDOM();
         this.settingsManager = new SettingsManager(this);
     }
@@ -96,7 +95,9 @@ class App {
         // Asynchronous setup
         await pluginManager.trigger('onAppInit', this);
 
+        await this.defineTabs();
         this.renderTabs();
+
         this._loadLastActiveIds();
         this.loadChats();
         this.activeView.id = this.activeChatId;
@@ -116,7 +117,7 @@ class App {
         `);
     }
 
-    defineTabs() {
+    async defineTabs() {
         const coreTabs = [{
             id: 'chats',
             label: 'Chats',
@@ -143,7 +144,7 @@ class App {
                 });
             }
         }];
-        this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
+        this.tabs = await pluginManager.trigger('onTabsRegistered', coreTabs);
     }
 
     initDOM() {
