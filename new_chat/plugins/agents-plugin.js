@@ -421,7 +421,20 @@ function initializeAgentEditor() {
     const mcpServerUrl = effectiveConfig.mcpServer;
     console.log(`DEBUG: Effective MCP URL for ${agentId}: '${mcpServerUrl}'`);
 
-    const tools = appInstance?.mcp?.getToolsForUrl(mcpServerUrl) || [];
+    // Get tools from cache, or fetch if not available for a valid URL
+    let tools = [];
+    if (mcpServerUrl && appInstance.mcp) {
+        const cachedTools = appInstance.mcp.getToolsForUrl(mcpServerUrl);
+        // A non-empty array in the cache means we have successfully fetched before.
+        // An undefined value means we haven't tried yet.
+        if (cachedTools) {
+            tools = cachedTools;
+        } else {
+            // URL is present, but no tools in cache. Fetch them.
+            // The UI will be updated by the 'mcp-tools-updated' event listener.
+            appInstance.mcp.fetchToolsForUrl(mcpServerUrl);
+        }
+    }
     console.log(`DEBUG: Tools found for URL '${mcpServerUrl}':`, tools.length);
 
     /** @type {Setting[]} */
@@ -562,13 +575,20 @@ const agentsPlugin = {
 
         // Add a listener to refresh the editor UI when tools are updated
         document.body.addEventListener('mcp-tools-updated', (e) => {
-            if (appInstance.activeView.type === 'agent-editor') {
-                const agent = agentManager.getAgent(appInstance.activeView.id);
-                // Check if the updated URL matches the current agent's URL
-                if (agent && agent.modelSettings.mcpServer === e.detail.url) {
-                    console.log('Refreshing agent editor due to tool update...');
-                    initializeAgentEditor();
-                }
+            // Only act if the agent editor is the active view.
+            if (appInstance.activeView.type !== 'agent-editor') return;
+
+            const agentId = appInstance.activeView.id;
+            if (!agentId) return;
+
+            // Get the effective URL for the agent being edited.
+            const effectiveConfig = agentManager.getEffectiveApiConfig(agentId);
+            const mcpServerUrl = effectiveConfig.mcpServer;
+
+            // Check if the URL from the event matches the agent's effective URL.
+            if (mcpServerUrl === e.detail.url) {
+                console.log(`Refreshing agent editor for agent ${agentId} due to tool update for ${mcpServerUrl}`);
+                initializeAgentEditor();
             }
         });
     },
