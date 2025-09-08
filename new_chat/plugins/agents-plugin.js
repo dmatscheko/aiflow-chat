@@ -490,7 +490,6 @@ async function initializeAgentEditor() {
                         const effectiveConfig = agentManager.getEffectiveApiConfig(agent.id);
                         const mcpServerUrl = effectiveConfig.mcpServer;
                         if (mcpServerUrl) {
-                            // getTools handles both fetching and caching
                             appInstance.mcp.getTools(mcpServerUrl);
                         } else {
                             alert('Please set an MCP Server URL for this agent or the Default Agent first.');

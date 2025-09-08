@@ -93,9 +93,8 @@ class App {
         this.settingsManager = new SettingsManager(this);
         // --- End Settings Management ---
 
-        // Initial async setup
         (async () => {
-            await pluginManager.trigger('onAppInit', this);
+            await pluginManager.triggerAsync('onAppInit', this);
             this.renderTabs();
             this._loadLastActiveIds();
             this.loadChats();
@@ -198,7 +197,7 @@ class App {
             if (type === 'chat') {
                 this.initChatView(id);
             }
-            await pluginManager.trigger('onViewRendered', this.activeView);
+            await pluginManager.triggerAsync('onViewRendered', this.activeView);
         } else {
             this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
         }

@@ -92,7 +92,7 @@ class PluginManager {
      * @returns {any} The result from the last callback in the chain, or the original
      * first argument if no callbacks were registered or if they returned undefined.
      */
-    async trigger(hookName, ...args) {
+    trigger(hookName, ...args) {
         const callbacks = this.hooks[hookName];
         if (!callbacks || callbacks.length === 0) {
             // If it's a data modification hook, return the first argument (the data)
@@ -100,10 +100,33 @@ class PluginManager {
         }
 
         let result = args[0];
-        for (const callback of callbacks) {
+        callbacks.forEach(callback => {
             // For hooks that are meant to modify data, the callback should return the modified data.
             // The modified data is then passed to the next callback.
-            // We await the callback in case it's async.
+            const callbackResult = callback(result, ...args.slice(1));
+            if (callbackResult !== undefined) {
+                result = callbackResult;
+            }
+        });
+
+        return result;
+    }
+
+    /**
+     * Asynchronously triggers a specific hook, executing all registered callbacks in sequence.
+     * This is for hooks that may have asynchronous callbacks (returning Promises).
+     * @param {string} hookName - The name of the hook to trigger.
+     * @param {...any} args - Arguments to pass to the hook's callbacks.
+     * @returns {Promise<any>} The result from the last callback in the chain.
+     */
+    async triggerAsync(hookName, ...args) {
+        const callbacks = this.hooks[hookName];
+        if (!callbacks || callbacks.length === 0) {
+            return args[0];
+        }
+
+        let result = args[0];
+        for (const callback of callbacks) {
             const callbackResult = await callback(result, ...args.slice(1));
             if (callbackResult !== undefined) {
                 result = callbackResult;

@@ -155,7 +155,7 @@ class ResponseProcessor {
             };
 
             // Pass the original agent object and the final effective config to the plugin hook
-            payload = await pluginManager.trigger('beforeApiCall', payload, effectiveConfig, agent);
+            payload = await pluginManager.triggerAsync('beforeApiCall', payload, effectiveConfig, agent);
 
             const reader = await app.apiService.streamChat(
                 payload,
@@ -212,7 +212,7 @@ class ResponseProcessor {
                 }
             }
             app.renderChatList();
-            await pluginManager.trigger('onResponseComplete', assistantMsg, chat);
+            await pluginManager.triggerAsync('onResponseComplete', assistantMsg, chat);
         }
     }
 }
