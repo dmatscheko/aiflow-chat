@@ -396,7 +396,7 @@ function renderAgentEditor(agentId) {
  * It builds the settings definition and uses createSettingsUI to render the form.
  * @private
  */
-function initializeAgentEditor() {
+async function initializeAgentEditor() {
     const editorView = document.getElementById('agent-editor-view');
     if (!editorView || !editorView.dataset.agentId) return;
 
@@ -425,7 +425,7 @@ function initializeAgentEditor() {
     const mcpServerUrl = effectiveConfig.mcpServer;
     console.log(`DEBUG: Effective MCP URL for ${agentId}: '${mcpServerUrl}'`);
 
-    const tools = appInstance?.mcp?.getToolsForUrl(mcpServerUrl) || [];
+    const tools = await appInstance?.mcp?.getTools(mcpServerUrl) || [];
     console.log(`DEBUG: Tools found for URL '${mcpServerUrl}':`, tools.length);
 
     /** @type {Setting[]} */
@@ -485,7 +485,8 @@ function initializeAgentEditor() {
                         const effectiveConfig = agentManager.getEffectiveApiConfig(agent.id);
                         const mcpServerUrl = effectiveConfig.mcpServer;
                         if (mcpServerUrl) {
-                            appInstance.mcp.fetchToolsForUrl(mcpServerUrl);
+                            // getTools handles both fetching and caching
+                            appInstance.mcp.getTools(mcpServerUrl);
                         } else {
                             alert('Please set an MCP Server URL for this agent or the Default Agent first.');
                         }
