@@ -651,7 +651,7 @@ const agentsPlugin = {
     /**
      * @param {Chat} chat
      */
-    onChatSwitched(chat) {
+    async onChatSwitched(chat) {
         populateAgentSelector();
         const agentSelector = document.getElementById('agent-selector');
         if (agentSelector) {

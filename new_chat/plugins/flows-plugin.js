@@ -696,7 +696,7 @@ const flowsPlugin = {
         `;
         return currentHtml + flowSelectorHtml;
     },
-    onChatSwitched(chat) {
+    async onChatSwitched(chat) {
         const selector = document.getElementById('flow-selector');
         if (!selector) return;
 

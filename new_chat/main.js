@@ -196,7 +196,7 @@ class App {
         if (renderer) {
             this.dom.mainPanel.innerHTML = renderer(id);
             if (type === 'chat') {
-                this.initChatView(id);
+                await this.initChatView(id);
             }
             await pluginManager.triggerAsync('onViewRendered', this.activeView);
         } else {
@@ -237,7 +237,7 @@ class App {
      * @param {string} chatId
      * @private
      */
-    initChatView(chatId) {
+    async initChatView(chatId) {
         const chat = this.chats.find(c => c.id === chatId);
         if (!chat) return;
         this.chatUI = new ChatUI(document.getElementById('chat-container'), this.agentManager);
@@ -245,6 +245,19 @@ class App {
         this.dom.messageForm = document.getElementById('message-form');
         this.dom.messageInput = document.getElementById('message-input');
         this.dom.stopButton = document.getElementById('stop-button');
+
+        // Restore draft message
+        this.dom.messageInput.value = chat.log.draftMessage || '';
+
+        // Save draft message on input
+        this.dom.messageInput.addEventListener('input', () => {
+            const activeChat = this.getActiveChat();
+            if (activeChat) {
+                activeChat.log.draftMessage = this.dom.messageInput.value;
+                this.debouncedSave();
+            }
+        });
+
         this.dom.messageForm.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleFormSubmit();
@@ -254,8 +267,8 @@ class App {
         });
         const chatAreaControls = document.getElementById('chat-area-controls');
         if (chatAreaControls) {
-            chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '');
-            pluginManager.trigger('onChatSwitched', chat);
+            chatAreaControls.innerHTML = await pluginManager.triggerAsync('onChatAreaRender', '');
+            await pluginManager.triggerAsync('onChatSwitched', chat);
         }
     }
 
@@ -317,7 +330,7 @@ class App {
         const newChat = {
             id: `chat-${Date.now()}`,
             title: 'New Chat',
-            log: new ChatLog(),
+            log: new ChatLog(), // draftMessage defaults to ''
         };
         newChat.log.subscribe(this.debouncedSave);
         this.chats.push(newChat);
@@ -384,6 +397,9 @@ class App {
             if (!userInput) return;
             activeChat.log.addMessage({ role: 'user', content: userInput });
             this.dom.messageInput.value = '';
+            // Clear the draft and save it
+            activeChat.log.draftMessage = '';
+            this.debouncedSave();
         }
         const finalAgentId = agentId || this.agentManager.getActiveAgentForChat(activeChat.id);
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });

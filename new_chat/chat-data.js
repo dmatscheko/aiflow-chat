@@ -132,6 +132,11 @@ export class ChatLog {
          * @type {Array<() => void>}
          */
         this.subscribers = [];
+        /**
+         * A temporary storage for the user's current unfinished message.
+         * @type {string}
+         */
+        this.draftMessage = '';
     }
 
     /**
@@ -277,20 +282,29 @@ export class ChatLog {
 
     /**
      * Serializes the entire chat log to a JSON-compatible object.
-     * @returns {SerializedAlternatives | null} A serializable representation of the root alternatives, or null if the log is empty.
+     * @returns {object | null} A serializable representation of the root alternatives and draft message, or null if the log is empty.
      */
     toJSON() {
-        return this.rootAlternatives ? this.rootAlternatives.toJSON() : null;
+        return {
+            rootAlternatives: this.rootAlternatives ? this.rootAlternatives.toJSON() : null,
+            draftMessage: this.draftMessage,
+        };
     }
 
     /**
      * Creates a ChatLog instance from a serialized JSON object.
-     * @param {SerializedAlternatives | null} jsonData - The serialized data to load from.
+     * @param {object | null} jsonData - The serialized data to load from.
      * @returns {ChatLog} A new ChatLog instance populated with the provided data.
      */
     static fromJSON(jsonData) {
         const chatLog = new ChatLog();
         if (!jsonData) {
+            return chatLog;
+        }
+
+        chatLog.draftMessage = jsonData.draftMessage || '';
+
+        if (!jsonData.rootAlternatives) {
             return chatLog;
         }
 
@@ -307,7 +321,7 @@ export class ChatLog {
             return alternatives;
         };
 
-        chatLog.rootAlternatives = buildAlternatives(jsonData);
+        chatLog.rootAlternatives = buildAlternatives(jsonData.rootAlternatives);
         return chatLog;
     }
 }
