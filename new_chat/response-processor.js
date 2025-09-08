@@ -136,13 +136,11 @@ class ResponseProcessor {
 
             // --- Get effective configuration using the new centralized method ---
             const agentId = assistantMsg.value.agent;
-            const agent = agentId ? app.agentManager.getAgent(agentId) : null;
             const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
 
-            // Determine the system prompt (agent's prompt takes precedence)
-            const systemPrompt = agent?.systemPrompt || effectiveConfig.systemPrompt;
-            if (systemPrompt) {
-                messages.unshift({ role: 'system', content: systemPrompt });
+            // Add the system prompt if it exists in the effective configuration.
+            if (effectiveConfig.systemPrompt) {
+                messages.unshift({ role: 'system', content: effectiveConfig.systemPrompt });
             }
             // --- End of configuration ---
 
@@ -155,6 +153,7 @@ class ResponseProcessor {
             };
 
             // Pass the original agent object and the final effective config to the plugin hook
+            const agent = agentId ? app.agentManager.getAgent(agentId) : null;
             payload = await pluginManager.triggerAsync('beforeApiCall', payload, effectiveConfig, agent);
 
             const reader = await app.apiService.streamChat(

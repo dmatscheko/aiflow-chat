@@ -86,15 +86,16 @@ class App {
         this.settingsManager = null;
 
         this.registerCoreViews();
-        this.defineTabs();
         this.initDOM();
 
         // --- Settings Management ---
         this.settingsManager = new SettingsManager(this);
         // --- End Settings Management ---
 
+        // Initial async setup
         (async () => {
             await pluginManager.triggerAsync('onAppInit', this);
+            this.defineTabs();
             this.renderTabs();
             this._loadLastActiveIds();
             this.loadChats();

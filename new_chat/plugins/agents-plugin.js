@@ -261,9 +261,13 @@ class AgentManager {
         // Start with default settings as the base
         let effectiveModelSettings = { ...(defaultAgent.modelSettings || {}) };
         let effectiveToolSettings = { ...(defaultAgent.toolSettings || {}) };
+        let effectiveSystemPrompt = defaultAgent.systemPrompt;
 
         // If we're looking at a specific, non-default agent, layer its settings on top
         if (agent && agent.id !== DEFAULT_AGENT_ID) {
+            // The agent's own system prompt always takes precedence if it exists.
+            effectiveSystemPrompt = agent.systemPrompt;
+
             if (agent.useCustomModelSettings) {
                 effectiveModelSettings = { ...effectiveModelSettings, ...(agent.modelSettings || {}) };
                 if (!agent.modelSettings?.apiUrl) {
@@ -287,6 +291,7 @@ class AgentManager {
 
         // Return the combined effective settings
         return {
+            systemPrompt: effectiveSystemPrompt,
             ...effectiveModelSettings,
             ...effectiveToolSettings
         };
