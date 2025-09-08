@@ -527,20 +527,11 @@ function populateAgentSelector() {
     const selector = document.getElementById('agent-selector');
     if (!selector || !appInstance) return;
 
-    const currentChatId = appInstance.activeChatId;
-    const activeAgentId = currentChatId ? agentManager.getActiveAgentForChat(currentChatId) : null;
-
     selector.innerHTML = ''; // Clear existing options
     agentManager.agents.forEach(agent => {
         const option = document.createElement('option');
         option.value = agent.id;
         option.textContent = agent.name;
-        // The default agent is selected if no specific agent is active for the chat.
-        if (agent.id === DEFAULT_AGENT_ID && !activeAgentId) {
-            option.selected = true;
-        } else if (agent.id === activeAgentId) {
-            option.selected = true;
-        }
         selector.appendChild(option);
     });
 }
@@ -655,6 +646,9 @@ const agentsPlugin = {
         populateAgentSelector();
         const agentSelector = document.getElementById('agent-selector');
         if (agentSelector) {
+            const activeAgentId = agentManager.getActiveAgentForChat(chat.id) || DEFAULT_AGENT_ID;
+            agentSelector.value = activeAgentId;
+
             // Use a fresh listener to avoid duplicates
             const newSelector = agentSelector.cloneNode(true);
             agentSelector.parentNode.replaceChild(newSelector, agentSelector);

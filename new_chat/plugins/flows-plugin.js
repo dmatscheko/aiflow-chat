@@ -676,6 +676,24 @@ function handleCanvasMouseUp(e, flow, debouncedUpdate) {
     resetInteractions();
 }
 
+/**
+ * Populates the flow selector dropdown.
+ * @private
+ */
+function populateFlowSelector() {
+    const selector = document.getElementById('flow-selector');
+    if (!selector) return;
+
+    selector.innerHTML = '<option value="">Select a flow</option>';
+    flowManager.flows.forEach(flow => {
+        const option = document.createElement('option');
+        option.value = flow.id;
+        option.textContent = flow.name;
+        selector.appendChild(option);
+    });
+}
+
+
 // --- Plugin Definition ---
 /**
  * The main plugin object for flows.
@@ -697,33 +715,23 @@ const flowsPlugin = {
         return currentHtml + flowSelectorHtml;
     },
     async onChatSwitched(chat) {
+        populateFlowSelector();
         const selector = document.getElementById('flow-selector');
-        if (!selector) return;
-
-        // 1. Populate the dropdown with all available flows
-        selector.innerHTML = '<option value="">Select a flow</option>';
-        flowManager.flows.forEach(flow => {
-            const option = document.createElement('option');
-            option.value = flow.id;
-            option.textContent = flow.name;
-            selector.appendChild(option);
-        });
-
-        // 2. Set the value based on the stored active flow for this chat
-        const activeFlowId = flowManager.getActiveFlowForChat(chat.id);
-        if (activeFlowId) {
-            selector.value = activeFlowId;
-        }
-
-        // 3. Re-add event listener to a cloned node to prevent duplicates
-        const newSelector = selector.cloneNode(true);
-        selector.parentNode.replaceChild(newSelector, selector);
-        newSelector.addEventListener('change', (e) => {
-            const selectedFlowId = e.target.value;
-            if (appInstance.activeChatId) {
-                flowManager.setActiveFlowForChat(appInstance.activeChatId, selectedFlowId || null);
+        if (selector) {
+            const activeFlowId = flowManager.getActiveFlowForChat(chat.id);
+            if (activeFlowId) {
+                selector.value = activeFlowId;
             }
-        });
+
+            const newSelector = selector.cloneNode(true);
+            selector.parentNode.replaceChild(newSelector, selector);
+            newSelector.addEventListener('change', (e) => {
+                const selectedFlowId = e.target.value;
+                if (appInstance.activeChatId) {
+                    flowManager.setActiveFlowForChat(appInstance.activeChatId, selectedFlowId || null);
+                }
+            });
+        }
     },
     onTabsRegistered(tabs) {
         tabs.push({
