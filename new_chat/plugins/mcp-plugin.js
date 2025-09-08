@@ -168,22 +168,21 @@ async function sendMcpRequest(url, method, params, isNotification = false, retur
 
         if (isNotification) return null;
 
-        // Clone the response so we can read the body twice if needed
-        const clonedResp = resp.clone();
+        const rawText = await resp.text();
+        console.log(`DEBUG: Raw response from ${url} for method ${method}:`, rawText);
 
         try {
-            // First, optimistically try to parse as JSON
-            const data = await resp.json();
+            // First, try to parse as JSON
+            const data = JSON.parse(rawText);
             if (data.error) throw new Error(data.error.message || 'MCP call failed');
             return data.result;
         } catch (error) {
             // If JSON parsing fails, check if it's an SSE stream
             if (error instanceof SyntaxError) {
                 console.warn('MCP: JSON parsing failed, attempting to parse as event-stream.');
-                const text = await clonedResp.text();
-                if (text.includes('data:')) {
+                if (rawText.includes('data:')) {
                     let result = null;
-                    const lines = text.split('\n');
+                    const lines = rawText.split('\n');
                     for (const line of lines) {
                          if (line.startsWith('data: ')) {
                             try {
