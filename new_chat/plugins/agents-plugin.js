@@ -261,14 +261,22 @@ class AgentManager {
         if (agent && agent.id !== DEFAULT_AGENT_ID) {
             if (agent.useCustomModelSettings) {
                 effectiveModelSettings = { ...effectiveModelSettings, ...(agent.modelSettings || {}) };
-                // Handle API URL fallback
                 if (!agent.modelSettings?.apiUrl) {
+                    // If no agent API URL is configured, use both default URL and key ...
                     effectiveModelSettings.apiUrl = defaultAgent.modelSettings.apiUrl;
                     effectiveModelSettings.apiKey = defaultAgent.modelSettings.apiKey;
+                } else {
+                    // ... otherwise, use both the agents URL and key to prevent sending a key to a wrong server
+                    effectiveModelSettings.apiUrl = agent.modelSettings.apiUrl;
+                    effectiveModelSettings.apiKey = agent.modelSettings.apiKey;
                 }
             }
             if (agent.useCustomToolSettings) {
                 effectiveToolSettings = { ...effectiveToolSettings, ...(agent.toolSettings || {}) };
+                // Handle MCP Server URL fallback
+                if (!effectiveToolSettings.mcpServer) {
+                    effectiveToolSettings.mcpServer = defaultAgent.toolSettings?.mcpServer;
+                }
             }
         }
 
