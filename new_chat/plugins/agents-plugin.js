@@ -75,7 +75,7 @@ class AgentManager {
             const oldGlobalSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
 
             // Create the new default agent object
-            const newDefaultAgent = {
+            defaultAgent = {
                 id: DEFAULT_AGENT_ID,
                 name: 'Default Agent',
                 systemPrompt: oldGlobalSettings.systemPrompt || 'You are a helpful assistant.',
@@ -95,9 +95,8 @@ class AgentManager {
                 localStorage.removeItem('core_chat_settings');
             }
             // Add the new default agent to the list to be saved
-            userAgents.unshift(newDefaultAgent);
+            userAgents.unshift(defaultAgent);
             this._saveAgents(userAgents); // Save immediately
-            defaultAgent = newDefaultAgent; // *** THIS IS THE FIX ***
         }
 
         // Ensure Default Agent is always first.
@@ -265,24 +264,20 @@ class AgentManager {
 
         // If we're looking at a specific, non-default agent, layer its settings on top
         if (agent && agent.id !== DEFAULT_AGENT_ID) {
-            // The agent's own system prompt always takes precedence if it exists.
             effectiveSystemPrompt = agent.systemPrompt;
 
             if (agent.useCustomModelSettings) {
                 effectiveModelSettings = { ...effectiveModelSettings, ...(agent.modelSettings || {}) };
                 if (!agent.modelSettings?.apiUrl) {
-                    // If no agent API URL is configured, use both default URL and key ...
                     effectiveModelSettings.apiUrl = defaultAgent.modelSettings.apiUrl;
                     effectiveModelSettings.apiKey = defaultAgent.modelSettings.apiKey;
                 } else {
-                    // ... otherwise, use both the agents URL and key to prevent sending a key to a wrong server
                     effectiveModelSettings.apiUrl = agent.modelSettings.apiUrl;
                     effectiveModelSettings.apiKey = agent.modelSettings.apiKey;
                 }
             }
             if (agent.useCustomToolSettings) {
                 effectiveToolSettings = { ...effectiveToolSettings, ...(agent.toolSettings || {}) };
-                // Handle MCP Server URL fallback
                 if (!effectiveToolSettings.mcpServer) {
                     effectiveToolSettings.mcpServer = defaultAgent.toolSettings?.mcpServer;
                 }

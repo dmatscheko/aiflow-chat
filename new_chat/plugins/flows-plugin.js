@@ -700,20 +700,22 @@ const flowsPlugin = {
         const selector = document.getElementById('flow-selector');
         if (!selector) return;
 
-        const activeFlowId = flowManager.getActiveFlowForChat(chat.id);
-
+        // 1. Populate the dropdown with all available flows
         selector.innerHTML = '<option value="">Select a flow</option>';
         flowManager.flows.forEach(flow => {
             const option = document.createElement('option');
             option.value = flow.id;
             option.textContent = flow.name;
-            if (flow.id === activeFlowId) {
-                option.selected = true;
-            }
             selector.appendChild(option);
         });
 
-        // Use a fresh listener to avoid duplicates
+        // 2. Set the value based on the stored active flow for this chat
+        const activeFlowId = flowManager.getActiveFlowForChat(chat.id);
+        if (activeFlowId) {
+            selector.value = activeFlowId;
+        }
+
+        // 3. Re-add event listener to a cloned node to prevent duplicates
         const newSelector = selector.cloneNode(true);
         selector.parentNode.replaceChild(newSelector, selector);
         newSelector.addEventListener('change', (e) => {
