@@ -224,11 +224,6 @@ const mcpPlugin = {
             getToolsForUrl: mcpPlugin.getToolsForUrl,
             fetchToolsForUrl: mcpPlugin.fetchToolsForUrl,
         };
-        // On startup, pre-fetch tools for the default agent.
-        const { mcpServer: mcpUrl } = appInstance.agentManager.getEffectiveApiConfig('agent-default');
-        if (mcpUrl) {
-            fetchToolsForUrl(mcpUrl);
-        }
     },
 
     beforeApiCall(payload, allSettings, agent) {
