@@ -93,17 +93,16 @@ class App {
         this.settingsManager = new SettingsManager(this);
         // --- End Settings Management ---
 
-        pluginManager.trigger('onAppInit', this);
-
-        this.renderTabs();
-
-        this._loadLastActiveIds();
-        this.loadChats();
-
-        this.activeView.id = this.activeChatId;
-        this.renderMainView();
-
-        this.initEventListeners();
+        // Initial async setup
+        (async () => {
+            await pluginManager.trigger('onAppInit', this);
+            this.renderTabs();
+            this._loadLastActiveIds();
+            this.loadChats();
+            this.activeView.id = this.activeChatId;
+            await this.renderMainView();
+            this.initEventListeners();
+        })();
     }
 
     registerCoreViews() {
@@ -176,7 +175,7 @@ class App {
         this.tabs[0].onActivate();
     }
 
-    setView(type, id) {
+    async setView(type, id) {
         this.activeView = { type, id };
         this.lastActiveIds[type] = id;
         this._saveLastActiveIds();
@@ -188,10 +187,10 @@ class App {
             localStorage.setItem('core_active_chat_id', this.activeChatId);
             this.updateActiveChatInList();
         }
-        this.renderMainView();
+        await this.renderMainView();
     }
 
-    renderMainView() {
+    async renderMainView() {
         const { type, id } = this.activeView;
         const renderer = pluginManager.getViewRenderer(type);
         if (renderer) {
@@ -199,7 +198,7 @@ class App {
             if (type === 'chat') {
                 this.initChatView(id);
             }
-            pluginManager.trigger('onViewRendered', this.activeView);
+            await pluginManager.trigger('onViewRendered', this.activeView);
         } else {
             this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
         }
@@ -209,7 +208,7 @@ class App {
      * @param {string} tabId
      * @private
      */
-    showTab(tabId) {
+    async showTab(tabId) {
         if (!tabId) return;
         const tab = this.tabs.find(t => t.id === tabId);
         if (!tab) return;
@@ -230,7 +229,7 @@ class App {
         // Then, if a last active view exists for this tab's type, restore it.
         const lastActiveId = tab.viewType ? this.lastActiveIds[tab.viewType] : null;
         if (lastActiveId) {
-            this.setView(tab.viewType, lastActiveId);
+            await this.setView(tab.viewType, lastActiveId);
         }
     }
 
@@ -261,10 +260,10 @@ class App {
     }
 
     initEventListeners() {
-        this.dom.panelTabs.addEventListener('click', (e) => {
+        this.dom.panelTabs.addEventListener('click', async (e) => {
             const tabId = e.target.dataset.tabId;
             if (tabId) {
-                this.showTab(tabId);
+                await this.showTab(tabId);
             }
         });
     }

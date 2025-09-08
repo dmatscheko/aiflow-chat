@@ -92,7 +92,7 @@ class PluginManager {
      * @returns {any} The result from the last callback in the chain, or the original
      * first argument if no callbacks were registered or if they returned undefined.
      */
-    trigger(hookName, ...args) {
+    async trigger(hookName, ...args) {
         const callbacks = this.hooks[hookName];
         if (!callbacks || callbacks.length === 0) {
             // If it's a data modification hook, return the first argument (the data)
@@ -100,14 +100,15 @@ class PluginManager {
         }
 
         let result = args[0];
-        callbacks.forEach(callback => {
+        for (const callback of callbacks) {
             // For hooks that are meant to modify data, the callback should return the modified data.
             // The modified data is then passed to the next callback.
-            const callbackResult = callback(result, ...args.slice(1));
+            // We await the callback in case it's async.
+            const callbackResult = await callback(result, ...args.slice(1));
             if (callbackResult !== undefined) {
                 result = callbackResult;
             }
-        });
+        }
 
         return result;
     }

@@ -74,7 +74,8 @@ class AgentManager {
             // Try to migrate from old global settings
             const oldGlobalSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
 
-            defaultAgent = {
+            // Create the new default agent object
+            const newDefaultAgent = {
                 id: DEFAULT_AGENT_ID,
                 name: 'Default Agent',
                 systemPrompt: oldGlobalSettings.systemPrompt || 'You are a helpful assistant.',
@@ -84,7 +85,6 @@ class AgentManager {
                     apiKey: oldGlobalSettings.apiKey || '',
                     model: oldGlobalSettings.model || '',
                     temperature: oldGlobalSettings.temperature ?? 1,
-                    // mcpServer will be added here later
                 },
                 useCustomToolSettings: true, // Always true for default
                 toolSettings: { allowAll: true, allowed: [] }
@@ -95,15 +95,20 @@ class AgentManager {
                 localStorage.removeItem('core_chat_settings');
             }
             // Add the new default agent to the list to be saved
-            userAgents.unshift(defaultAgent);
+            userAgents.unshift(newDefaultAgent);
             this._saveAgents(userAgents); // Save immediately
+            defaultAgent = newDefaultAgent; // *** THIS IS THE FIX ***
         }
 
         // Ensure Default Agent is always first.
-        this.agents = [
-            defaultAgent,
-            ...userAgents.filter(a => a.id !== DEFAULT_AGENT_ID)
-        ];
+        const finalAgents = [...userAgents];
+        const defaultIdx = finalAgents.findIndex(a => a.id === DEFAULT_AGENT_ID);
+        if (defaultIdx > 0) {
+            // Move it to the front if it's not already there
+            const defaultItem = finalAgents.splice(defaultIdx, 1)[0];
+            finalAgents.unshift(defaultItem);
+        }
+        this.agents = finalAgents;
     }
 
     /**
