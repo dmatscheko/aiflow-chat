@@ -279,11 +279,17 @@ class FlowManager {
     constructor() {
         /** @type {Flow[]} */
         this.flows = this._loadFlows();
+        /** @type {Object.<string, string>} */
+        this.chatFlowMap = this._loadChatFlowMap();
     }
     /** @private */
     _loadFlows() { try { return JSON.parse(localStorage.getItem('core_flows_v2')) || []; } catch (e) { console.error('Failed to load flows:', e); return []; } }
     /** @private */
     _saveFlows() { localStorage.setItem('core_flows_v2', JSON.stringify(this.flows)); }
+    /** @private */
+    _loadChatFlowMap() { try { return JSON.parse(localStorage.getItem('core_chat_flow_map_v2')) || {}; } catch (e) { console.error('Failed to load chat-flow map:', e); return {}; } }
+    /** @private */
+    _saveChatFlowMap() { localStorage.setItem('core_chat_flow_map_v2', JSON.stringify(this.chatFlowMap)); }
     /** @param {string} id */
     getFlow(id) { return this.flows.find(f => f.id === id); }
     /** @param {Omit<Flow, 'id'>} flowData */
@@ -292,6 +298,20 @@ class FlowManager {
     updateFlow(flowData) { const i = this.flows.findIndex(f => f.id === flowData.id); if (i !== -1) { this.flows[i] = flowData; this._saveFlows(); } }
     /** @param {string} id */
     deleteFlow(id) { this.flows = this.flows.filter(f => f.id !== id); this._saveFlows(); }
+    /** @param {string} chatId */
+    getActiveFlowForChat(chatId) { return this.chatFlowMap[chatId] || null; }
+    /**
+     * @param {string} chatId - The ID of the chat.
+     * @param {string|null} flowId - The ID of the flow to set as active, or null to deactivate.
+     */
+    setActiveFlowForChat(chatId, flowId) {
+        if (flowId) {
+            this.chatFlowMap[chatId] = flowId;
+        } else {
+            delete this.chatFlowMap[chatId];
+        }
+        this._saveChatFlowMap();
+    }
 }
 const flowManager = new FlowManager();
 
@@ -680,12 +700,27 @@ const flowsPlugin = {
         const selector = document.getElementById('flow-selector');
         if (!selector) return;
 
+        const activeFlowId = flowManager.getActiveFlowForChat(chat.id);
+
         selector.innerHTML = '<option value="">Select a flow</option>';
         flowManager.flows.forEach(flow => {
             const option = document.createElement('option');
             option.value = flow.id;
             option.textContent = flow.name;
+            if (flow.id === activeFlowId) {
+                option.selected = true;
+            }
             selector.appendChild(option);
+        });
+
+        // Use a fresh listener to avoid duplicates
+        const newSelector = selector.cloneNode(true);
+        selector.parentNode.replaceChild(newSelector, selector);
+        newSelector.addEventListener('change', (e) => {
+            const selectedFlowId = e.target.value;
+            if (appInstance.activeChatId) {
+                flowManager.setActiveFlowForChat(appInstance.activeChatId, selectedFlowId || null);
+            }
         });
     },
     onTabsRegistered(tabs) {
