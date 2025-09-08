@@ -26,6 +26,9 @@ import './plugins/formatting-plugin.js';
  * @property {string} id - The unique identifier for the chat.
  * @property {string} title - The title of the chat.
  * @property {ChatLog} log - The ChatLog instance for the chat.
+ * @property {string} draftMessage - The current draft message.
+ * @property {string | null} agent - The ID of the active agent.
+ * @property {string | null} flow - The ID of the active flow.
  */
 
 /**
@@ -198,7 +201,7 @@ class App {
             if (type === 'chat') {
                 this.initChatView(id);
             }
-            await pluginManager.triggerAsync('onViewRendered', this.activeView);
+            await pluginManager.triggerAsync('onViewRendered', this.activeView, this.getActiveChat());
         } else {
             this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
         }
@@ -245,6 +248,19 @@ class App {
         this.dom.messageForm = document.getElementById('message-form');
         this.dom.messageInput = document.getElementById('message-input');
         this.dom.stopButton = document.getElementById('stop-button');
+
+        // Restore draft message
+        this.dom.messageInput.value = chat.draftMessage || '';
+
+        // Save draft message on input
+        this.dom.messageInput.addEventListener('input', () => {
+            const activeChat = this.getActiveChat();
+            if (activeChat) {
+                activeChat.draftMessage = this.dom.messageInput.value;
+                this.debouncedSave();
+            }
+        });
+
         this.dom.messageForm.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleFormSubmit();
@@ -254,7 +270,7 @@ class App {
         });
         const chatAreaControls = document.getElementById('chat-area-controls');
         if (chatAreaControls) {
-            chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '');
+            chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '', chat);
             pluginManager.trigger('onChatSwitched', chat);
         }
     }
@@ -276,6 +292,9 @@ class App {
                     id: chatData.id,
                     title: chatData.title,
                     log: ChatLog.fromJSON(chatData.log),
+                    draftMessage: chatData.draftMessage || '',
+                    agent: chatData.agent || null,
+                    flow: chatData.flow || null,
                 };
                 chat.log.subscribe(this.debouncedSave);
                 return chat;
@@ -292,6 +311,9 @@ class App {
             id: chat.id,
             title: chat.title,
             log: chat.log.toJSON(),
+            draftMessage: chat.draftMessage,
+            agent: chat.agent,
+            flow: chat.flow,
         }));
         localStorage.setItem('core_chat_logs', JSON.stringify(chatsToSave));
         localStorage.setItem('core_active_chat_id', this.activeChatId);
@@ -318,6 +340,9 @@ class App {
             id: `chat-${Date.now()}`,
             title: 'New Chat',
             log: new ChatLog(),
+            draftMessage: '',
+            agent: null,
+            flow: null,
         };
         newChat.log.subscribe(this.debouncedSave);
         this.chats.push(newChat);
@@ -385,7 +410,7 @@ class App {
             activeChat.log.addMessage({ role: 'user', content: userInput });
             this.dom.messageInput.value = '';
         }
-        const finalAgentId = agentId || this.agentManager.getActiveAgentForChat(activeChat.id);
+        const finalAgentId = agentId || activeChat.agent || null;
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
         responseProcessor.scheduleProcessing(this);
     }

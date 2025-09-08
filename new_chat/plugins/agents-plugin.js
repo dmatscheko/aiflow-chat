@@ -11,7 +11,7 @@ import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 
 /**
  * @typedef {import('../main.js').Setting} Setting
- * @typedef {import('../utils.js').ToolSettings} AgentToolSettings
+ * @typedef {import('../main.js').Setting} AgentToolSettings
  */
 
 /**
@@ -47,8 +47,6 @@ class AgentManager {
         this.agents = [];
         this._loadAgents(); // Populates this.agents
 
-        /** @type {Object.<string, string>} */
-        this.chatAgentMap = this._loadChatAgentMap();
         this.debouncedSave = debounce(() => this._saveAgents(), 500);
     }
 
@@ -97,7 +95,7 @@ class AgentManager {
             // Add the new default agent to the list to be saved
             userAgents.unshift(newDefaultAgent);
             this._saveAgents(userAgents); // Save immediately
-            defaultAgent = newDefaultAgent; // *** THIS IS THE FIX ***
+            defaultAgent = newDefaultAgent;
         }
 
         // Ensure Default Agent is always first.
@@ -120,27 +118,6 @@ class AgentManager {
         localStorage.setItem('core_agents_v2', JSON.stringify(agents));
     }
 
-    /**
-     * @returns {Object.<string, string>} The chat-agent map.
-     * @private
-     */
-    _loadChatAgentMap() {
-        try {
-            const mapJson = localStorage.getItem('core_chat_agent_map_v2');
-            return mapJson ? JSON.parse(mapJson) : {};
-        } catch (e) {
-            console.error('Failed to load chat-agent map:', e);
-            return {};
-        }
-    }
-
-    /**
-     * Saves the current chat-to-agent mapping to localStorage.
-     * @private
-     */
-    _saveChatAgentMap() {
-        localStorage.setItem('core_chat_agent_map_v2', JSON.stringify(this.chatAgentMap));
-    }
 
     /**
      * @param {string} id - The ID of the agent.
@@ -213,33 +190,13 @@ class AgentManager {
         }
         this.agents = this.agents.filter(a => a.id !== id);
         this._saveAgents();
-        for (const chatId in this.chatAgentMap) {
-            if (this.chatAgentMap[chatId] === id) {
-                delete this.chatAgentMap[chatId];
+        // When an agent is deleted, we must update any chats that were using it.
+        appInstance.chats.forEach(chat => {
+            if (chat.agent === id) {
+                chat.agent = null;
             }
-        }
-        this._saveChatAgentMap();
-    }
-
-    /**
-     * @param {string} chatId
-     * @returns {string|null} The active agent ID or null.
-     */
-    getActiveAgentForChat(chatId) {
-        return this.chatAgentMap[chatId] || null;
-    }
-
-    /**
-     * @param {string} chatId - The ID of the chat.
-     * @param {string|null} agentId - The ID of the agent to set as active, or null to deactivate.
-     */
-    setActiveAgentForChat(chatId, agentId) {
-        if (agentId) {
-            this.chatAgentMap[chatId] = agentId;
-        } else {
-            delete this.chatAgentMap[chatId];
-        }
-        this._saveChatAgentMap();
+        });
+        appInstance.saveChats();
     }
 
     /**
@@ -249,7 +206,7 @@ class AgentManager {
      * @returns {object} An object containing the effective settings.
      */
     getEffectiveApiConfig(agentId = null) {
-        const finalAgentId = agentId || this.getActiveAgentForChat(appInstance.activeChatId) || DEFAULT_AGENT_ID;
+        const finalAgentId = agentId || appInstance.getActiveChat()?.agent || DEFAULT_AGENT_ID;
         const agent = this.getAgent(finalAgentId);
         const defaultAgent = this.getAgent(DEFAULT_AGENT_ID);
 
@@ -525,32 +482,6 @@ async function initializeAgentEditor() {
 }
 
 /**
- * Populates the agent selector dropdown in the chat area.
- * @private
- */
-function populateAgentSelector() {
-    const selector = document.getElementById('agent-selector');
-    if (!selector || !appInstance) return;
-
-    const currentChatId = appInstance.activeChatId;
-    const activeAgentId = currentChatId ? agentManager.getActiveAgentForChat(currentChatId) : null;
-
-    selector.innerHTML = ''; // Clear existing options
-    agentManager.agents.forEach(agent => {
-        const option = document.createElement('option');
-        option.value = agent.id;
-        option.textContent = agent.name;
-        // The default agent is selected if no specific agent is active for the chat.
-        if (agent.id === DEFAULT_AGENT_ID && !activeAgentId) {
-            option.selected = true;
-        } else if (agent.id === activeAgentId) {
-            option.selected = true;
-        }
-        selector.appendChild(option);
-    });
-}
-
-/**
  * @typedef {import('../main.js').App} App
  * @typedef {import('../main.js').Tab} Tab
  * @typedef {import('../main.js').Chat} Chat
@@ -622,7 +553,6 @@ const agentsPlugin = {
                         if (confirm(`Are you sure you want to delete the agent "${agentManager.getAgent(agentId)?.name}"?`)) {
                             agentManager.deleteAgent(agentId);
                             renderAgentList();
-                            populateAgentSelector();
                             // If the deleted agent was being edited, switch view
                             if (appInstance.activeView.type === 'agent-editor' && appInstance.activeView.id === agentId) {
                                 appInstance.showTab('agents');
@@ -639,14 +569,20 @@ const agentsPlugin = {
 
     /**
      * @param {string} currentHtml - The current HTML of the chat controls area.
+     * @param {Chat} chat - The chat object for which the controls are being rendered.
      * @returns {string} The updated HTML.
      */
-    onChatAreaRender(currentHtml) {
+    onChatAreaRender(currentHtml, chat) {
+        const activeAgentId = chat.agent || DEFAULT_AGENT_ID;
+        const optionsHtml = agentManager.agents.map(agent =>
+            `<option value="${agent.id}" ${agent.id === activeAgentId ? 'selected' : ''}>${agent.name}</option>`
+        ).join('');
+
         const agentSelectorHtml = `
             <div id="agent-selector-container">
                 <label for="agent-selector">Active Agent:</label>
                 <select id="agent-selector">
-                    <option value="">Default AI</option>
+                    ${optionsHtml}
                 </select>
             </div>
         `;
@@ -657,7 +593,6 @@ const agentsPlugin = {
      * @param {Chat} chat
      */
     onChatSwitched(chat) {
-        populateAgentSelector();
         const agentSelector = document.getElementById('agent-selector');
         if (agentSelector) {
             // Use a fresh listener to avoid duplicates
@@ -665,18 +600,17 @@ const agentsPlugin = {
             agentSelector.parentNode.replaceChild(newSelector, agentSelector);
             newSelector.addEventListener('change', (e) => {
                 const selectedAgentId = e.target.value;
-                if (appInstance.activeChatId) {
-                    const agentIdToSet = selectedAgentId === DEFAULT_AGENT_ID ? null : selectedAgentId;
-                    agentManager.setActiveAgentForChat(appInstance.activeChatId, agentIdToSet);
-                }
+                chat.agent = selectedAgentId === DEFAULT_AGENT_ID ? null : selectedAgentId;
+                appInstance.debouncedSave();
             });
         }
     },
 
     /**
      * @param {View} view - The rendered view object.
+     * @param {Chat} chat
      */
-    onViewRendered(view) {
+    onViewRendered(view, chat) {
         if (view.type === 'agent-editor') {
             initializeAgentEditor();
         }
