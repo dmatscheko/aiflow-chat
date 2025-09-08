@@ -676,23 +676,7 @@ function handleCanvasMouseUp(e, flow, debouncedUpdate) {
     resetInteractions();
 }
 
-/**
- * Populates the flow selector dropdown.
- * @private
- */
-function populateFlowSelector() {
-    const selector = document.getElementById('flow-selector');
-    if (!selector) return;
-
-    selector.innerHTML = '<option value="">Select a flow</option>';
-    flowManager.flows.forEach(flow => {
-        const option = document.createElement('option');
-        option.value = flow.id;
-        option.textContent = flow.name;
-        selector.appendChild(option);
-    });
-}
-
+let flowChangeController = new AbortController();
 
 // --- Plugin Definition ---
 /**
@@ -702,12 +686,18 @@ function populateFlowSelector() {
 const flowsPlugin = {
     name: 'Flows',
     onAppInit(app) { appInstance = app; pluginManager.registerView('flow-editor', renderFlowEditor); },
-    onChatAreaRender(currentHtml) {
+    onChatAreaRender(currentHtml, chat) {
+        const activeFlowId = flowManager.getActiveFlowForChat(chat.id);
+        const optionsHtml = flowManager.flows.map(flow =>
+            `<option value="${flow.id}" ${flow.id === activeFlowId ? 'selected' : ''}>${flow.name}</option>`
+        ).join('');
+
         const flowSelectorHtml = `
             <div id="flow-runner-container">
                 <label for="flow-selector">Flow:</label>
                 <select id="flow-selector">
                     <option value="">Select a flow</option>
+                    ${optionsHtml}
                 </select>
                 <button id="run-chat-flow-btn">Run</button>
             </div>
@@ -715,23 +705,9 @@ const flowsPlugin = {
         return currentHtml + flowSelectorHtml;
     },
     async onChatSwitched(chat) {
-        populateFlowSelector();
-        const selector = document.getElementById('flow-selector');
-        if (selector) {
-            const activeFlowId = flowManager.getActiveFlowForChat(chat.id);
-            if (activeFlowId) {
-                selector.value = activeFlowId;
-            }
-
-            const newSelector = selector.cloneNode(true);
-            selector.parentNode.replaceChild(newSelector, selector);
-            newSelector.addEventListener('change', (e) => {
-                const selectedFlowId = e.target.value;
-                if (appInstance.activeChatId) {
-                    flowManager.setActiveFlowForChat(appInstance.activeChatId, selectedFlowId || null);
-                }
-            });
-        }
+        // This hook is now only for behavior, not rendering.
+        // The rendering is done in onChatAreaRender.
+        // The event listener is attached in onViewRendered.
     },
     onTabsRegistered(tabs) {
         tabs.push({
@@ -805,6 +781,20 @@ const flowsPlugin = {
             });
             window.addEventListener('click', (e) => { if (!e.target.matches('#add-flow-step-btn')) dropdown.classList.remove('show'); });
         } else if (view.type === 'chat') {
+            // Attach listener for flow selector
+            const selector = document.getElementById('flow-selector');
+            if (selector) {
+                flowChangeController.abort();
+                flowChangeController = new AbortController();
+                selector.addEventListener('change', (e) => {
+                    const selectedFlowId = e.target.value;
+                    if (appInstance.activeChatId) {
+                        flowManager.setActiveFlowForChat(appInstance.activeChatId, selectedFlowId || null);
+                    }
+                }, { signal: flowChangeController.signal });
+            }
+
+            // Attach listener for run button
             const runBtn = document.getElementById('run-chat-flow-btn');
             if (runBtn) {
                 runBtn.addEventListener('click', () => {

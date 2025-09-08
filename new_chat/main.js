@@ -267,7 +267,7 @@ class App {
         });
         const chatAreaControls = document.getElementById('chat-area-controls');
         if (chatAreaControls) {
-            chatAreaControls.innerHTML = await pluginManager.triggerAsync('onChatAreaRender', '');
+            chatAreaControls.innerHTML = await pluginManager.triggerAsync('onChatAreaRender', '', chat);
             await pluginManager.triggerAsync('onChatSwitched', chat);
         }
     }

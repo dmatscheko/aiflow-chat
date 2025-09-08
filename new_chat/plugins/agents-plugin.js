@@ -11,7 +11,7 @@ import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 
 /**
  * @typedef {import('../main.js').Setting} Setting
- * @typedef {import('../utils.js').ToolSettings} AgentToolSettings
+ * @typedef {import('../main.js').ToolSettings} AgentToolSettings
  */
 
 /**
@@ -298,6 +298,7 @@ const agentManager = new AgentManager();
 let appInstance = null;
 /** @type {Map<string, {id: string}[]>} */
 const modelCache = new Map();
+let agentChangeController = new AbortController();
 
 async function fetchModels(agentId = null, targetSelectElement = null) {
     const effectiveConfig = agentManager.getEffectiveApiConfig(agentId);
@@ -520,23 +521,6 @@ async function initializeAgentEditor() {
 }
 
 /**
- * Populates the agent selector dropdown in the chat area.
- * @private
- */
-function populateAgentSelector() {
-    const selector = document.getElementById('agent-selector');
-    if (!selector || !appInstance) return;
-
-    selector.innerHTML = ''; // Clear existing options
-    agentManager.agents.forEach(agent => {
-        const option = document.createElement('option');
-        option.value = agent.id;
-        option.textContent = agent.name;
-        selector.appendChild(option);
-    });
-}
-
-/**
  * @typedef {import('../main.js').App} App
  * @typedef {import('../main.js').Tab} Tab
  * @typedef {import('../main.js').Chat} Chat
@@ -608,7 +592,6 @@ const agentsPlugin = {
                         if (confirm(`Are you sure you want to delete the agent "${agentManager.getAgent(agentId)?.name}"?`)) {
                             agentManager.deleteAgent(agentId);
                             renderAgentList();
-                            populateAgentSelector();
                             // If the deleted agent was being edited, switch view
                             if (appInstance.activeView.type === 'agent-editor' && appInstance.activeView.id === agentId) {
                                 appInstance.showTab('agents');
@@ -625,14 +608,20 @@ const agentsPlugin = {
 
     /**
      * @param {string} currentHtml - The current HTML of the chat controls area.
+     * @param {Chat} chat - The chat object for which the controls are being rendered.
      * @returns {string} The updated HTML.
      */
-    onChatAreaRender(currentHtml) {
+    onChatAreaRender(currentHtml, chat) {
+        const activeAgentId = agentManager.getActiveAgentForChat(chat.id) || DEFAULT_AGENT_ID;
+        const optionsHtml = agentManager.agents.map(agent =>
+            `<option value="${agent.id}" ${agent.id === activeAgentId ? 'selected' : ''}>${agent.name}</option>`
+        ).join('');
+
         const agentSelectorHtml = `
             <div id="agent-selector-container">
                 <label for="agent-selector">Active Agent:</label>
                 <select id="agent-selector">
-                    <option value="">Default AI</option>
+                    ${optionsHtml}
                 </select>
             </div>
         `;
@@ -643,23 +632,9 @@ const agentsPlugin = {
      * @param {Chat} chat
      */
     async onChatSwitched(chat) {
-        populateAgentSelector();
-        const agentSelector = document.getElementById('agent-selector');
-        if (agentSelector) {
-            const activeAgentId = agentManager.getActiveAgentForChat(chat.id) || DEFAULT_AGENT_ID;
-            agentSelector.value = activeAgentId;
-
-            // Use a fresh listener to avoid duplicates
-            const newSelector = agentSelector.cloneNode(true);
-            agentSelector.parentNode.replaceChild(newSelector, agentSelector);
-            newSelector.addEventListener('change', (e) => {
-                const selectedAgentId = e.target.value;
-                if (appInstance.activeChatId) {
-                    const agentIdToSet = selectedAgentId === DEFAULT_AGENT_ID ? null : selectedAgentId;
-                    agentManager.setActiveAgentForChat(appInstance.activeChatId, agentIdToSet);
-                }
-            });
-        }
+        // This hook is now only for behavior, not rendering.
+        // The rendering is done in onChatAreaRender.
+        // The event listener is attached in onViewRendered.
     },
 
     /**
@@ -668,6 +643,20 @@ const agentsPlugin = {
     onViewRendered(view) {
         if (view.type === 'agent-editor') {
             initializeAgentEditor();
+        } else if (view.type === 'chat') {
+            // Attach the change listener for the agent selector
+            const agentSelector = document.getElementById('agent-selector');
+            if (agentSelector) {
+                agentChangeController.abort(); // Remove previous listener
+                agentChangeController = new AbortController();
+                agentSelector.addEventListener('change', (e) => {
+                    const selectedAgentId = e.target.value;
+                    if (appInstance.activeChatId) {
+                        const agentIdToSet = selectedAgentId === DEFAULT_AGENT_ID ? null : selectedAgentId;
+                        agentManager.setActiveAgentForChat(appInstance.activeChatId, agentIdToSet);
+                    }
+                }, { signal: agentChangeController.signal });
+            }
         }
         // Update the active state in the list whenever any view is rendered
         updateActiveAgentInList();
