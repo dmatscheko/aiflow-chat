@@ -267,7 +267,6 @@ class AgentManager {
 }
 
 export const agentManager = new AgentManager();
-const DEFAULT_AGENT_ID = 'agent-default';
 /** @type {import('../main.js').App | null} */
 let appInstance = null;
 /** @type {Map<string, {id: string}[]>} */
