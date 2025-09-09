@@ -478,16 +478,11 @@ button:hover {
     font-weight: 600;
 }
 
-/* --- Flow Editor Toolbar --- */
-.flow-toolbar {
+/* --- Flow and Agent Editor Toolbar --- */
+.flow-toolbar, .agent-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.5rem 1rem;
-    border-bottom: 1px solid var(--border-color);
-}
-.flow-toolbar h3 {
-    margin: 0;
 }
 .primary-btn {
     background-color: var(--accent-color);

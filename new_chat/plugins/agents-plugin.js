@@ -355,7 +355,7 @@ function renderAgentEditor(agentId) {
     }
 
     // This outerHTML is just a shell. The content will be rendered by createSettingsUI.
-    return `<div id="agent-editor-view" data-agent-id="${agent.id}"></div>`;
+    return `<div id="agent-editor-container" data-agent-id="${agent.id}"></div>`;
 }
 
 /**
@@ -364,7 +364,7 @@ function renderAgentEditor(agentId) {
  * @private
  */
 async function initializeAgentEditor() {
-    const editorView = document.getElementById('agent-editor-view');
+    const editorView = document.getElementById('agent-editor-container');
     if (!editorView || !editorView.dataset.agentId) return;
 
     const agentId = editorView.dataset.agentId;
@@ -474,7 +474,7 @@ async function initializeAgentEditor() {
         'agent-editor'
     );
 
-    editorView.innerHTML = `<h2 class="editor-title">Edit Agent</h2>`;
+    editorView.innerHTML = `<div class="agent-toolbar"><h2 class="editor-title" style="flex-grow: 1;">Edit Agent</h2></div>`;
     editorView.appendChild(settingsFragment);
 
     // Fetch models for the current agent when the editor is opened.
