@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce } from '../utils.js';
+import { debounce, importJson, exportJson } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 
 /**
@@ -147,6 +147,17 @@ class AgentManager {
         return newAgent;
     }
 
+    addAgentFromData(agentData) {
+        const newAgent = {
+            id: `agent-${Date.now()}`,
+            ...agentData
+        };
+        this.agents.push(newAgent);
+        this._saveAgents();
+        renderAgentList();
+        return newAgent;
+    }
+
     /**
      * @param {Agent} agentData - The updated agent data.
      */
@@ -255,7 +266,8 @@ class AgentManager {
     }
 }
 
-const agentManager = new AgentManager();
+export const agentManager = new AgentManager();
+const DEFAULT_AGENT_ID = 'agent-default';
 /** @type {import('../main.js').App | null} */
 let appInstance = null;
 /** @type {Map<string, {id: string}[]>} */
@@ -474,11 +486,58 @@ async function initializeAgentEditor() {
         'agent-editor'
     );
 
-    editorView.innerHTML = `<div class="agent-toolbar"><h2 class="editor-title" style="flex-grow: 1;">Edit Agent</h2></div>`;
+    const toolbar = document.createElement('div');
+    toolbar.className = 'agent-toolbar';
+    toolbar.innerHTML = `
+        <h2 class="editor-title" style="flex-grow: 1;">Edit Agent</h2>
+        <div class="title-bar-buttons">
+            <button id="import-agents-btn" class="btn-gray">Import Agents</button>
+            <button id="export-agents-btn" class="btn-gray">Export Agents</button>
+        </div>
+    `;
+    editorView.innerHTML = '';
+    editorView.appendChild(toolbar);
     editorView.appendChild(settingsFragment);
+
+    toolbar.querySelector('#import-agents-btn').addEventListener('click', () => {
+        importJson('.agent', (data) => {
+            if (Array.isArray(data)) {
+                data.forEach(agentData => agentManager.addAgentFromData(agentData));
+                alert(`${data.length} agent(s) imported successfully.`);
+            } else {
+                agentManager.addAgentFromData(data);
+                alert(`Agent imported successfully.`);
+            }
+        });
+    });
+
+    toolbar.querySelector('#export-agents-btn').addEventListener('click', () => {
+        const agentsToExport = agentManager.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
+        if (agentsToExport.length > 0) {
+            exportJson(agentsToExport, 'agents_config', 'agent');
+        } else {
+            alert('No custom agents to export.');
+        }
+    });
 
     // Fetch models for the current agent when the editor is opened.
     fetchModels(agentId);
+}
+
+export function getAgentSelectorHtml(activeAgentId) {
+    const finalActiveAgentId = activeAgentId || DEFAULT_AGENT_ID;
+    const optionsHtml = agentManager.agents.map(agent =>
+        `<option value="${agent.id}" ${agent.id === finalActiveAgentId ? 'selected' : ''}>${agent.name}</option>`
+    ).join('');
+
+    return `
+        <div id="agent-selector-container">
+            <label for="agent-selector">Active Agent:</label>
+            <select id="agent-selector">
+                ${optionsHtml}
+            </select>
+        </div>
+    `;
 }
 
 /**
@@ -565,45 +624,6 @@ const agentsPlugin = {
             }
         });
         return tabs;
-    },
-
-    /**
-     * @param {string} currentHtml - The current HTML of the chat controls area.
-     * @param {Chat} chat - The chat object for which the controls are being rendered.
-     * @returns {string} The updated HTML.
-     */
-    onChatAreaRender(currentHtml, chat) {
-        const activeAgentId = chat.agent || DEFAULT_AGENT_ID;
-        const optionsHtml = agentManager.agents.map(agent =>
-            `<option value="${agent.id}" ${agent.id === activeAgentId ? 'selected' : ''}>${agent.name}</option>`
-        ).join('');
-
-        const agentSelectorHtml = `
-            <div id="agent-selector-container">
-                <label for="agent-selector">Active Agent:</label>
-                <select id="agent-selector">
-                    ${optionsHtml}
-                </select>
-            </div>
-        `;
-        return currentHtml + agentSelectorHtml;
-    },
-
-    /**
-     * @param {Chat} chat
-     */
-    onChatSwitched(chat) {
-        const agentSelector = document.getElementById('agent-selector');
-        if (agentSelector) {
-            // Use a fresh listener to avoid duplicates
-            const newSelector = agentSelector.cloneNode(true);
-            agentSelector.parentNode.replaceChild(newSelector, agentSelector);
-            newSelector.addEventListener('change', (e) => {
-                const selectedAgentId = e.target.value;
-                chat.agent = selectedAgentId === DEFAULT_AGENT_ID ? null : selectedAgentId;
-                appInstance.debouncedSave();
-            });
-        }
     },
 
     /**

@@ -287,13 +287,25 @@ class FlowManager {
     /** @param {string} id */
     getFlow(id) { return this.flows.find(f => f.id === id); }
     /** @param {Omit<Flow, 'id'>} flowData */
-    addFlow(flowData) { this.flows.push({ ...flowData, id: `flow-${Date.now()}` }); this._saveFlows(); }
+    addFlow(flowData) { const newFlow = { ...flowData, id: `flow-${Date.now()}` }; this.flows.push(newFlow); this._saveFlows(); return newFlow; }
     /** @param {Flow} flowData */
     updateFlow(flowData) { const i = this.flows.findIndex(f => f.id === flowData.id); if (i !== -1) { this.flows[i] = flowData; this._saveFlows(); } }
     /** @param {string} id */
     deleteFlow(id) { this.flows = this.flows.filter(f => f.id !== id); this._saveFlows(); }
+    /** @param {Flow} flowData */
+    addFlowFromData(flowData) {
+        const newFlow = { ...flowData, id: `flow-${Date.now()}` };
+        this.flows.push(newFlow);
+        this._saveFlows();
+        // We need to re-render the list in the side panel
+        const flowListEl = document.getElementById('flow-list');
+        if (flowListEl) {
+            renderFlowList();
+        }
+        return newFlow;
+    }
 }
-const flowManager = new FlowManager();
+export const flowManager = new FlowManager();
 
 // --- Flow Runner ---
 /**
@@ -394,6 +406,14 @@ class FlowRunner {
  */
 let activeFlowRunner = null;
 
+export function startFlow(flowId) {
+    const flow = flowManager.getFlow(flowId);
+    if (flow) {
+        activeFlowRunner = new FlowRunner(flow, appInstance);
+        activeFlowRunner.start();
+    }
+}
+
 // --- UI Rendering ---
 /**
  * Highlights the currently active flow in the list.
@@ -440,7 +460,6 @@ function renderFlowEditor(flowId) {
     return `
         <div id="flow-editor-container">
             <div class="flow-toolbar">
-                <h2 class="editor-title" style="flex-grow: 1;">${flow?.name || 'Flow Editor'}</h2>
                 <div class="dropdown" style="margin-right: 1rem;">
                     <button id="add-flow-step-btn" class="primary-btn">Add Step</button>
                     <div id="add-step-dropdown" class="dropdown-content">${dropdownContent}</div>
@@ -657,6 +676,23 @@ function handleCanvasMouseUp(e, flow, debouncedUpdate) {
     resetInteractions();
 }
 
+export function getFlowSelectorHtml(activeFlowId) {
+    const optionsHtml = flowManager.flows.map(flow =>
+        `<option value="${flow.id}" ${flow.id === activeFlowId ? 'selected' : ''}>${flow.name}</option>`
+    ).join('');
+
+    return `
+        <div id="flow-runner-container">
+            <label for="flow-selector">Flow:</label>
+            <select id="flow-selector">
+                <option value="">Select a flow</option>
+                ${optionsHtml}
+            </select>
+            <button id="run-chat-flow-btn">Run</button>
+        </div>
+    `;
+}
+
 // --- Plugin Definition ---
 /**
  * The main plugin object for flows.
@@ -665,24 +701,6 @@ function handleCanvasMouseUp(e, flow, debouncedUpdate) {
 const flowsPlugin = {
     name: 'Flows',
     onAppInit(app) { appInstance = app; pluginManager.registerView('flow-editor', renderFlowEditor); },
-    onChatAreaRender(currentHtml, chat) {
-        const activeFlowId = chat.flow;
-        const optionsHtml = flowManager.flows.map(flow =>
-            `<option value="${flow.id}" ${flow.id === activeFlowId ? 'selected' : ''}>${flow.name}</option>`
-        ).join('');
-
-        const flowSelectorHtml = `
-            <div id="flow-runner-container">
-                <label for="flow-selector">Flow:</label>
-                <select id="flow-selector">
-                    <option value="">Select a flow</option>
-                    ${optionsHtml}
-                </select>
-                <button id="run-chat-flow-btn">Run</button>
-            </div>
-        `;
-        return currentHtml + flowSelectorHtml;
-    },
     onTabsRegistered(tabs) {
         tabs.push({
             id: 'flows',
@@ -714,39 +732,6 @@ const flowsPlugin = {
             }
         });
         return tabs;
-    },
-    onChatSwitched(chat) {
-        // Attach listener for flow selector
-        const selector = document.getElementById('flow-selector');
-        if (selector) {
-            const newSelector = selector.cloneNode(true);
-            selector.parentNode.replaceChild(newSelector, selector);
-            newSelector.addEventListener('change', (e) => {
-                const selectedFlowId = e.target.value;
-                if (chat) {
-                    chat.flow = selectedFlowId || null;
-                    appInstance.debouncedSave();
-                }
-            });
-        }
-
-        // Attach listener for run button
-        const runBtn = document.getElementById('run-chat-flow-btn');
-        if (runBtn) {
-            const newRunBtn = runBtn.cloneNode(true);
-            runBtn.parentNode.replaceChild(newRunBtn, runBtn);
-            newRunBtn.addEventListener('click', () => {
-                const currentSelector = document.getElementById('flow-selector');
-                const flowId = currentSelector.value;
-                if (flowId) {
-                    const flow = flowManager.getFlow(flowId);
-                    if (flow) {
-                        activeFlowRunner = new FlowRunner(flow, appInstance);
-                        activeFlowRunner.start();
-                    }
-                }
-            });
-        }
     },
     onViewRendered(view, chat) {
         if (view.type === 'flow-editor') {

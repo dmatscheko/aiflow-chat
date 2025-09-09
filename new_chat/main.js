@@ -19,6 +19,7 @@ import './plugins/agents-plugin.js';
 import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
 import './plugins/formatting-plugin.js';
+import './plugins/title-bar-plugin.js';
 
 /**
  * @typedef {import('./chat-data.js').Message} Message
@@ -343,6 +344,22 @@ class App {
             draftMessage: '',
             agent: null,
             flow: null,
+        };
+        newChat.log.subscribe(this.debouncedSave);
+        this.chats.push(newChat);
+        this.renderChatList();
+        this.setView('chat', newChat.id);
+        this.saveChats();
+    }
+
+    createChatFromData(chatData) {
+        const newChat = {
+            id: `chat-${Date.now()}`,
+            title: chatData.title || 'Imported Chat',
+            log: ChatLog.fromJSON(chatData.log),
+            draftMessage: chatData.draftMessage || '',
+            agent: chatData.agent || null,
+            flow: chatData.flow || null,
         };
         newChat.log.subscribe(this.debouncedSave);
         this.chats.push(newChat);
