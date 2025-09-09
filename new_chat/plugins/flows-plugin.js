@@ -564,10 +564,11 @@ let dragInfo = {}, panInfo = {}, connectionInfo = {};
  * @private
  */
 function resetInteractions() {
+    const canvas = document.getElementById('flow-canvas');
+    if (canvas) canvas.classList.remove('panning');
     dragInfo = { active: false }; panInfo = { active: false };
     if (connectionInfo.tempLine) connectionInfo.tempLine.remove();
     connectionInfo = { active: false };
-    document.getElementById('flow-canvas-wrapper').style.cursor = 'grab';
 }
 
 /**
@@ -586,11 +587,11 @@ function handleCanvasMouseDown(e, flow, debouncedUpdate) {
     } else if (target.closest('.flow-step-card') && !target.matches('input, textarea, select, button')) {
         e.preventDefault();
         dragInfo = { active: true, target: target.closest('.flow-step-card'), offsetX: e.clientX - target.closest('.flow-step-card').offsetLeft, offsetY: e.clientY - target.closest('.flow-step-card').offsetTop };
-    } else if (e.target.id === 'flow-canvas' || e.target.id === 'flow-canvas-wrapper') {
+    } else if (e.target.id === 'flow-canvas' || e.target.id === 'flow-canvas-wrapper' || e.target.id === 'flow-svg-layer' || e.target.id === 'flow-node-container') {
         e.preventDefault();
         const wrapper = document.getElementById('flow-canvas-wrapper');
         panInfo = { active: true, startX: e.clientX, startY: e.clientY, scrollLeft: wrapper.scrollLeft, scrollTop: wrapper.scrollTop };
-        wrapper.style.cursor = 'grabbing';
+        e.target.closest('#flow-canvas').classList.add('panning');
     }
 }
 
