@@ -535,3 +535,40 @@ button:hover {
     padding: 0;
     /* margin: -1rem; This was the problem */
 }
+
+/* --- Notification System --- */
+#notification-container {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.notification {
+    padding: 1rem;
+    border-radius: 4px;
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    min-width: 250px;
+}
+
+.notification-info { background-color: #007acc; }
+.notification-success { background-color: #2a9d8f; }
+.notification-warning { background-color: #e9c46a; color: #333; }
+.notification-error { background-color: #e76f51; }
+
+.notification button {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}

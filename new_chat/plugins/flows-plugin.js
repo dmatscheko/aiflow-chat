@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce } from '../utils.js';
+import { debounce, importJson, exportJson } from '../utils.js';
 import { responseProcessor } from '../response-processor.js';
 
 /**
@@ -460,6 +460,11 @@ function renderFlowEditor(flowId) {
     return `
         <div id="flow-editor-container">
             <div class="flow-toolbar">
+                <h2 class="editor-title" style="flex-grow: 1;">${flow?.name || 'Flow Editor'}</h2>
+                <div class="title-bar-buttons">
+                    <button id="load-flow-btn" class="btn-gray">Load Flow</button>
+                    <button id="save-flow-btn" class="btn-gray">Save Flow</button>
+                </div>
                 <div class="dropdown" style="margin-right: 1rem;">
                     <button id="add-flow-step-btn" class="primary-btn">Add Step</button>
                     <div id="add-step-dropdown" class="dropdown-content">${dropdownContent}</div>
@@ -772,6 +777,26 @@ const flowsPlugin = {
                 }
             });
             window.addEventListener('click', (e) => { if (!e.target.matches('#add-flow-step-btn')) dropdown.classList.remove('show'); });
+
+            const loadFlowBtn = document.getElementById('load-flow-btn');
+            if (loadFlowBtn) {
+                loadFlowBtn.addEventListener('click', () => {
+                    importJson('.flow', (data) => {
+                        const newFlow = flowManager.addFlowFromData(data);
+                        appInstance.setView('flow-editor', newFlow.id);
+                    });
+                });
+            }
+
+            const saveFlowBtn = document.getElementById('save-flow-btn');
+            if (saveFlowBtn) {
+                saveFlowBtn.addEventListener('click', () => {
+                    const flowToSave = flowManager.getFlow(view.id);
+                    if (flowToSave) {
+                        exportJson(flowToSave, flowToSave.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow');
+                    }
+                });
+            }
         }
         updateActiveFlowInList();
     },

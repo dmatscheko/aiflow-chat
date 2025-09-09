@@ -80,3 +80,38 @@ export function importJson(extension, onParsedData) {
     });
     input.click();
 }
+
+/**
+ * Shows a dismissible notification at the top of the screen.
+ * @param {string} message - The message to display.
+ * @param {string} [type='info'] - The type of notification ('info', 'success', 'warning', 'error').
+ * @param {number} [duration=5000] - The duration in ms to show the notification. 0 for permanent.
+ */
+export function showNotification(message, type = 'info', duration = 5000) {
+    const container = document.getElementById('notification-container') || createNotificationContainer();
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+
+    const closeButton = document.createElement('button');
+    closeButton.innerHTML = '&times;';
+    closeButton.onclick = () => notification.remove();
+    notification.appendChild(closeButton);
+
+    container.appendChild(notification);
+
+    if (duration > 0) {
+        setTimeout(() => {
+            if (document.body.contains(notification)) {
+                notification.remove();
+            }
+        }, duration);
+    }
+}
+
+function createNotificationContainer() {
+    const container = document.createElement('div');
+    container.id = 'notification-container';
+    document.body.appendChild(container);
+    return container;
+}

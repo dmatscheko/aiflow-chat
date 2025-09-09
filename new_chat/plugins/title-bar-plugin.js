@@ -120,40 +120,6 @@ const titleBarPlugin = {
                     }
                 });
             }
-        } else if (view.type === 'flow-editor') {
-            const flow = flowManager.getFlow(view.id);
-            const titleBar = document.createElement('div');
-            titleBar.className = 'main-title-bar';
-
-            titleBar.innerHTML = `
-                <h2 class="flow-editor-title">${flow ? flow.name : 'Flow Editor'}</h2>
-                <div class="title-bar-buttons">
-                    <button id="load-flow-btn" class="btn-gray">Load Flow</button>
-                    <button id="save-flow-btn" class="btn-gray">Save Flow</button>
-                </div>
-            `;
-
-            mainPanel.prepend(titleBar);
-
-            const loadFlowBtn = titleBar.querySelector('#load-flow-btn');
-            if (loadFlowBtn) {
-                loadFlowBtn.addEventListener('click', () => {
-                    importJson('.flow', (data) => {
-                        const newFlow = flowManager.addFlowFromData(data);
-                        appInstance.setView('flow-editor', newFlow.id);
-                    });
-                });
-            }
-
-            const saveFlowBtn = titleBar.querySelector('#save-flow-btn');
-            if (saveFlowBtn) {
-                saveFlowBtn.addEventListener('click', () => {
-                    const flowToSave = flowManager.getFlow(view.id);
-                    if (flowToSave) {
-                        exportJson(flowToSave, flowToSave.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow');
-                    }
-                });
-            }
         }
     }
 };

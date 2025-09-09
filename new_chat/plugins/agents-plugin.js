@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, importJson, exportJson } from '../utils.js';
+import { debounce, importJson, exportJson, showNotification } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 
 /**
@@ -148,14 +148,11 @@ class AgentManager {
     }
 
     addAgentFromData(agentData) {
-        const newAgent = {
-            id: `agent-${Date.now()}`,
-            ...agentData
-        };
-        this.agents.push(newAgent);
+        // ID is preserved from the imported data
+        this.agents.push(agentData);
         this._saveAgents();
         renderAgentList();
-        return newAgent;
+        return agentData;
     }
 
     /**
@@ -500,12 +497,28 @@ async function initializeAgentEditor() {
 
     toolbar.querySelector('#import-agents-btn').addEventListener('click', () => {
         importJson('.agent', (data) => {
-            if (Array.isArray(data)) {
-                data.forEach(agentData => agentManager.addAgentFromData(agentData));
-                alert(`${data.length} agent(s) imported successfully.`);
-            } else {
-                agentManager.addAgentFromData(data);
-                alert(`Agent imported successfully.`);
+            const agentsToImport = Array.isArray(data) ? data : [data];
+            const skippedAgents = [];
+            let importedCount = 0;
+
+            agentsToImport.forEach(agentData => {
+                if (agentManager.getAgent(agentData.id)) {
+                    skippedAgents.push(agentData);
+                } else {
+                    agentManager.addAgentFromData(agentData);
+                    importedCount++;
+                }
+            });
+
+            if (skippedAgents.length > 0) {
+                const skippedMessage = `Skipped ${skippedAgents.length} agents due to existing IDs: ${skippedAgents.map(a => a.name).join(', ')}`;
+                showNotification(skippedMessage, 'warning', 10000);
+            }
+            if (importedCount > 0) {
+                showNotification(`${importedCount} agent(s) imported successfully.`, 'success');
+            }
+            if (importedCount === 0 && skippedAgents.length === 0) {
+                showNotification('No new agents to import.', 'info');
             }
         });
     });
@@ -514,8 +527,9 @@ async function initializeAgentEditor() {
         const agentsToExport = agentManager.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
         if (agentsToExport.length > 0) {
             exportJson(agentsToExport, 'agents_config', 'agent');
+            showNotification(`${agentsToExport.length} agent(s) exported.`, 'success');
         } else {
-            alert('No custom agents to export.');
+            showNotification('No custom agents to export.', 'info');
         }
     });
 
