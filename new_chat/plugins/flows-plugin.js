@@ -714,6 +714,39 @@ const flowsPlugin = {
         });
         return tabs;
     },
+    onChatSwitched(chat) {
+        // Attach listener for flow selector
+        const selector = document.getElementById('flow-selector');
+        if (selector) {
+            const newSelector = selector.cloneNode(true);
+            selector.parentNode.replaceChild(newSelector, selector);
+            newSelector.addEventListener('change', (e) => {
+                const selectedFlowId = e.target.value;
+                if (chat) {
+                    chat.flow = selectedFlowId || null;
+                    appInstance.debouncedSave();
+                }
+            });
+        }
+
+        // Attach listener for run button
+        const runBtn = document.getElementById('run-chat-flow-btn');
+        if (runBtn) {
+            const newRunBtn = runBtn.cloneNode(true);
+            runBtn.parentNode.replaceChild(newRunBtn, runBtn);
+            newRunBtn.addEventListener('click', () => {
+                const currentSelector = document.getElementById('flow-selector');
+                const flowId = currentSelector.value;
+                if (flowId) {
+                    const flow = flowManager.getFlow(flowId);
+                    if (flow) {
+                        activeFlowRunner = new FlowRunner(flow, appInstance);
+                        activeFlowRunner.start();
+                    }
+                }
+            });
+        }
+    },
     onViewRendered(view, chat) {
         if (view.type === 'flow-editor') {
             const flow = flowManager.getFlow(view.id); if (!flow) return;
@@ -753,32 +786,6 @@ const flowsPlugin = {
                 }
             });
             window.addEventListener('click', (e) => { if (!e.target.matches('#add-flow-step-btn')) dropdown.classList.remove('show'); });
-        } else if (view.type === 'chat') {
-            // Attach listener for flow selector
-            const selector = document.getElementById('flow-selector');
-            if (selector) {
-                selector.addEventListener('change', (e) => {
-                    const selectedFlowId = e.target.value;
-                    chat.flow = selectedFlowId || null;
-                    appInstance.debouncedSave();
-                });
-            }
-
-            // Attach listener for run button
-            const runBtn = document.getElementById('run-chat-flow-btn');
-            if (runBtn) {
-                runBtn.addEventListener('click', () => {
-                    const selector = document.getElementById('flow-selector');
-                    const flowId = selector.value;
-                    if (flowId) {
-                        const flow = flowManager.getFlow(flowId);
-                        if (flow) {
-                            activeFlowRunner = new FlowRunner(flow, appInstance);
-                            activeFlowRunner.start();
-                        }
-                    }
-                });
-            }
         }
         updateActiveFlowInList();
     },
