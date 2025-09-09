@@ -474,7 +474,7 @@ async function initializeAgentEditor() {
         'agent-editor'
     );
 
-    editorView.innerHTML = `<h2>Edit Agent</h2>`;
+    editorView.innerHTML = `<h2 class="editor-title">Edit Agent</h2>`;
     editorView.appendChild(settingsFragment);
 
     // Fetch models for the current agent when the editor is opened.

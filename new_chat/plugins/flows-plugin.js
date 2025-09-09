@@ -440,8 +440,8 @@ function renderFlowEditor(flowId) {
     return `
         <div id="flow-editor-container">
             <div class="flow-toolbar">
-                <h3>${flow?.name || 'Flow Editor'}</h3>
-                <div class="dropdown">
+                <h2 class="editor-title" style="flex-grow: 1;">${flow?.name || 'Flow Editor'}</h2>
+                <div class="dropdown" style="margin-right: 1rem;">
                     <button id="add-flow-step-btn" class="primary-btn">Add Step</button>
                     <div id="add-step-dropdown" class="dropdown-content">${dropdownContent}</div>
                 </div>
