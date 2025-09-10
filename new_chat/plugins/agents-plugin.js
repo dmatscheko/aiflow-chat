@@ -202,12 +202,14 @@ class AgentManager {
         this.agents = this.agents.filter(a => a.id !== id);
         this._saveAgents();
         // When an agent is deleted, we must update any chats that were using it.
-        appInstance.chats.forEach(chat => {
-            if (chat.agent === id) {
-                chat.agent = null;
-            }
-        });
-        appInstance.saveChats();
+        if (appInstance.chatManager) {
+            appInstance.chatManager.chats.forEach(chat => {
+                if (chat.agent === id) {
+                    chat.agent = null;
+                }
+            });
+            appInstance.chatManager.saveChats();
+        }
     }
 
     /**
@@ -217,7 +219,8 @@ class AgentManager {
      * @returns {object} An object containing the effective settings.
      */
     getEffectiveApiConfig(agentId = null) {
-        const finalAgentId = agentId || appInstance.getActiveChat()?.agent || DEFAULT_AGENT_ID;
+        const activeChat = appInstance.chatManager ? appInstance.chatManager.getActiveChat() : null;
+        const finalAgentId = agentId || activeChat?.agent || DEFAULT_AGENT_ID;
         const agent = this.getAgent(finalAgentId);
         const defaultAgent = this.getAgent(DEFAULT_AGENT_ID);
 

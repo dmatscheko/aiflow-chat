@@ -215,7 +215,7 @@ defineStep('branching-prompt', {
     onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
     execute: (step, context) => {
         console.log("Executing Branching Prompt (not implemented)");
-        const lastMessage = context.app.getActiveChat()?.log.getLastMessage()?.content || '';
+        const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.content || '';
         let isMatch = false;
         try {
             switch(step.data.conditionType) {
@@ -252,7 +252,7 @@ defineStep('conditional-stop', {
     onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
     execute: (step, context) => {
         console.log("Executing Conditional Stop (not implemented)");
-        const lastMessage = context.app.getActiveChat()?.log.getLastMessage()?.content || '';
+        const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.content || '';
         let isMatch = false;
         try {
             switch(step.data.conditionType) {
