@@ -324,6 +324,8 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                         container.appendChild(errorSpan);
                     }
 
+            }
+
             if (setting.actions) {
                 const buttonContainer = document.createElement('div');
                 buttonContainer.classList.add('setting-actions');
@@ -333,12 +335,13 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     button.textContent = action.label;
                     button.type = 'button';
                     button.addEventListener('click', (e) => {
-                        action.onClick(e, input);
+                        // Pass the input element if it exists, otherwise the container.
+                        // This makes the behavior consistent for fieldsets vs. regular inputs.
+                        action.onClick(e, input || container);
                     });
                     buttonContainer.appendChild(button);
                 });
                 container.appendChild(buttonContainer);
-            }
             }
 
             if (setting.dependsOn) {

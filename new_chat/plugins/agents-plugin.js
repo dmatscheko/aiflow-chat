@@ -297,6 +297,12 @@ class AgentManager {
         const agent = this.getAgent(agentId);
         if (!agent) return;
 
+        // Remove existing title bar before adding a new one to prevent duplication
+        const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
+        if (existingTitleBar) {
+            existingTitleBar.remove();
+        }
+
         // --- Title Bar ---
         const buttons = [
             {
@@ -368,7 +374,20 @@ class AgentManager {
         settingsDefinition.push({
             id: 'toolSettings', type: 'fieldset', label: 'Tool Settings',
             children: [
-                { id: 'mcpServer', label: 'MCP Server URL', type: 'text', placeholder: 'e.g. http://localhost:3000/mcp' },
+                {
+                    id: 'mcpServer', label: 'MCP Server URL', type: 'text', placeholder: 'e.g. http://localhost:3000/mcp',
+                    actions: [{
+                        id: 'agent-refresh-tools', label: 'Refresh',
+                        onClick: () => {
+                            const effectiveConfig = this.getEffectiveApiConfig(agent.id);
+                            if (effectiveConfig.mcpServer) {
+                                this.app.mcp.getTools(effectiveConfig.mcpServer, true); // force=true
+                            } else {
+                                alert('Please set an MCP Server URL for this agent or the Default Agent first.');
+                            }
+                        }
+                    }]
+                },
                 { id: 'allowAll', label: 'Allow all available tools', type: 'checkbox' },
                 {
                     id: 'allowed', type: 'checkbox-list', label: '',
@@ -376,15 +395,7 @@ class AgentManager {
                     dependsOn: 'allowAll', dependsOnValue: false
                 }
             ],
-            ...(isDefaultAgent ? {} : { dependsOn: 'useCustomToolSettings', dependsOnValue: true }),
-            actions: [{
-                id: 'agent-refresh-tools', label: 'Refresh Tools',
-                onClick: () => {
-                    const effectiveConfig = this.getEffectiveApiConfig(agent.id);
-                    if (effectiveConfig.mcpServer) this.app.mcp.getTools(effectiveConfig.mcpServer);
-                    else alert('Please set an MCP Server URL for this agent or the Default Agent first.');
-                }
-            }]
+            ...(isDefaultAgent ? {} : { dependsOn: 'useCustomToolSettings', dependsOnValue: true })
         });
 
         const onSettingChanged = (path, value) => this.updateAgentProperty(agentId, path, value);
@@ -424,10 +435,16 @@ const agentsPlugin = {
         agentManager.fetchModels(DEFAULT_AGENT_ID);
 
         document.body.addEventListener('mcp-tools-updated', (e) => {
-            if (app.activeView.type === 'agent-editor') {
+            // Check if the currently active view is an agent editor
+            if (app.activeView.type === 'agent-editor' && app.activeView.id) {
                 const agent = agentManager.getAgent(app.activeView.id);
-                if (agent && agent.modelSettings.mcpServer === e.detail.url) {
-                    agentManager.initializeAgentEditor();
+                if (agent) {
+                    // Get the effective config for the agent being edited
+                    const effectiveConfig = agentManager.getEffectiveApiConfig(agent.id);
+                    // If the updated tools belong to the agent we are viewing, refresh the editor
+                    if (effectiveConfig.mcpServer === e.detail.url) {
+                        agentManager.initializeAgentEditor();
+                    }
                 }
             }
         });
