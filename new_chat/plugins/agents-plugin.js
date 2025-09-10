@@ -1,6 +1,6 @@
 /**
  * @fileoverview Plugin for managing and using Agents with advanced settings.
- * @version 2.3.0
+ * @version 2.4.0
  */
 
 'use strict';
@@ -8,6 +8,7 @@
 import { pluginManager } from '../plugin-manager.js';
 import { debounce, importJson, exportJson } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
+import { createTitleBar } from './title-bar-plugin.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -160,6 +161,11 @@ class AgentManager {
             if (path === 'name') {
                 const agentListItem = document.querySelector(`.list-item[data-id="${agentId}"] span`);
                 if (agentListItem) agentListItem.textContent = value;
+                // Also update the title bar if it's the active view
+                if (this.app.activeView.type === 'agent-editor' && this.app.activeView.id === agentId) {
+                    const titleEl = document.querySelector('#main-panel .main-title-bar .title');
+                    if (titleEl) titleEl.textContent = value;
+                }
             }
         }
     }
@@ -275,16 +281,52 @@ class AgentManager {
     renderAgentEditor(agentId) {
         const agent = agentId ? this.getAgent(agentId) : null;
         if (!agent) return '<h2>Agent not found.</h2>';
+        // The main-panel now includes the title bar, so the editor is just the container.
         return `<div id="agent-editor-container" data-agent-id="${agent.id}"></div>`;
     }
 
     async initializeAgentEditor() {
+        const mainPanel = document.getElementById('main-panel');
         const editorView = document.getElementById('agent-editor-container');
-        if (!editorView || !editorView.dataset.agentId) return;
+        if (!mainPanel || !editorView || !editorView.dataset.agentId) return;
 
         const agentId = editorView.dataset.agentId;
         const agent = this.getAgent(agentId);
         if (!agent) return;
+
+        // --- Title Bar ---
+        const buttons = [
+            {
+                id: 'import-agents-btn',
+                label: 'Import Agents',
+                className: 'btn-gray',
+                onClick: () => {
+                    importJson('.agent', (data) => {
+                        if (Array.isArray(data)) {
+                            data.forEach(agentData => this.addAgentFromData(agentData));
+                            alert(`${data.length} agent(s) imported successfully.`);
+                        } else {
+                            this.addAgentFromData(data);
+                            alert(`Agent imported successfully.`);
+                        }
+                    });
+                }
+            },
+            {
+                id: 'export-agents-btn',
+                label: 'Export Agents',
+                className: 'btn-gray',
+                onClick: () => {
+                    const agentsToExport = this.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
+                    if (agentsToExport.length > 0) exportJson(agentsToExport, 'agents_config', 'agent');
+                    else alert('No custom agents to export.');
+                }
+            }
+        ];
+        const titleBar = createTitleBar(agent.name, [], buttons);
+        mainPanel.prepend(titleBar);
+        // --- End Title Bar ---
+
 
         const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
 
@@ -345,36 +387,8 @@ class AgentManager {
         const onSettingChanged = (path, value) => this.updateAgentProperty(agentId, path, value);
         const settingsFragment = createSettingsUI(settingsDefinition, agent, onSettingChanged, `agent-${agent.id}-`, 'agent-editor');
 
-        const toolbar = document.createElement('div');
-        toolbar.className = 'agent-toolbar';
-        toolbar.innerHTML = `
-            <h2 class="editor-title" style="flex-grow: 1;">Edit Agent</h2>
-            <div class="title-bar-buttons">
-                <button id="import-agents-btn" class="btn-gray">Import Agents</button>
-                <button id="export-agents-btn" class="btn-gray">Export Agents</button>
-            </div>
-        `;
-        editorView.innerHTML = '';
-        editorView.appendChild(toolbar);
+        editorView.innerHTML = ''; // Clear potential old content
         editorView.appendChild(settingsFragment);
-
-        toolbar.querySelector('#import-agents-btn').addEventListener('click', () => {
-            importJson('.agent', (data) => {
-                if (Array.isArray(data)) {
-                    data.forEach(agentData => this.addAgentFromData(agentData));
-                    alert(`${data.length} agent(s) imported successfully.`);
-                } else {
-                    this.addAgentFromData(data);
-                    alert(`Agent imported successfully.`);
-                }
-            });
-        });
-
-        toolbar.querySelector('#export-agents-btn').addEventListener('click', () => {
-            const agentsToExport = this.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
-            if (agentsToExport.length > 0) exportJson(agentsToExport, 'agents_config', 'agent');
-            else alert('No custom agents to export.');
-        });
 
         this.fetchModels(agentId);
     }
@@ -466,6 +480,12 @@ const agentsPlugin = {
      * @param {Chat} chat
      */
     onViewRendered(view, chat) {
+        // Remove any existing title bar from other views
+        const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
+        if (existingTitleBar) {
+            existingTitleBar.remove();
+        }
+
         if (view.type === 'agent-editor') {
             agentManager.initializeAgentEditor();
         }

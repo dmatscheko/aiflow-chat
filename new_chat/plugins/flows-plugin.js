@@ -1,13 +1,14 @@
 /**
  * @fileoverview Plugin for creating and executing complex, node-based flows.
- * @version 2.1.0
+ * @version 2.2.0
  */
 
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce } from '../utils.js';
+import { debounce, importJson, exportJson } from '../utils.js';
 import { responseProcessor } from './chats-plugin.js';
+import { createTitleBar } from './title-bar-plugin.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -255,15 +256,8 @@ class FlowsManager {
 
     /** @param {string} flowId */
     renderFlowEditor(flowId) {
-        const dropdownContent = Object.entries(this.stepTypes).map(([type, { label }]) => `<a href="#" data-step-type="${type}">${label}</a>`).join('');
         return `
             <div id="flow-editor-container">
-                <div class="flow-toolbar">
-                    <div class="dropdown" style="margin-right: 1rem;">
-                        <button id="add-flow-step-btn" class="primary-btn">Add Step</button>
-                        <div id="add-step-dropdown" class="dropdown-content">${dropdownContent}</div>
-                    </div>
-                </div>
                 <div id="flow-canvas-wrapper"><div id="flow-canvas">
                     <svg id="flow-svg-layer"></svg>
                     <div id="flow-node-container"></div>
@@ -526,9 +520,63 @@ const flowsPlugin = {
 
     /** @param {View} view, @param {Chat} chat */
     onViewRendered(view, chat) {
+        // Remove any existing title bar from other views
+        const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
+        if (existingTitleBar) {
+            existingTitleBar.remove();
+        }
+
         if (view.type === 'flow-editor') {
             const flow = flowsManager.getFlow(view.id);
             if (!flow) return;
+
+            const mainPanel = document.getElementById('main-panel');
+
+            // --- Title Bar ---
+            const dropdownContent = Object.entries(flowsManager.stepTypes)
+                .map(([type, { label }]) => `<a href="#" data-step-type="${type}">${label}</a>`)
+                .join('');
+
+            const buttons = [
+                {
+                    id: 'add-flow-step-btn',
+                    label: 'Add Step',
+                    className: 'primary-btn',
+                    dropdownContent: dropdownContent,
+                    onClick: (e) => {
+                        const type = e.target.dataset.stepType;
+                        if (type && flowsManager.stepTypes[type]) {
+                            flow.steps.push({ id: `step-${Date.now()}`, type, x: 50, y: 50, data: flowsManager.stepTypes[type].getDefaults() });
+                            flowsManager.updateFlow(flow);
+                            flowsManager.renderFlow(flow);
+                        }
+                    }
+                },
+                {
+                    id: 'load-flow-btn',
+                    label: 'Load Flow',
+                    className: 'btn-gray',
+                    onClick: () => {
+                        importJson('.flow', (data) => {
+                            const newFlow = flowsManager.addFlowFromData(data);
+                            flowsManager.app.setView('flow-editor', newFlow.id);
+                        });
+                    }
+                },
+                {
+                    id: 'save-flow-btn',
+                    label: 'Save Flow',
+                    className: 'btn-gray',
+                    onClick: () => {
+                        exportJson(flow, flow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow');
+                    }
+                }
+            ];
+
+            const titleBar = createTitleBar(flow.name, [], buttons);
+            mainPanel.prepend(titleBar);
+            // --- End Title Bar ---
+
             const debouncedUpdate = debounce(() => flowsManager.updateFlow(flow), 500);
             flowsManager.renderFlow(flow);
             const canvas = document.getElementById('flow-canvas');
@@ -551,18 +599,6 @@ const flowsPlugin = {
                     flowsManager.renderFlow(flow);
                 }
             });
-            const dropdown = document.getElementById('add-step-dropdown');
-            document.getElementById('add-flow-step-btn').addEventListener('click', (e) => { e.stopPropagation(); dropdown.classList.toggle('show'); });
-            dropdown.addEventListener('click', (e) => {
-                const type = e.target.dataset.stepType;
-                if (type && flowsManager.stepTypes[type]) {
-                    flow.steps.push({ id: `step-${Date.now()}`, type, x: 50, y: 50, data: flowsManager.stepTypes[type].getDefaults() });
-                    flowsManager.updateFlow(flow);
-                    flowsManager.renderFlow(flow);
-                    dropdown.classList.remove('show');
-                }
-            });
-            window.addEventListener('click', (e) => { if (!e.target.matches('#add-flow-step-btn')) dropdown.classList.remove('show'); });
         }
         flowsManager.updateActiveFlowInList();
     },
