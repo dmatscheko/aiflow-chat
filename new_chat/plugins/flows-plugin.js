@@ -1,6 +1,6 @@
 /**
  * @fileoverview Plugin for creating and executing complex, node-based flows.
- * @version 2.2.0
+ * @version 2.2.1
  */
 
 'use strict';
@@ -520,13 +520,12 @@ const flowsPlugin = {
 
     /** @param {View} view, @param {Chat} chat */
     onViewRendered(view, chat) {
-        // Remove any existing title bar from other views
-        const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
-        if (existingTitleBar) {
-            existingTitleBar.remove();
-        }
-
         if (view.type === 'flow-editor') {
+            const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
+            if (existingTitleBar) {
+                existingTitleBar.remove();
+            }
+
             const flow = flowsManager.getFlow(view.id);
             if (!flow) return;
 

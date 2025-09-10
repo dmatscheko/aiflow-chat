@@ -1,6 +1,6 @@
 /**
  * @fileoverview Plugin for managing and using Agents with advanced settings.
- * @version 2.4.0
+ * @version 2.4.1
  */
 
 'use strict';
@@ -480,13 +480,11 @@ const agentsPlugin = {
      * @param {Chat} chat
      */
     onViewRendered(view, chat) {
-        // Remove any existing title bar from other views
-        const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
-        if (existingTitleBar) {
-            existingTitleBar.remove();
-        }
-
         if (view.type === 'agent-editor') {
+            const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
+            if (existingTitleBar) {
+                existingTitleBar.remove();
+            }
             agentManager.initializeAgentEditor();
         }
         agentManager.updateActiveAgentInList();

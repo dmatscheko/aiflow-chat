@@ -1,6 +1,6 @@
 /**
  * @fileoverview Plugin for creating title bars and handling file operations.
- * @version 2.0.0
+ * @version 2.0.1
  */
 
 'use strict';
@@ -141,17 +141,16 @@ const titleBarPlugin = {
      */
     onViewRendered(view, chat) {
         if (!appInstance) return;
-
         const mainPanel = document.getElementById('main-panel');
         if (!mainPanel) return;
 
-        // Remove any existing title bar to prevent duplicates on re-renders
-        const existingTitleBar = mainPanel.querySelector('.main-title-bar');
-        if (existingTitleBar) {
-            existingTitleBar.remove();
-        }
-
         if (view.type === 'chat' && chat) {
+            // Remove any existing title bar to prevent duplicates on re-renders
+            const existingTitleBar = mainPanel.querySelector('.main-title-bar');
+            if (existingTitleBar) {
+                existingTitleBar.remove();
+            }
+
             const controls = [
                 {
                     id: 'agent-selector-container',
