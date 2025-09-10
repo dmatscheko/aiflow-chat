@@ -175,6 +175,7 @@ h2 {
     border-bottom: 1px solid var(--border-color);
     background-color: var(--panel-bg-color);
     gap: 1rem;
+    flex-wrap: wrap;
 }
 
 .main-title-bar .title {
@@ -193,7 +194,7 @@ h2 {
     justify-content: flex-end;
     gap: 1rem;
     min-width: 0;
-    margin-right: 2rem;
+    flex-wrap: wrap;
 }
 
 #title-bar-controls label {
@@ -221,7 +222,7 @@ h2 {
 .title-bar-buttons {
     display: flex;
     gap: 0.5rem;
-    flex-shrink: 0; /* Prevent buttons from shrinking */
+    flex-wrap: wrap;
 }
 
 .btn-gray {
