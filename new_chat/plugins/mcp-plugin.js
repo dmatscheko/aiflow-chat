@@ -254,7 +254,11 @@ class McpPlugin {
      * @param {string} url - The MCP server URL.
      * @returns {Promise<ToolSchema[]>}
      */
-    async getTools(url) {
+    async getTools(url, force = false) {
+        if (force) {
+            this.#toolCache.delete(url);
+            this.#initPromises.delete(url); // Also clear any pending/failed init promises
+        }
         if (this.#toolCache.has(url)) {
             return this.#toolCache.get(url);
         }

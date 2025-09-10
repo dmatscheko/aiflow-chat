@@ -381,8 +381,11 @@ class AgentManager {
                 id: 'agent-refresh-tools', label: 'Refresh Tools',
                 onClick: () => {
                     const effectiveConfig = this.getEffectiveApiConfig(agent.id);
-                    if (effectiveConfig.mcpServer) this.app.mcp.getTools(effectiveConfig.mcpServer);
-                    else alert('Please set an MCP Server URL for this agent or the Default Agent first.');
+                    if (effectiveConfig.mcpServer) {
+                        this.app.mcp.getTools(effectiveConfig.mcpServer, true); // force=true
+                    } else {
+                        alert('Please set an MCP Server URL for this agent or the Default Agent first.');
+                    }
                 }
             }]
         });
@@ -424,10 +427,16 @@ const agentsPlugin = {
         agentManager.fetchModels(DEFAULT_AGENT_ID);
 
         document.body.addEventListener('mcp-tools-updated', (e) => {
-            if (app.activeView.type === 'agent-editor') {
+            // Check if the currently active view is an agent editor
+            if (app.activeView.type === 'agent-editor' && app.activeView.id) {
                 const agent = agentManager.getAgent(app.activeView.id);
-                if (agent && agent.modelSettings.mcpServer === e.detail.url) {
-                    agentManager.initializeAgentEditor();
+                if (agent) {
+                    // Get the effective config for the agent being edited
+                    const effectiveConfig = agentManager.getEffectiveApiConfig(agent.id);
+                    // If the updated tools belong to the agent we are viewing, refresh the editor
+                    if (effectiveConfig.mcpServer === e.detail.url) {
+                        agentManager.initializeAgentEditor();
+                    }
                 }
             }
         });

@@ -112,6 +112,24 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                         const childFragment = createSettingsUI(setting.children, currentValue || {}, onChange, `${settingId}-`, context, settingPath, dependencyMap);
                         container.appendChild(childFragment);
                     }
+                    // Also handle actions for fieldset directly
+                    if (setting.actions) {
+                        const buttonContainer = document.createElement('div');
+                        buttonContainer.classList.add('setting-actions');
+                        setting.actions.forEach(action => {
+                            const button = document.createElement('button');
+                            button.id = action.id;
+                            button.textContent = action.label;
+                            button.type = 'button';
+                             if (action.className) button.className = action.className;
+                            button.addEventListener('click', (e) => {
+                                // For fieldsets, we pass the fieldset element itself instead of a specific input
+                                action.onClick(e, container);
+                            });
+                            buttonContainer.appendChild(button);
+                        });
+                        container.appendChild(buttonContainer);
+                    }
                     break;
 
                 case 'checkbox-list':
