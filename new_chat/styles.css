@@ -190,9 +190,10 @@ h2 {
     flex-grow: 1; /* Pushes buttons to the right */
     display: flex;
     align-items: center;
-    justify-content: flex-start; /* Align controls to the left */
+    justify-content: flex-end;
     gap: 1rem;
     min-width: 0;
+    margin-right: 2rem;
 }
 
 #title-bar-controls label {

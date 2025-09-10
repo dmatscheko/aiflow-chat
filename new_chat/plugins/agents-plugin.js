@@ -1,6 +1,6 @@
 /**
  * @fileoverview Plugin for managing and using Agents with advanced settings.
- * @version 2.4.1
+ * @version 2.4.2
  */
 
 'use strict';
@@ -280,8 +280,11 @@ class AgentManager {
     /** @param {string} [agentId] */
     renderAgentEditor(agentId) {
         const agent = agentId ? this.getAgent(agentId) : null;
-        if (!agent) return '<h2>Agent not found.</h2>';
-        // The main-panel now includes the title bar, so the editor is just the container.
+        if (!agent) {
+             // This case is now handled by onActivate, which should set view to default.
+             // But as a fallback, we can show a message.
+            return '<h2>Agent not found</h2><p>Select an agent from the list.</p>';
+        }
         return `<div id="agent-editor-container" data-agent-id="${agent.id}"></div>`;
     }
 
@@ -463,13 +466,21 @@ const agentsPlugin = {
                             agentManager.deleteAgent(agentId);
                             agentManager.renderAgentList();
                             if (agentManager.app.activeView.id === agentId) {
-                                agentManager.app.showTab('agents');
+                                // If the deleted agent was active, show the default agent view
+                                agentManager.app.setView('agent-editor', DEFAULT_AGENT_ID);
                             }
                         }
                     } else {
                         agentManager.app.setView('agent-editor', agentId);
                     }
                 });
+
+                // If no agent is active or the active one is invalid, show the default agent.
+                const lastActiveId = agentManager.app.lastActiveIds['agent-editor'];
+                const lastAgent = agentManager.getAgent(lastActiveId);
+                if (!lastAgent) {
+                    agentManager.app.setView('agent-editor', DEFAULT_AGENT_ID);
+                }
             }
         });
         return tabs;
