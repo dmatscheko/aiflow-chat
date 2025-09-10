@@ -13,7 +13,7 @@ import { importJson, exportJson } from '../utils.js';
 /**
  * @typedef {import('../main.js').App} App
  * @typedef {import('../main.js').View} View
- * @typedef {import('../main.js').Chat} Chat
+ * @typedef {import('./chat-plugin.js').Chat} Chat
  */
 
 /** @type {App | null} */
@@ -72,7 +72,7 @@ const titleBarPlugin = {
                 agentSelector.addEventListener('change', (e) => {
                     const selectedAgentId = e.target.value;
                     chat.agent = selectedAgentId === 'agent-default' ? null : selectedAgentId;
-                    appInstance.debouncedSave();
+                    appInstance.chatManager.debouncedSave();
                 });
             }
 
@@ -81,7 +81,7 @@ const titleBarPlugin = {
                 flowSelector.addEventListener('change', (e) => {
                     const selectedFlowId = e.target.value;
                     chat.flow = selectedFlowId || null;
-                    appInstance.debouncedSave();
+                    appInstance.chatManager.debouncedSave();
                 });
             }
 
@@ -99,7 +99,7 @@ const titleBarPlugin = {
             if (loadChatBtn) {
                 loadChatBtn.addEventListener('click', () => {
                     importJson('.chat', (data) => {
-                        appInstance.createChatFromData(data);
+                        appInstance.chatManager.createChatFromData(data);
                     });
                 });
             }
@@ -107,7 +107,7 @@ const titleBarPlugin = {
             const saveChatBtn = titleBar.querySelector('#save-chat-btn');
             if (saveChatBtn) {
                 saveChatBtn.addEventListener('click', () => {
-                    const activeChat = appInstance.getActiveChat();
+                    const activeChat = appInstance.chatManager.getActiveChat();
                     if (activeChat) {
                         const chatToSave = {
                             title: activeChat.title,

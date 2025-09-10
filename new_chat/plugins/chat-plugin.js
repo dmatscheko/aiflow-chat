@@ -1,20 +1,213 @@
 /**
- * @fileoverview The primary plugin for Core Chat functionality.
- * This plugin manages the chat UI, message processing, and core chat views.
- * @version 1.0.0
+ * @fileoverview Plugin for core chat functionality.
  */
 
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
+import { ChatLog } from '../chat-data.js';
+import { debounce } from '../utils.js';
 
 /**
  * @typedef {import('../main.js').App} App
- * @typedef {import('../main.js').Chat} Chat
+ * @typedef {import('../main.js').View} View
  * @typedef {import('../chat-data.js').Message} Message
- * @typedef {import('./agents-plugin.js').AgentManager} AgentManager
- * @typedef {import('../chat-data.js').ChatLog} ChatLog
+ * @typedef {object} Chat
+ * @property {string} id - The unique identifier for the chat.
+ * @property {string} title - The title of the chat.
+ * @property {ChatLog} log - The ChatLog instance for the chat.
+ * @property {string} draftMessage - The current draft message.
+ * @property {string | null} agent - The ID of the active agent.
+ * @property {string | null} flow - The ID of the active flow.
  */
+
+let appInstance = null;
+
+/**
+ * Manages the lifecycle and storage of chats.
+ * @class
+ */
+class ChatManager {
+    /**
+     * @param {App} app
+     */
+    constructor(app) {
+        /** @type {App} */
+        this.app = app;
+        /** @type {Chat[]} */
+        this.chats = [];
+        /** @type {string | null} */
+        this.activeChatId = null;
+        /** @type {ChatUI | null} */
+        this.chatUI = null;
+
+        this.debouncedSave = debounce(() => this.saveChats(), 500);
+    }
+
+    init() {
+        this.loadChats();
+        this.app.activeView.id = this.activeChatId;
+    }
+
+    loadChats() {
+        const savedChats = JSON.parse(localStorage.getItem('core_chat_logs'));
+        if (savedChats && savedChats.length > 0) {
+            this.chats = savedChats.map(chatData => {
+                const chat = {
+                    id: chatData.id,
+                    title: chatData.title,
+                    log: ChatLog.fromJSON(chatData.log),
+                    draftMessage: chatData.draftMessage || '',
+                    agent: chatData.agent || null,
+                    flow: chatData.flow || null,
+                };
+                chat.log.subscribe(this.debouncedSave);
+                return chat;
+            });
+            this.activeChatId = localStorage.getItem('core_active_chat_id') || this.chats[0].id;
+            this.renderChatList();
+        } else {
+            this.createNewChat();
+        }
+    }
+
+    saveChats() {
+        const chatsToSave = this.chats.map(chat => ({
+            id: chat.id,
+            title: chat.title,
+            log: chat.log.toJSON(),
+            draftMessage: chat.draftMessage,
+            agent: chat.agent,
+            flow: chat.flow,
+        }));
+        localStorage.setItem('core_chat_logs', JSON.stringify(chatsToSave));
+        localStorage.setItem('core_active_chat_id', this.activeChatId);
+    }
+
+    createNewChat() {
+        const newChat = {
+            id: `chat-${Date.now()}`,
+            title: 'New Chat',
+            log: new ChatLog(),
+            draftMessage: '',
+            agent: null,
+            flow: null,
+        };
+        newChat.log.subscribe(this.debouncedSave);
+        this.chats.push(newChat);
+        this.renderChatList();
+        this.app.setView('chat', newChat.id);
+        this.saveChats();
+    }
+
+    createChatFromData(chatData) {
+        const newChat = {
+            id: `chat-${Date.now()}`,
+            title: chatData.title || 'Imported Chat',
+            log: ChatLog.fromJSON(chatData.log),
+            draftMessage: chatData.draftMessage || '',
+            agent: chatData.agent || null,
+            flow: chatData.flow || null,
+        };
+        newChat.log.subscribe(this.debouncedSave);
+        this.chats.push(newChat);
+        this.renderChatList();
+        this.app.setView('chat', newChat.id);
+        this.saveChats();
+    }
+
+    deleteChat(chatId) {
+        this.chats = this.chats.filter(c => c.id !== chatId);
+        if (this.activeChatId === chatId) {
+            const newActiveChat = this.chats.length > 0 ? this.chats[0] : null;
+            if (newActiveChat) {
+                this.app.setView('chat', newActiveChat.id);
+            } else {
+                this.createNewChat();
+                return;
+            }
+        }
+        this.renderChatList();
+        this.saveChats();
+    }
+
+    renderChatList() {
+        const chatListEl = document.getElementById('chat-list');
+        if (!chatListEl) return;
+        chatListEl.innerHTML = '';
+        this.chats.forEach(chat => {
+            const li = document.createElement('li');
+            li.className = 'list-item';
+            li.dataset.id = chat.id;
+            li.innerHTML = `<span>${chat.title}</span><button class="delete-button">X</button>`;
+            chatListEl.appendChild(li);
+        });
+        this.updateActiveChatInList();
+    }
+
+    updateActiveChatInList() {
+        const chatListEl = document.getElementById('chat-list');
+        if (!chatListEl) return;
+        chatListEl.querySelectorAll('li').forEach(item => {
+            item.classList.toggle('active', item.dataset.id === this.activeChatId);
+        });
+    }
+
+    getActiveChat() {
+        return this.chats.find(c => c.id === this.activeChatId);
+    }
+
+    initChatView(chatId) {
+        const chat = this.chats.find(c => c.id === chatId);
+        if (!chat) return;
+        this.chatUI = new ChatUI(document.getElementById('chat-container'), this.app.agentManager);
+        this.chatUI.setChatLog(chat.log);
+        this.app.dom.messageForm = document.getElementById('message-form');
+        this.app.dom.messageInput = document.getElementById('message-input');
+        this.app.dom.stopButton = document.getElementById('stop-button');
+
+        this.app.dom.messageInput.value = chat.draftMessage || '';
+
+        this.app.dom.messageInput.addEventListener('input', () => {
+            const activeChat = this.getActiveChat();
+            if (activeChat) {
+                activeChat.draftMessage = this.app.dom.messageInput.value;
+                this.debouncedSave();
+            }
+        });
+
+        this.app.dom.messageForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.handleFormSubmit();
+        });
+        this.app.dom.stopButton.addEventListener('click', () => {
+            if (this.app.abortController) this.app.abortController.abort();
+        });
+        const chatAreaControls = document.getElementById('chat-area-controls');
+        if (chatAreaControls) {
+            chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '', chat);
+            pluginManager.trigger('onChatSwitched', chat);
+        }
+    }
+
+    async handleFormSubmit(options = {}) {
+        const { isContinuation = false, agentId = null } = options;
+        const activeChat = this.getActiveChat();
+        if (!activeChat) return;
+        if (!isContinuation) {
+            const userInput = this.app.dom.messageInput.value.trim();
+            if (!userInput) return;
+            activeChat.log.addMessage({ role: 'user', content: userInput });
+            this.app.dom.messageInput.value = '';
+        }
+        const finalAgentId = agentId || activeChat.agent || null;
+        activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
+        responseProcessor.scheduleProcessing(this.app);
+    }
+}
+
+
+// --- From chat-ui.js ---
 
 /**
  * Manages the rendering of a ChatLog instance into a designated HTML element.
@@ -25,7 +218,7 @@ import { pluginManager } from '../plugin-manager.js';
 class ChatUI {
     /**
      * @param {HTMLElement} container - The DOM element to render the chat messages into.
-     * @param {AgentManager} agentManager - The agent manager instance for displaying agent names.
+     * @param {import('./agents-plugin.js').AgentManager} agentManager - The agent manager instance for displaying agent names.
      * @throws {Error} If the container element is not provided.
      */
     constructor(container, agentManager) {
@@ -39,7 +232,7 @@ class ChatUI {
         this.container = container;
         /**
          * The agent manager instance.
-         * @type {AgentManager}
+         * @type {import('./agents-plugin.js').AgentManager}
          */
         this.agentManager = agentManager;
         /**
@@ -154,6 +347,8 @@ class ChatUI {
 }
 
 
+// --- From response-processor.js ---
+
 /**
  * Manages the queue and execution of AI response generation.
  * It scans all chats for "pending" assistant messages (content is null)
@@ -223,7 +418,7 @@ class ResponseProcessor {
 
         let workFound = false;
         if (this.app) {
-            for (const chat of this.app.chats) {
+            for (const chat of this.app.chatManager.chats) {
                 const pendingMessage = chat.log.findNextPendingMessage();
                 if (pendingMessage) {
                     // Found a message to process
@@ -347,42 +542,28 @@ class ResponseProcessor {
                 const firstUserMessage = chat.log.getActiveMessageValues().find(m => m.role === 'user');
                 if (firstUserMessage) {
                     chat.title = firstUserMessage.content.substring(0, 20) + '...';
-                    app.saveChats(); // Save title change
+                    this.app.chatManager.saveChats(); // Save title change
                 }
             }
-            app.renderChatList();
+            this.app.chatManager.renderChatList();
             await pluginManager.triggerAsync('onResponseComplete', assistantMsg, chat);
         }
     }
 }
 
-/**
- * @type {App|null}
- */
-let appInstance = null;
-/**
- * @type {ChatUI|null}
- */
-let chatUI = null;
-const responseProcessor = new ResponseProcessor();
+export const responseProcessor = new ResponseProcessor();
 
 
-/**
- * The main plugin object for Core Chat functionality.
- * @type {import('../plugin-manager.js').Plugin}
- */
 const chatPlugin = {
     name: 'Chat',
 
     /**
-     * @param {App} app - The main application instance.
+     * @param {App} app
      */
     onAppInit(app) {
         appInstance = app;
-        app.responseProcessor = responseProcessor;
-        responseProcessor.scheduleProcessing(app);
+        app.chatManager = new ChatManager(app);
 
-        // Register the core chat view
         pluginManager.registerView('chat', (chatId) => `
             <div id="chat-container"></div>
             <div id="chat-area-controls"></div>
@@ -395,11 +576,13 @@ const chatPlugin = {
     },
 
     /**
-     * @param {import('../main.js').Tab[]} tabs - The array of existing tabs.
-     * @returns {import('../main.js').Tab[]} The updated array of tabs.
+     * @param {import('../main.js').Tab[]} tabs
+     * @returns {import('../main.js').Tab[]}
      */
     onTabsRegistered(tabs) {
-        const chatTab = {
+        const chatManager = appInstance.chatManager;
+        const newTabs = [...tabs];
+        newTabs.unshift({
             id: 'chats',
             label: 'Chats',
             viewType: 'chat',
@@ -411,8 +594,8 @@ const chatPlugin = {
                         <button id="new-chat-button" class="add-new-button">New Chat</button>
                     </div>
                 `;
-                appInstance.renderChatList();
-                document.getElementById('new-chat-button').addEventListener('click', () => appInstance.createNewChat());
+                chatManager.renderChatList();
+                document.getElementById('new-chat-button').addEventListener('click', () => chatManager.createNewChat());
                 document.getElementById('chat-list').addEventListener('click', (e) => {
                     const target = e.target;
                     if (target.closest('li')) {
@@ -420,80 +603,18 @@ const chatPlugin = {
                     }
                     if (target.classList.contains('delete-button')) {
                         e.stopPropagation();
-                        appInstance.deleteChat(target.parentElement.dataset.id);
+                        chatManager.deleteChat(target.parentElement.dataset.id);
                     }
                 });
             }
-        };
-        // Add the chat tab to the beginning of the array
-        tabs.unshift(chatTab);
-        return tabs;
+        });
+        return newTabs;
     },
 
-    /**
-     * @param {import('../main.js').View} view - The rendered view object.
-     * @param {Chat} chat
-     */
     onViewRendered(view, chat) {
         if (view.type === 'chat') {
-            const chatContainer = document.getElementById('chat-container');
-            if (!chatContainer) return;
-
-            chatUI = new ChatUI(chatContainer, appInstance.agentManager);
-            chatUI.setChatLog(chat.log);
-
-            appInstance.dom.messageForm = document.getElementById('message-form');
-            appInstance.dom.messageInput = document.getElementById('message-input');
-            appInstance.dom.stopButton = document.getElementById('stop-button');
-
-            // Restore draft message
-            appInstance.dom.messageInput.value = chat.draftMessage || '';
-
-            // Save draft message on input
-            appInstance.dom.messageInput.addEventListener('input', () => {
-                const activeChat = appInstance.getActiveChat();
-                if (activeChat) {
-                    activeChat.draftMessage = appInstance.dom.messageInput.value;
-                    appInstance.debouncedSave();
-                }
-            });
-
-            appInstance.dom.messageForm.addEventListener('submit', (e) => {
-                e.preventDefault();
-                this.handleFormSubmit();
-            });
-
-            appInstance.dom.stopButton.addEventListener('click', () => {
-                if (appInstance.abortController) appInstance.abortController.abort();
-            });
-
-            const chatAreaControls = document.getElementById('chat-area-controls');
-            if (chatAreaControls) {
-                chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '', chat);
-                pluginManager.trigger('onChatSwitched', chat);
-            }
+            appInstance.chatManager.initChatView(view.id);
         }
-    },
-
-    /**
-     * Handles the submission of the message form.
-     * @param {object} [options={}] - Options for the submission.
-     */
-    handleFormSubmit(options = {}) {
-        const { isContinuation = false, agentId = null } = options;
-        const activeChat = appInstance.getActiveChat();
-        if (!activeChat) return;
-
-        if (!isContinuation) {
-            const userInput = appInstance.dom.messageInput.value.trim();
-            if (!userInput) return;
-            activeChat.log.addMessage({ role: 'user', content: userInput });
-            appInstance.dom.messageInput.value = '';
-        }
-
-        const finalAgentId = agentId || activeChat.agent || null;
-        activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
-        responseProcessor.scheduleProcessing(appInstance);
     }
 };
 

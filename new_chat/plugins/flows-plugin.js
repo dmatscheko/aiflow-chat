@@ -7,7 +7,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { debounce } from '../utils.js';
-import { responseProcessor } from '../response-processor.js';
+import { responseProcessor } from './chat-plugin.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -111,7 +111,7 @@ defineStep('simple-prompt', {
     execute: (step, context) => {
         if (!step.data.prompt) return context.stopFlow('Simple Prompt step is not configured.');
         context.app.dom.messageInput.value = step.data.prompt;
-        context.app.handleFormSubmit({ agentId: step.data.agentId });
+        context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
     },
 });
 
@@ -133,7 +133,7 @@ defineStep('multi-prompt', {
         console.log("Executing Multi-Prompt (not fully implemented, runs once)");
         if (!step.data.prompt) return context.stopFlow('Multi Prompt step is not configured.');
         context.app.dom.messageInput.value = step.data.prompt;
-        context.app.handleFormSubmit({ agentId: step.data.agentId });
+        context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
     },
 });
 
