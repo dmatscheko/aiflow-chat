@@ -1,6 +1,6 @@
 /**
  * @fileoverview Plugin for creating and executing complex, node-based flows.
- * @version 2.0.0
+ * @version 2.1.0
  */
 
 'use strict';
@@ -56,6 +56,8 @@ import { responseProcessor } from './chat-plugin.js';
  * @property {(step: FlowStep, target: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) => void} onUpdate
  * @property {(step: FlowStep, context: FlowExecutionContext) => void} execute
  */
+
+let flowsManager = null;
 
 /**
  * Manages the entire lifecycle, execution, and UI of flows.
@@ -480,11 +482,10 @@ const flowsPlugin = {
     name: 'Flows',
     /** @param {App} app */
     onAppInit(app) {
-        const flowsManager = new FlowsManager(app);
+        flowsManager = new FlowsManager(app);
         app.flowsManager = flowsManager;
-        this.flowsManager = flowsManager; // For other hooks
 
-        pluginManager.registerView('flow-editor', (id) => this.flowsManager.renderFlowEditor(id));
+        pluginManager.registerView('flow-editor', (id) => flowsManager.renderFlowEditor(id));
     },
 
     /** @param {Tab[]} tabs */
@@ -496,12 +497,12 @@ const flowsPlugin = {
             onActivate: () => {
                 const contentEl = document.getElementById('flows-pane');
                 contentEl.innerHTML = `<div class="list-pane"><ul id="flow-list" class="item-list"></ul><button id="add-flow-btn" class="add-new-button">Add New Flow</button></div>`;
-                this.flowsManager.renderFlowList();
+                flowsManager.renderFlowList();
                 document.getElementById('add-flow-btn').addEventListener('click', () => {
                     const name = prompt('Enter a name for the new flow:');
                     if (name) {
-                        this.flowsManager.addFlow({ name, steps: [], connections: [] });
-                        this.flowsManager.renderFlowList();
+                        flowsManager.addFlow({ name, steps: [], connections: [] });
+                        flowsManager.renderFlowList();
                     }
                 });
                 document.getElementById('flow-list').addEventListener('click', (e) => {
@@ -511,11 +512,11 @@ const flowsPlugin = {
                     if (e.target.classList.contains('delete-button')) {
                         e.stopPropagation();
                         if (confirm('Delete this flow?')) {
-                            this.flowsManager.deleteFlow(id);
-                            this.flowsManager.renderFlowList();
+                            flowsManager.deleteFlow(id);
+                            flowsManager.renderFlowList();
                         }
                     } else {
-                        this.flowsManager.app.setView('flow-editor', id);
+                        flowsManager.app.setView('flow-editor', id);
                     }
                 });
             }
@@ -526,18 +527,18 @@ const flowsPlugin = {
     /** @param {View} view, @param {Chat} chat */
     onViewRendered(view, chat) {
         if (view.type === 'flow-editor') {
-            const flow = this.flowsManager.getFlow(view.id);
+            const flow = flowsManager.getFlow(view.id);
             if (!flow) return;
-            const debouncedUpdate = debounce(() => this.flowsManager.updateFlow(flow), 500);
-            this.flowsManager.renderFlow(flow);
+            const debouncedUpdate = debounce(() => flowsManager.updateFlow(flow), 500);
+            flowsManager.renderFlow(flow);
             const canvas = document.getElementById('flow-canvas');
-            canvas.addEventListener('mousedown', (e) => this.flowsManager._handleCanvasMouseDown(e, flow, debouncedUpdate));
-            canvas.addEventListener('mousemove', (e) => this.flowsManager._handleCanvasMouseMove(e, flow));
-            canvas.addEventListener('mouseup', (e) => this.flowsManager._handleCanvasMouseUp(e, flow, debouncedUpdate));
+            canvas.addEventListener('mousedown', (e) => flowsManager._handleCanvasMouseDown(e, flow, debouncedUpdate));
+            canvas.addEventListener('mousemove', (e) => flowsManager._handleCanvasMouseMove(e, flow));
+            canvas.addEventListener('mouseup', (e) => flowsManager._handleCanvasMouseUp(e, flow, debouncedUpdate));
             canvas.addEventListener('change', (e) => {
                 const step = flow.steps.find(s => s.id === e.target.dataset.id);
-                if (step && this.flowsManager.stepTypes[step.type]?.onUpdate) {
-                    this.flowsManager.stepTypes[step.type].onUpdate(step, e.target);
+                if (step && flowsManager.stepTypes[step.type]?.onUpdate) {
+                    flowsManager.stepTypes[step.type].onUpdate(step, e.target);
                     debouncedUpdate();
                 }
             });
@@ -546,30 +547,30 @@ const flowsPlugin = {
                     const stepId = e.target.dataset.id;
                     flow.steps = flow.steps.filter(s => s.id !== stepId);
                     flow.connections = flow.connections.filter(c => c.from !== stepId && c.to !== stepId);
-                    this.flowsManager.updateFlow(flow);
-                    this.flowsManager.renderFlow(flow);
+                    flowsManager.updateFlow(flow);
+                    flowsManager.renderFlow(flow);
                 }
             });
             const dropdown = document.getElementById('add-step-dropdown');
             document.getElementById('add-flow-step-btn').addEventListener('click', (e) => { e.stopPropagation(); dropdown.classList.toggle('show'); });
             dropdown.addEventListener('click', (e) => {
                 const type = e.target.dataset.stepType;
-                if (type && this.flowsManager.stepTypes[type]) {
-                    flow.steps.push({ id: `step-${Date.now()}`, type, x: 50, y: 50, data: this.flowsManager.stepTypes[type].getDefaults() });
-                    this.flowsManager.updateFlow(flow);
-                    this.flowsManager.renderFlow(flow);
+                if (type && flowsManager.stepTypes[type]) {
+                    flow.steps.push({ id: `step-${Date.now()}`, type, x: 50, y: 50, data: flowsManager.stepTypes[type].getDefaults() });
+                    flowsManager.updateFlow(flow);
+                    flowsManager.renderFlow(flow);
                     dropdown.classList.remove('show');
                 }
             });
             window.addEventListener('click', (e) => { if (!e.target.matches('#add-flow-step-btn')) dropdown.classList.remove('show'); });
         }
-        this.flowsManager.updateActiveFlowInList();
+        flowsManager.updateActiveFlowInList();
     },
 
     /** @param {Message} message, @param {Chat} chat */
     onResponseComplete(message, chat) {
-        if (this.flowsManager.activeFlowRunner) {
-            this.flowsManager.activeFlowRunner.continue();
+        if (flowsManager.activeFlowRunner) {
+            flowsManager.activeFlowRunner.continue();
         }
     }
 };

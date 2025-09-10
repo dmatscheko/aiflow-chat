@@ -1,6 +1,6 @@
 /**
  * @fileoverview Plugin for managing and using Agents with advanced settings.
- * @version 2.2.0
+ * @version 2.3.0
  */
 
 'use strict';
@@ -38,6 +38,8 @@ import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
  */
 
 const DEFAULT_AGENT_ID = 'agent-default';
+
+let agentManager = null;
 
 /**
  * Manages the lifecycle, storage, and UI of agents.
@@ -398,19 +400,17 @@ const agentsPlugin = {
 
     /** @param {App} app */
     onAppInit(app) {
-        const agentManager = new AgentManager(app);
+        agentManager = new AgentManager(app);
         app.agentManager = agentManager;
-        // Make it available to the plugin's own hooks
-        this.agentManager = agentManager;
 
-        pluginManager.registerView('agent-editor', (id) => this.agentManager.renderAgentEditor(id));
-        this.agentManager.fetchModels(DEFAULT_AGENT_ID);
+        pluginManager.registerView('agent-editor', (id) => agentManager.renderAgentEditor(id));
+        agentManager.fetchModels(DEFAULT_AGENT_ID);
 
         document.body.addEventListener('mcp-tools-updated', (e) => {
             if (app.activeView.type === 'agent-editor') {
-                const agent = this.agentManager.getAgent(app.activeView.id);
+                const agent = agentManager.getAgent(app.activeView.id);
                 if (agent && agent.modelSettings.mcpServer === e.detail.url) {
-                    this.agentManager.initializeAgentEditor();
+                    agentManager.initializeAgentEditor();
                 }
             }
         });
@@ -430,12 +430,12 @@ const agentsPlugin = {
                         <button id="add-agent-btn" class="add-new-button">Add New Agent</button>
                     </div>
                 `;
-                this.agentManager.renderAgentList();
+                agentManager.renderAgentList();
 
                 document.getElementById('add-agent-btn').addEventListener('click', () => {
-                    const newAgent = this.agentManager.addAgent({});
-                    this.agentManager.renderAgentList();
-                    this.agentManager.app.setView('agent-editor', newAgent.id);
+                    const newAgent = agentManager.addAgent({});
+                    agentManager.renderAgentList();
+                    agentManager.app.setView('agent-editor', newAgent.id);
                 });
 
                 document.getElementById('agent-list').addEventListener('click', (e) => {
@@ -445,15 +445,15 @@ const agentsPlugin = {
 
                     if (e.target.classList.contains('delete-button')) {
                         e.stopPropagation();
-                        if (confirm(`Are you sure you want to delete agent "${this.agentManager.getAgent(agentId)?.name}"?`)) {
-                            this.agentManager.deleteAgent(agentId);
-                            this.agentManager.renderAgentList();
-                            if (this.agentManager.app.activeView.id === agentId) {
-                                this.agentManager.app.showTab('agents');
+                        if (confirm(`Are you sure you want to delete agent "${agentManager.getAgent(agentId)?.name}"?`)) {
+                            agentManager.deleteAgent(agentId);
+                            agentManager.renderAgentList();
+                            if (agentManager.app.activeView.id === agentId) {
+                                agentManager.app.showTab('agents');
                             }
                         }
                     } else {
-                        this.agentManager.app.setView('agent-editor', agentId);
+                        agentManager.app.setView('agent-editor', agentId);
                     }
                 });
             }
@@ -467,9 +467,9 @@ const agentsPlugin = {
      */
     onViewRendered(view, chat) {
         if (view.type === 'agent-editor') {
-            this.agentManager.initializeAgentEditor();
+            agentManager.initializeAgentEditor();
         }
-        this.agentManager.updateActiveAgentInList();
+        agentManager.updateActiveAgentInList();
     }
 };
 
