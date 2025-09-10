@@ -199,6 +199,8 @@ class ChatManager {
             if (!userInput) return;
             activeChat.log.addMessage({ role: 'user', content: userInput });
             this.app.dom.messageInput.value = '';
+            activeChat.draftMessage = '';
+            this.saveChats();
         }
         const finalAgentId = agentId || activeChat.agent || null;
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
