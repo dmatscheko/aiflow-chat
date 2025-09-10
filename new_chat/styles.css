@@ -1,3 +1,7 @@
+html {
+    font-size: 16px;
+}
+
 :root {
     --bg-color: #1a1a1a;
     --text-color: #e0e0e0;
@@ -50,10 +54,11 @@ h2 {
     margin-bottom: 0.5rem;
     font-size: 0.9rem;
 }
-.setting input[type="text"],
-.setting input[type="password"],
-.setting select,
-.setting textarea {
+/* Unified Input Styles */
+input[type="text"],
+input[type="password"],
+select,
+textarea {
     width: 100%;
     background-color: var(--input-bg-color);
     color: var(--text-color);
@@ -61,8 +66,30 @@ h2 {
     border-radius: 4px;
     padding: 0.5rem;
     box-sizing: border-box;
+    font-size: 1rem; /* Ensures readability on mobile */
+    min-height: 2.5rem; /* Improves touch-friendliness */
+    -webkit-appearance: none; /* Allows custom styling on iOS */
+    -moz-appearance: none;
+    appearance: none;
 }
-.setting textarea {
+
+/* Add back arrow for select dropdowns */
+select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 1rem;
+    padding-right: 2rem; /* Make space for the arrow */
+}
+
+/* Remove arrow for multiple select */
+select[multiple] {
+    background-image: none;
+    padding-right: 0.5rem;
+}
+
+
+textarea {
     resize: vertical;
 }
 .setting button {
@@ -199,14 +226,6 @@ h2 {
 
 #title-bar-controls label {
     margin-right: 0.5rem;
-}
-
-#title-bar-controls select {
-    background-color: var(--input-bg-color);
-    color: var(--text-color);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 0.25rem;
 }
 
 #flow-runner-container {
