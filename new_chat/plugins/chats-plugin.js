@@ -207,8 +207,6 @@ class ChatManager {
 }
 
 
-// --- From chat-ui.js ---
-
 /**
  * Manages the rendering of a ChatLog instance into a designated HTML element.
  * It subscribes to a ChatLog and automatically re-renders the UI when the
@@ -346,8 +344,6 @@ class ChatUI {
     }
 }
 
-
-// --- From response-processor.js ---
 
 /**
  * Manages the queue and execution of AI response generation.

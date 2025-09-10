@@ -11,7 +11,7 @@ import { importJson, exportJson } from '../utils.js';
 /**
  * @typedef {import('../main.js').App} App
  * @typedef {import('../main.js').View} View
- * @typedef {import('./chat-plugin.js').Chat} Chat
+ * @typedef {import('./chats-plugin.js').Chat} Chat
  */
 
 /** @type {App | null} */

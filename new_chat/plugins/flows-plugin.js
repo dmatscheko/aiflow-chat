@@ -7,7 +7,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { debounce } from '../utils.js';
-import { responseProcessor } from './chat-plugin.js';
+import { responseProcessor } from './chats-plugin.js';
 
 /**
  * @typedef {import('../main.js').App} App

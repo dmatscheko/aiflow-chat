@@ -10,7 +10,7 @@ import { pluginManager } from './plugin-manager.js';
 import { SettingsManager } from './settings-manager.js';
 
 // Load plugins
-import './plugins/chat-plugin.js';
+import './plugins/chats-plugin.js';
 import './plugins/example-plugin.js';
 import './plugins/agents-plugin.js';
 import './plugins/flows-plugin.js';
@@ -20,7 +20,7 @@ import './plugins/title-bar-plugin.js';
 
 /**
  * @typedef {import('./chat-data.js').Message} Message
- * @typedef {import('./plugins/chat-plugin.js').Chat} Chat
+ * @typedef {import('./plugins/chats-plugin.js').Chat} Chat
  */
 
 /**
@@ -74,7 +74,7 @@ class App {
         this.initDOM();
 
         // --- Managers will be attached by plugins ---
-        /** @type {import('./plugins/chat-plugin.js').ChatManager | null} */
+        /** @type {import('./plugins/chats-plugin.js').ChatManager | null} */
         this.chatManager = null;
         /** @type {import('./plugins/agents-plugin.js').AgentManager | null} */
         this.agentManager = null;

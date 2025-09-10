@@ -4,7 +4,7 @@
 
 'use strict';
 
-import { responseProcessor } from './plugins/chat-plugin.js';
+import { responseProcessor } from './plugins/chats-plugin.js';
 
 /**
  * @typedef {import('./chat-data.js').Message} Message
