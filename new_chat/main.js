@@ -7,13 +7,12 @@
 
 import { ChatLog } from './chat-data.js';
 import { ApiService } from './api-service.js';
-import { ChatUI } from './chat-ui.js';
 import { pluginManager } from './plugin-manager.js';
 import { debounce } from './utils.js';
-import { responseProcessor } from './response-processor.js';
 import { SettingsManager } from './settings-manager.js';
 
 // Load plugins
+import './plugins/chat-plugin.js';
 import './plugins/example-plugin.js';
 import './plugins/agents-plugin.js';
 import './plugins/flows-plugin.js';
@@ -77,8 +76,6 @@ class App {
         this.activeChatId = null;
         /** @type {Object.<string, string>} */
         this.lastActiveIds = {};
-        /** @type {ChatUI | null} */
-        this.chatUI = null;
         /** @type {() => void} */
         this.debouncedSave = debounce(() => this.saveChats(), 500);
         /** @type {Object.<string, HTMLElement>} */
@@ -89,7 +86,6 @@ class App {
         /** @type {SettingsManager} */
         this.settingsManager = null;
 
-        this.registerCoreViews();
         this.initDOM();
 
         // --- Settings Management ---
@@ -109,45 +105,8 @@ class App {
         })();
     }
 
-    registerCoreViews() {
-        pluginManager.registerView('chat', (chatId) => `
-            <div id="chat-container"></div>
-            <div id="chat-area-controls"></div>
-            <form id="message-form">
-                <textarea id="message-input" placeholder="Type your message..." rows="3"></textarea>
-                <button type="submit">Send</button>
-                <button type="button" id="stop-button" style="display: none;">Stop</button>
-            </form>
-        `);
-    }
-
     defineTabs() {
-        const coreTabs = [{
-            id: 'chats',
-            label: 'Chats',
-            viewType: 'chat',
-            onActivate: () => {
-                const contentEl = document.getElementById('chats-pane');
-                contentEl.innerHTML = `
-                    <div class="list-pane">
-                        <ul id="chat-list" class="item-list"></ul>
-                        <button id="new-chat-button" class="add-new-button">New Chat</button>
-                    </div>
-                `;
-                this.renderChatList();
-                document.getElementById('new-chat-button').addEventListener('click', () => this.createNewChat());
-                document.getElementById('chat-list').addEventListener('click', (e) => {
-                    const target = e.target;
-                    if (target.closest('li')) {
-                        this.setView('chat', target.closest('li').dataset.id);
-                    }
-                    if (target.classList.contains('delete-button')) {
-                        e.stopPropagation();
-                        this.deleteChat(target.parentElement.dataset.id);
-                    }
-                });
-            }
-        }];
+        const coreTabs = [];
         this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
     }
 
@@ -199,9 +158,6 @@ class App {
         const renderer = pluginManager.getViewRenderer(type);
         if (renderer) {
             this.dom.mainPanel.innerHTML = renderer(id);
-            if (type === 'chat') {
-                this.initChatView(id);
-            }
             await pluginManager.triggerAsync('onViewRendered', this.activeView, this.getActiveChat());
         } else {
             this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
@@ -234,45 +190,6 @@ class App {
         const lastActiveId = tab.viewType ? this.lastActiveIds[tab.viewType] : null;
         if (lastActiveId) {
             await this.setView(tab.viewType, lastActiveId);
-        }
-    }
-
-    /**
-     * @param {string} chatId
-     * @private
-     */
-    initChatView(chatId) {
-        const chat = this.chats.find(c => c.id === chatId);
-        if (!chat) return;
-        this.chatUI = new ChatUI(document.getElementById('chat-container'), this.agentManager);
-        this.chatUI.setChatLog(chat.log);
-        this.dom.messageForm = document.getElementById('message-form');
-        this.dom.messageInput = document.getElementById('message-input');
-        this.dom.stopButton = document.getElementById('stop-button');
-
-        // Restore draft message
-        this.dom.messageInput.value = chat.draftMessage || '';
-
-        // Save draft message on input
-        this.dom.messageInput.addEventListener('input', () => {
-            const activeChat = this.getActiveChat();
-            if (activeChat) {
-                activeChat.draftMessage = this.dom.messageInput.value;
-                this.debouncedSave();
-            }
-        });
-
-        this.dom.messageForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.handleFormSubmit();
-        });
-        this.dom.stopButton.addEventListener('click', () => {
-            if (this.abortController) this.abortController.abort();
-        });
-        const chatAreaControls = document.getElementById('chat-area-controls');
-        if (chatAreaControls) {
-            chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '', chat);
-            pluginManager.trigger('onChatSwitched', chat);
         }
     }
 
@@ -411,25 +328,15 @@ class App {
 
     /**
      * Handles the submission of the message form.
-     * Adds the user message to the log and schedules the response processor.
+     * This now delegates the call to the chat plugin.
      * @param {object} [options={}] - Options for the submission.
-     * @param {boolean} [options.isContinuation=false] - Whether this is a continuation of a previous turn.
-     * @param {string|null} [options.agentId=null] - The ID of an agent to force for this turn.
      * @private
      */
-    async handleFormSubmit(options = {}) {
-        const { isContinuation = false, agentId = null } = options;
-        const activeChat = this.getActiveChat();
-        if (!activeChat) return;
-        if (!isContinuation) {
-            const userInput = this.dom.messageInput.value.trim();
-            if (!userInput) return;
-            activeChat.log.addMessage({ role: 'user', content: userInput });
-            this.dom.messageInput.value = '';
+    handleFormSubmit(options = {}) {
+        const chatPlugin = pluginManager.getPlugin('Chat');
+        if (chatPlugin && chatPlugin.handleFormSubmit) {
+            chatPlugin.handleFormSubmit(options);
         }
-        const finalAgentId = agentId || activeChat.agent || null;
-        activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
-        responseProcessor.scheduleProcessing(this);
     }
 }
 
