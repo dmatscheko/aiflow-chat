@@ -1,0 +1,49 @@
+.mobile-settings-button {
+    display: none; /* Hidden by default */
+    position: fixed;
+    top: 0px;
+    right: 0px;
+    z-index: 1001; /* Above the right panel */
+    width: 40px;
+    height: 40px;
+    background-color: #80808080; /* Gray */
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 5px;
+}
+
+.mobile-settings-button svg {
+    width: 100%;
+    height: 100%;
+    color: var(--text-color);
+}
+
+
+@media (max-width: 768px) {
+    .mobile-settings-button {
+        display: block; /* Show the button on mobile */
+    }
+
+    #right-panel {
+        display: none;
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 250px; /* Same as the original width */
+        z-index: 1000;
+        box-shadow: -5px 0 15px rgba(0, 0, 0, 0.2);
+        transform: translateX(100%);
+        transition: transform 0.3s ease-in-out;
+    }
+
+    #app-container.right-panel-visible #right-panel {
+        display: flex; /* Or block, depending on its content */
+        transform: translateX(0);
+    }
+
+    #main-panel {
+        width: 100%;
+    }
+}
