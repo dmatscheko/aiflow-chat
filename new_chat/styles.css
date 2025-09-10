@@ -151,47 +151,28 @@ h2 {
     margin-top: 1rem;
 }
 
-/* Agent Plugin Styles */
-#agent-selector-container {
-    padding: 0 1rem 0.5rem 1rem;
-    border-bottom: 1px solid var(--border-color);
+
+/* Flow and Agent Plugin Styles */
+#agent-selector-container, #flow-runner-container {
+    padding: 0 1rem 0 1rem;
 }
-#agent-selector-container label {
+#agent-selector-container label, #flow-runner-container label {
     margin-right: 0.5rem;
 }
-#agent-selector {
+#agent-selector, #flow-selector {
     background-color: var(--input-bg-color);
     color: var(--text-color);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 0.25rem;
-}
-
-#agent-list-container, #agent-form-container {
-    margin-bottom: 1rem;
-}
-#agent-list li button {
-    margin-left: 0.5rem;
-}
-#agent-form button {
-    margin-right: 0.5rem;
 }
 
 /* Flow Plugin Styles */
-#flow-runner-container {
-    padding: 0 1rem 0.5rem 1rem;
+#run-chat-flow-btn {
+    margin-left: 0.5rem;
+    margin-right: 1.5rem;
 }
-#flow-runner-container label {
-    margin-right: 0.5rem;
-}
-#flow-runner-container select {
-    background-color: var(--input-bg-color);
-    color: var(--text-color);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 0.25rem;
-    margin-right: 0.5rem;
-}
+
 #flow-list-container, #flow-form-container {
     margin-bottom: 1rem;
 }
@@ -202,6 +183,16 @@ h2 {
     margin-right: 0.5rem;
 }
 
+/* Agent Plugin Styles */
+#agent-list-container, #agent-form-container {
+    margin-bottom: 1rem;
+}
+#agent-list li button {
+    margin-left: 0.5rem;
+}
+#agent-form button {
+    margin-right: 0.5rem;
+}
 
 /* Main Panel */
 #main-panel {
