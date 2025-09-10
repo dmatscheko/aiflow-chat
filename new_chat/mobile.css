@@ -46,4 +46,14 @@
     #main-panel {
         width: 100%;
     }
+
+    /* Adjust font sizes for smaller screens */
+    select, option {
+        font-size: 1rem;
+    }
+
+    .dropdown-content a {
+        font-size: 1rem;
+        padding: 12px 16px;
+    }
 }
