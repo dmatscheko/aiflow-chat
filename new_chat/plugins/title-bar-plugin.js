@@ -6,14 +6,12 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { getAgentSelectorHtml } from './agents-plugin.js';
-import { getFlowSelectorHtml, flowManager, startFlow } from './flows-plugin.js';
 import { importJson, exportJson } from '../utils.js';
 
 /**
  * @typedef {import('../main.js').App} App
  * @typedef {import('../main.js').View} View
- * @typedef {import('../main.js').Chat} Chat
+ * @typedef {import('./chat-plugin.js').Chat} Chat
  */
 
 /** @type {App | null} */
@@ -49,8 +47,8 @@ const titleBarPlugin = {
             const titleBar = document.createElement('div');
             titleBar.className = 'main-title-bar';
 
-            const agentSelectorHtml = getAgentSelectorHtml(chat.agent);
-            const flowSelectorHtml = getFlowSelectorHtml(chat.flow);
+            const agentSelectorHtml = appInstance.agentManager.getAgentSelectorHtml(chat.agent);
+            const flowSelectorHtml = appInstance.flowsManager.getFlowSelectorHtml(chat.flow);
 
             titleBar.innerHTML = `
                 <h2 class="chat-title">${chat.title}</h2>
@@ -72,7 +70,7 @@ const titleBarPlugin = {
                 agentSelector.addEventListener('change', (e) => {
                     const selectedAgentId = e.target.value;
                     chat.agent = selectedAgentId === 'agent-default' ? null : selectedAgentId;
-                    appInstance.debouncedSave();
+                    appInstance.chatManager.debouncedSave();
                 });
             }
 
@@ -81,7 +79,7 @@ const titleBarPlugin = {
                 flowSelector.addEventListener('change', (e) => {
                     const selectedFlowId = e.target.value;
                     chat.flow = selectedFlowId || null;
-                    appInstance.debouncedSave();
+                    appInstance.chatManager.debouncedSave();
                 });
             }
 
@@ -90,7 +88,7 @@ const titleBarPlugin = {
                 runFlowBtn.addEventListener('click', () => {
                     const flowId = flowSelector.value;
                     if (flowId) {
-                        startFlow(flowId);
+                        appInstance.flowsManager.startFlow(flowId);
                     }
                 });
             }
@@ -99,7 +97,7 @@ const titleBarPlugin = {
             if (loadChatBtn) {
                 loadChatBtn.addEventListener('click', () => {
                     importJson('.chat', (data) => {
-                        appInstance.createChatFromData(data);
+                        appInstance.chatManager.createChatFromData(data);
                     });
                 });
             }
@@ -107,7 +105,7 @@ const titleBarPlugin = {
             const saveChatBtn = titleBar.querySelector('#save-chat-btn');
             if (saveChatBtn) {
                 saveChatBtn.addEventListener('click', () => {
-                    const activeChat = appInstance.getActiveChat();
+                    const activeChat = appInstance.chatManager.getActiveChat();
                     if (activeChat) {
                         const chatToSave = {
                             title: activeChat.title,
@@ -121,7 +119,7 @@ const titleBarPlugin = {
                 });
             }
         } else if (view.type === 'flow-editor') {
-            const flow = flowManager.getFlow(view.id);
+            const flow = appInstance.flowsManager.getFlow(view.id);
             const titleBar = document.createElement('div');
             titleBar.className = 'main-title-bar';
 
@@ -139,7 +137,7 @@ const titleBarPlugin = {
             if (loadFlowBtn) {
                 loadFlowBtn.addEventListener('click', () => {
                     importJson('.flow', (data) => {
-                        const newFlow = flowManager.addFlowFromData(data);
+                        const newFlow = appInstance.flowsManager.addFlowFromData(data);
                         appInstance.setView('flow-editor', newFlow.id);
                     });
                 });
@@ -148,7 +146,7 @@ const titleBarPlugin = {
             const saveFlowBtn = titleBar.querySelector('#save-flow-btn');
             if (saveFlowBtn) {
                 saveFlowBtn.addEventListener('click', () => {
-                    const flowToSave = flowManager.getFlow(view.id);
+                    const flowToSave = appInstance.flowsManager.getFlow(view.id);
                     if (flowToSave) {
                         exportJson(flowToSave, flowToSave.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow');
                     }
