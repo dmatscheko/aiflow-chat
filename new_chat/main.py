@@ -10,6 +10,7 @@ import threading
 import webbrowser
 import logging
 import argparse
+import time
 import signal
 import sys
 from fastmcp import FastMCP
@@ -125,7 +126,13 @@ def main():
     if proxy_info:
         proxy, cors = proxy_info
         logging.info("MCP: Starting proxy at http://127.0.0.1:3000/mcp")
+        # This is a blocking call
         proxy.run(transport="http", host="127.0.0.1", port=3000, middleware=cors)
+    else:
+        logging.info("No MCP proxy to run. Serving files only.")
+        # Keep the main thread alive so the daemon file server thread can run.
+        while True:
+            time.sleep(1)
 
 
 if __name__ == "__main__":

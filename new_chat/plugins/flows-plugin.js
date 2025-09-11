@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, importJson, exportJson } from '../utils.js';
+import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId } from '../utils.js';
 import { responseProcessor } from './chats-plugin.js';
 import { createTitleBar } from './title-bar-plugin.js';
 
@@ -91,14 +91,23 @@ class FlowsManager {
     /** @param {string} id */
     getFlow(id) { return this.flows.find(f => f.id === id); }
     /** @param {Omit<Flow, 'id'>} flowData */
-    addFlow(flowData) { const newFlow = { ...flowData, id: `flow-${Date.now()}` }; this.flows.push(newFlow); this._saveFlows(); return newFlow; }
+    addFlow(flowData) {
+        const existingIds = new Set(this.flows.map(f => f.id));
+        const newFlow = { ...flowData, id: generateUniqueId('flow', existingIds) };
+        this.flows.push(newFlow);
+        this._saveFlows();
+        return newFlow;
+    }
     /** @param {Flow} flowData */
     updateFlow(flowData) { const i = this.flows.findIndex(f => f.id === flowData.id); if (i !== -1) { this.flows[i] = flowData; this._saveFlows(); } }
     /** @param {string} id */
     deleteFlow(id) { this.flows = this.flows.filter(f => f.id !== id); this._saveFlows(); }
     /** @param {Flow} flowData */
     addFlowFromData(flowData) {
-        const newFlow = { ...flowData, id: `flow-${Date.now()}` };
+        const existingIds = new Set(this.flows.map(f => f.id));
+        const finalId = ensureUniqueId(flowData.id, 'flow', existingIds);
+
+        const newFlow = { ...flowData, id: finalId };
         this.flows.push(newFlow);
         this._saveFlows();
         const flowListEl = document.getElementById('flow-list');

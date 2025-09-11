@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, importJson, exportJson } from '../utils.js';
+import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 import { createTitleBar } from './title-bar-plugin.js';
 
@@ -115,8 +115,9 @@ class AgentManager {
 
     /** @param {Omit<Agent, 'id'>} agentData */
     addAgent(agentData) {
+        const existingIds = new Set(this.agents.map(a => a.id));
         const newAgent = {
-            id: `agent-${Date.now()}`,
+            id: generateUniqueId('agent', existingIds),
             name: 'New Agent',
             systemPrompt: 'You are a helpful assistant.',
             useCustomModelSettings: false,
@@ -130,9 +131,23 @@ class AgentManager {
         return newAgent;
     }
 
-    /** @param {Agent} agentData */
+    /**
+     * Adds an agent from imported data.
+     * If the agent's ID conflicts with an existing ID, or if the ID is missing,
+     * a new unique ID will be generated. Otherwise, the original ID is preserved.
+     * @param {Agent} agentData The agent data to import.
+     */
     addAgentFromData(agentData) {
-        const newAgent = { id: `agent-${Date.now()}`, ...agentData };
+        if (!agentData || typeof agentData !== 'object') {
+            console.warn('Skipping invalid agent data during import:', agentData);
+            return;
+        }
+
+        const existingIds = new Set(this.agents.map(a => a.id));
+        const finalId = ensureUniqueId(agentData.id, 'agent', existingIds);
+
+        const newAgent = { ...agentData, id: finalId };
+
         this.agents.push(newAgent);
         this._saveAgents();
         this.renderAgentList();

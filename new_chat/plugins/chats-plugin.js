@@ -6,7 +6,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { ChatLog } from '../chat-data.js';
-import { debounce } from '../utils.js';
+import { debounce, generateUniqueId, ensureUniqueId } from '../utils.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -85,8 +85,9 @@ class ChatManager {
     }
 
     createNewChat() {
+        const existingIds = new Set(this.chats.map(c => c.id));
         const newChat = {
-            id: `chat-${Date.now()}`,
+            id: generateUniqueId('chat', existingIds),
             title: 'New Chat',
             log: new ChatLog(),
             draftMessage: '',
@@ -101,8 +102,11 @@ class ChatManager {
     }
 
     createChatFromData(chatData) {
+        const existingIds = new Set(this.chats.map(c => c.id));
+        const finalId = ensureUniqueId(chatData.id, 'chat', existingIds);
+
         const newChat = {
-            id: `chat-${Date.now()}`,
+            id: finalId,
             title: chatData.title || 'Imported Chat',
             log: ChatLog.fromJSON(chatData.log),
             draftMessage: chatData.draftMessage || '',

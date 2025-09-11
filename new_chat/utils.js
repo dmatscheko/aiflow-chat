@@ -80,3 +80,35 @@ export function importJson(extension, onParsedData) {
     });
     input.click();
 }
+
+/**
+ * Generates a unique ID with a given prefix.
+ * If the initial ID conflicts with an existing one, it appends a random suffix.
+ * @param {string} prefix - The prefix for the ID (e.g., 'agent', 'chat').
+ * @param {Set<string>} existingIds - A set of already existing IDs to check against for uniqueness.
+ * @returns {string} A new, unique ID.
+ */
+export function generateUniqueId(prefix, existingIds) {
+    let id = `${prefix}-${Date.now()}`;
+    while (existingIds.has(id)) {
+        id = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    }
+    return id;
+}
+
+/**
+ * Ensures that a given ID is unique within a set of existing IDs.
+ * If the proposed ID is missing or already exists, it generates a new unique ID.
+ * @param {string | null | undefined} proposedId - The ID to check for uniqueness.
+ * @param {string} prefix - The prefix to use if a new ID needs to be generated (e.g., 'agent').
+ * @param {Set<string>} existingIds - A set of already existing IDs.
+ * @returns {string} The original ID if it was unique, or a newly generated unique ID.
+ */
+export function ensureUniqueId(proposedId, prefix, existingIds) {
+    if (!proposedId || existingIds.has(proposedId)) {
+        const newId = generateUniqueId(prefix, existingIds);
+        console.log(`ID "${proposedId}" conflicted or was missing. Assigned new ID: "${newId}"`);
+        return newId;
+    }
+    return proposedId;
+}
