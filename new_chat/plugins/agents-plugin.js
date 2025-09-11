@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, importJson, exportJson } from '../utils.js';
+import { debounce, importJson, exportJson, generateUniqueId } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 import { createTitleBar } from './title-bar-plugin.js';
 
@@ -115,8 +115,9 @@ class AgentManager {
 
     /** @param {Omit<Agent, 'id'>} agentData */
     addAgent(agentData) {
+        const existingIds = new Set(this.agents.map(a => a.id));
         const newAgent = {
-            id: `agent-${Date.now()}`,
+            id: generateUniqueId('agent', existingIds),
             name: 'New Agent',
             systemPrompt: 'You are a helpful assistant.',
             useCustomModelSettings: false,
@@ -147,11 +148,7 @@ class AgentManager {
 
         if (!finalId || existingIds.has(finalId)) {
             const originalId = finalId;
-            finalId = `agent-${Date.now()}`;
-            // In the unlikely event of a timestamp collision (e.g., rapid batch import), ensure uniqueness.
-            while (existingIds.has(finalId)) {
-                finalId = `agent-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-            }
+            finalId = generateUniqueId('agent', existingIds);
             console.log(`Agent ID "${originalId}" conflicted or was missing. Assigned new ID: "${finalId}"`);
         }
 

@@ -80,3 +80,18 @@ export function importJson(extension, onParsedData) {
     });
     input.click();
 }
+
+/**
+ * Generates a unique ID with a given prefix.
+ * If the initial ID conflicts with an existing one, it appends a random suffix.
+ * @param {string} prefix - The prefix for the ID (e.g., 'agent', 'chat').
+ * @param {Set<string>} existingIds - A set of already existing IDs to check against for uniqueness.
+ * @returns {string} A new, unique ID.
+ */
+export function generateUniqueId(prefix, existingIds) {
+    let id = `${prefix}-${Date.now()}`;
+    while (existingIds.has(id)) {
+        id = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    }
+    return id;
+}
