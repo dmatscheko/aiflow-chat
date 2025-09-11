@@ -506,7 +506,9 @@ hr.divider {
 /* --- Custom Dropdown Styles --- */
 .custom-dropdown {
   position: relative;
-  /* Let the container define the width */
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: middle; /* Align nicely with text labels */
 }
 
 /* The original select is moved inside the wrapper, so we hide it. */
