@@ -95,3 +95,20 @@ export function generateUniqueId(prefix, existingIds) {
     }
     return id;
 }
+
+/**
+ * Ensures that a given ID is unique within a set of existing IDs.
+ * If the proposed ID is missing or already exists, it generates a new unique ID.
+ * @param {string | null | undefined} proposedId - The ID to check for uniqueness.
+ * @param {string} prefix - The prefix to use if a new ID needs to be generated (e.g., 'agent').
+ * @param {Set<string>} existingIds - A set of already existing IDs.
+ * @returns {string} The original ID if it was unique, or a newly generated unique ID.
+ */
+export function ensureUniqueId(proposedId, prefix, existingIds) {
+    if (!proposedId || existingIds.has(proposedId)) {
+        const newId = generateUniqueId(prefix, existingIds);
+        console.log(`ID "${proposedId}" conflicted or was missing. Assigned new ID: "${newId}"`);
+        return newId;
+    }
+    return proposedId;
+}

@@ -6,7 +6,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { ChatLog } from '../chat-data.js';
-import { debounce, generateUniqueId } from '../utils.js';
+import { debounce, generateUniqueId, ensureUniqueId } from '../utils.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -103,13 +103,7 @@ class ChatManager {
 
     createChatFromData(chatData) {
         const existingIds = new Set(this.chats.map(c => c.id));
-        let finalId = chatData.id;
-
-        if (!finalId || existingIds.has(finalId)) {
-            const originalId = finalId;
-            finalId = generateUniqueId('chat', existingIds);
-            console.log(`Chat ID "${originalId}" conflicted or was missing. Assigned new ID: "${finalId}"`);
-        }
+        const finalId = ensureUniqueId(chatData.id, 'chat', existingIds);
 
         const newChat = {
             id: finalId,

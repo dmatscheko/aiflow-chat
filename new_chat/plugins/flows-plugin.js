@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, importJson, exportJson, generateUniqueId } from '../utils.js';
+import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId } from '../utils.js';
 import { responseProcessor } from './chats-plugin.js';
 import { createTitleBar } from './title-bar-plugin.js';
 
@@ -105,13 +105,7 @@ class FlowsManager {
     /** @param {Flow} flowData */
     addFlowFromData(flowData) {
         const existingIds = new Set(this.flows.map(f => f.id));
-        let finalId = flowData.id;
-
-        if (!finalId || existingIds.has(finalId)) {
-            const originalId = finalId;
-            finalId = generateUniqueId('flow', existingIds);
-            console.log(`Flow ID "${originalId}" conflicted or was missing. Assigned new ID: "${finalId}"`);
-        }
+        const finalId = ensureUniqueId(flowData.id, 'flow', existingIds);
 
         const newFlow = { ...flowData, id: finalId };
         this.flows.push(newFlow);

@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, importJson, exportJson, generateUniqueId } from '../utils.js';
+import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 import { createTitleBar } from './title-bar-plugin.js';
 
@@ -144,15 +144,8 @@ class AgentManager {
         }
 
         const existingIds = new Set(this.agents.map(a => a.id));
-        let finalId = agentData.id;
+        const finalId = ensureUniqueId(agentData.id, 'agent', existingIds);
 
-        if (!finalId || existingIds.has(finalId)) {
-            const originalId = finalId;
-            finalId = generateUniqueId('agent', existingIds);
-            console.log(`Agent ID "${originalId}" conflicted or was missing. Assigned new ID: "${finalId}"`);
-        }
-
-        // Create the new agent object, ensuring the final ID is correctly assigned.
         const newAgent = { ...agentData, id: finalId };
 
         this.agents.push(newAgent);
