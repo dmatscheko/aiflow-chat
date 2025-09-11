@@ -572,6 +572,9 @@ hr.divider {
   font-size: 0.9rem;
   position: relative;
   padding-left: 1.75rem; /* Make space for checkmark */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dropdown-item:hover {
@@ -589,4 +592,21 @@ hr.divider {
     top: 50%;
     transform: translateY(-50%);
     font-weight: bold;
+}
+
+/* --- Layout Adjustments for Custom Controls --- */
+.setting--flex {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.setting--flex label {
+    margin-bottom: 0; /* Override default margin */
+    flex-shrink: 0; /* Prevent label from shrinking */
+}
+
+/* The custom dropdown needs to be able to grow */
+.setting--flex .custom-dropdown {
+    flex-grow: 1;
 }

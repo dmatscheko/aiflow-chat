@@ -21,6 +21,12 @@
     if (select.classList.contains("original-select")) return; // already converted
     select.classList.add("original-select");
 
+    // Add a class to the parent .setting for flex layout
+    const settingContainer = select.closest('.setting');
+    if (settingContainer) {
+        settingContainer.classList.add('setting--flex');
+    }
+
     // Create wrapper
     const wrapper = document.createElement("div");
     wrapper.className = "custom-dropdown";
