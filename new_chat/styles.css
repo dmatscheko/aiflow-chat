@@ -502,3 +502,66 @@ hr.divider {
     border-top: 1px solid var(--border-color);
     margin: 1rem 0;
 }
+
+/* --- Custom Dropdown Styles --- */
+.custom-dropdown {
+  position: relative;
+  /* Let the container define the width */
+}
+
+/* The original select is moved inside the wrapper, so we hide it. */
+.custom-dropdown .original-select {
+  display: none;
+}
+
+.dropdown-btn {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.9rem; /* Match other inputs */
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--input-bg-color);
+  color: var(--text-color);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-btn:hover {
+    background-color: var(--button-hover-bg-color);
+}
+
+.dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--panel-bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-top: 0.2rem;
+  display: none;
+  z-index: 100; /* Ensure it appears above other elements */
+  max-height: 200px; /* Prevent long lists from breaking layout */
+  overflow-y: auto;
+}
+
+.dropdown-list.show {
+  display: block;
+}
+
+.dropdown-item {
+  padding: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.dropdown-item:hover {
+  background: var(--button-hover-bg-color);
+}
+
+.dropdown-item.selected {
+    background-color: var(--accent-color);
+}

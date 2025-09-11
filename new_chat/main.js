@@ -18,6 +18,7 @@ import './plugins/mcp-plugin.js';
 import './plugins/formatting-plugin.js';
 import './plugins/title-bar-plugin.js';
 import './plugins/mobile-style-plugin.js';
+import './plugins/custom-dropdown-plugin.js';
 
 /**
  * @typedef {import('./chat-data.js').Message} Message
