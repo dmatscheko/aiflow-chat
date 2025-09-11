@@ -502,3 +502,110 @@ hr.divider {
     border-top: 1px solid var(--border-color);
     margin: 1rem 0;
 }
+
+/* --- Custom Dropdown Styles --- */
+.custom-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+/* The original select is moved inside the wrapper, so we hide it. */
+.custom-dropdown .original-select {
+  display: none;
+}
+
+.dropdown-btn {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 0.9rem; /* Match other inputs */
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--input-bg-color);
+  color: var(--text-color);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  position: relative;
+  padding-right: 2rem; /* Make space for arrow */
+}
+
+.dropdown-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 0.75rem;
+    width: 0.4em;
+    height: 0.4em;
+    border-right: 0.1em solid var(--text-color);
+    border-bottom: 0.1em solid var(--text-color);
+    transform: translateY(-75%) rotate(45deg);
+}
+
+.dropdown-btn:hover {
+    background-color: var(--button-hover-bg-color);
+}
+
+.dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--panel-bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-top: 0.2rem;
+  display: none;
+  z-index: 100; /* Ensure it appears above other elements */
+  max-height: 200px; /* Prevent long lists from breaking layout */
+  overflow-y: auto;
+}
+
+.dropdown-list.show {
+  display: block;
+}
+
+.dropdown-item {
+  padding: 0.5rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  position: relative;
+  padding-left: 1.75rem; /* Make space for checkmark */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-item:hover {
+  background: var(--button-hover-bg-color);
+}
+
+.dropdown-item.selected {
+    background-color: var(--accent-color);
+}
+
+.dropdown-item.selected::before {
+    content: '✓';
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-weight: bold;
+}
+
+/* --- Layout Adjustments for Custom Controls --- */
+.setting__control-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.setting__control-wrapper label {
+    margin-bottom: 0; /* Override default margin */
+    flex-shrink: 0; /* Prevent label from shrinking */
+}
+
+.setting__control-wrapper .custom-dropdown {
+    flex-grow: 1;
+}
