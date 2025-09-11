@@ -130,9 +130,34 @@ class AgentManager {
         return newAgent;
     }
 
-    /** @param {Agent} agentData */
+    /**
+     * Adds an agent from imported data.
+     * If the agent's ID conflicts with an existing ID, or if the ID is missing,
+     * a new unique ID will be generated. Otherwise, the original ID is preserved.
+     * @param {Agent} agentData The agent data to import.
+     */
     addAgentFromData(agentData) {
-        const newAgent = { id: `agent-${Date.now()}`, ...agentData };
+        if (!agentData || typeof agentData !== 'object') {
+            console.warn('Skipping invalid agent data during import:', agentData);
+            return;
+        }
+
+        const existingIds = new Set(this.agents.map(a => a.id));
+        let finalId = agentData.id;
+
+        if (!finalId || existingIds.has(finalId)) {
+            const originalId = finalId;
+            finalId = `agent-${Date.now()}`;
+            // In the unlikely event of a timestamp collision (e.g., rapid batch import), ensure uniqueness.
+            while (existingIds.has(finalId)) {
+                finalId = `agent-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+            }
+            console.log(`Agent ID "${originalId}" conflicted or was missing. Assigned new ID: "${finalId}"`);
+        }
+
+        // Create the new agent object, ensuring the final ID is correctly assigned.
+        const newAgent = { ...agentData, id: finalId };
+
         this.agents.push(newAgent);
         this._saveAgents();
         this.renderAgentList();
