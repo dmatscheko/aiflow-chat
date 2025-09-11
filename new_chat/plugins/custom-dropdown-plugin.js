@@ -40,10 +40,20 @@
       item.className = "dropdown-item";
       item.textContent = option.text;
       item.dataset.value = option.value;
+
+      if (option.selected) {
+          item.classList.add('selected');
+      }
+
       item.addEventListener("click", () => {
+        // Update selected state in custom dropdown
+        list.querySelectorAll('.dropdown-item').forEach(i => i.classList.remove('selected'));
+        item.classList.add('selected');
+
+        // Update original select and fire change event
         btn.textContent = option.text;
         select.value = option.value;
-        select.dispatchEvent(new Event("change", { bubbles: true })); // fire change event
+        select.dispatchEvent(new Event("change", { bubbles: true }));
         list.classList.remove("show");
       });
       list.appendChild(item);

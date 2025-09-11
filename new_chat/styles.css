@@ -570,6 +570,8 @@ hr.divider {
   padding: 0.5rem;
   cursor: pointer;
   font-size: 0.9rem;
+  position: relative;
+  padding-left: 1.75rem; /* Make space for checkmark */
 }
 
 .dropdown-item:hover {
@@ -578,4 +580,13 @@ hr.divider {
 
 .dropdown-item.selected {
     background-color: var(--accent-color);
+}
+
+.dropdown-item.selected::before {
+    content: '✓';
+    position: absolute;
+    left: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    font-weight: bold;
 }
