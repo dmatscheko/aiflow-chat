@@ -145,17 +145,33 @@
     // Convert all selects on page
     document.querySelectorAll("select").forEach(convertSelect);
 
-    // Watch for new selects being added dynamically
+    // Watch for new selects being added or options changing in existing ones
     const observer = new MutationObserver(mutations => {
       for (const m of mutations) {
+        // Case 1: A new <select> element is added to the DOM
         for (const node of m.addedNodes) {
           if (node.nodeType === 1) { // ELEMENT_NODE
             if (node.tagName === "SELECT") {
               convertSelect(node);
-            } else {
-              node.querySelectorAll?.("select").forEach(convertSelect);
+            } else if (node.querySelectorAll) {
+              node.querySelectorAll("select").forEach(convertSelect);
             }
           }
+        }
+
+        // Case 2: The options of a converted <select> have changed
+        if (m.type === 'childList' && m.target.tagName === 'SELECT' && m.target.classList.contains('original-select')) {
+            const select = m.target;
+            const customDropdownWrapper = select.closest('.custom-dropdown');
+            if (customDropdownWrapper && customDropdownWrapper.parentNode) {
+                // The select is inside the custom dropdown. Move it out before removing the wrapper.
+                customDropdownWrapper.parentNode.insertBefore(select, customDropdownWrapper);
+                customDropdownWrapper.remove();
+
+                // Re-run the conversion. First, remove the class so the guard clause passes.
+                select.classList.remove('original-select');
+                convertSelect(select);
+            }
         }
       }
     });
