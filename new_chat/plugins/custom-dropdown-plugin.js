@@ -19,6 +19,15 @@
    */
   function convertSelect(select) {
     if (select.classList.contains("original-select")) return; // already converted
+
+    // Defensively remove any orphaned dropdown for this select's ID
+    if (select.id) {
+        const orphan = document.querySelector(`.custom-dropdown[data-for-select="${select.id}"]`);
+        if (orphan) {
+            orphan.remove();
+        }
+    }
+
     select.classList.add("original-select");
 
     // Wrap label and select in a div for better layout control, if a label exists.
@@ -37,6 +46,9 @@
     // Create wrapper
     const wrapper = document.createElement("div");
     wrapper.className = "custom-dropdown";
+    if (select.id) {
+        wrapper.dataset.forSelect = select.id;
+    }
 
     // Create button
     const btn = document.createElement("button");
