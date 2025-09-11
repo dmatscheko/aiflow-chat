@@ -19,6 +19,8 @@ body {
     margin: 0;
     height: 100vh;
     overflow: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
 }
 
 #app-container {
@@ -208,6 +210,8 @@ h2 {
     border: 1px solid var(--border-color);
     border-radius: 4px;
     padding: 0.25rem;
+    width: auto;
+    flex-shrink: 0;
 }
 
 #flow-runner-container {
