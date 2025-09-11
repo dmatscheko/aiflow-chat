@@ -507,8 +507,6 @@ hr.divider {
 .custom-dropdown {
   position: relative;
   display: inline-block;
-  max-width: 100%;
-  vertical-align: middle; /* Align nicely with text labels */
 }
 
 /* The original select is moved inside the wrapper, so we hide it. */
@@ -597,18 +595,17 @@ hr.divider {
 }
 
 /* --- Layout Adjustments for Custom Controls --- */
-.setting--flex {
+.setting__control-wrapper {
     display: flex;
     align-items: center;
     gap: 0.5rem;
 }
 
-.setting--flex label {
+.setting__control-wrapper label {
     margin-bottom: 0; /* Override default margin */
     flex-shrink: 0; /* Prevent label from shrinking */
 }
 
-/* The custom dropdown needs to be able to grow */
-.setting--flex .custom-dropdown {
+.setting__control-wrapper .custom-dropdown {
     flex-grow: 1;
 }

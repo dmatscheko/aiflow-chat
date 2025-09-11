@@ -21,10 +21,17 @@
     if (select.classList.contains("original-select")) return; // already converted
     select.classList.add("original-select");
 
-    // Add a class to the parent .setting for flex layout
-    const settingContainer = select.closest('.setting');
-    if (settingContainer) {
-        settingContainer.classList.add('setting--flex');
+    // Wrap label and select in a div for better layout control, if a label exists.
+    if (select.id) {
+        const label = document.querySelector(`label[for="${select.id}"]`);
+        if (label && label.parentNode) {
+            const controlWrapper = document.createElement('div');
+            controlWrapper.className = 'setting__control-wrapper';
+            // Insert the wrapper before the label and move the label and select inside
+            label.parentNode.insertBefore(controlWrapper, label);
+            controlWrapper.appendChild(label);
+            controlWrapper.appendChild(select);
+        }
     }
 
     // Create wrapper
@@ -90,7 +97,7 @@
     document.body.removeChild(tempSpan);
 
     // Set the wrapper's min-width. The button is 100% of the wrapper.
-    wrapper.style.minWidth = `${maxWidth}px`;
+    wrapper.style.minWidth = `${maxWidth + 10}px`;
 
 
     // Toggle open/close
