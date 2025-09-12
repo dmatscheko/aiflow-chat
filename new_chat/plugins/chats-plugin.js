@@ -312,8 +312,10 @@ class ChatUI {
         titleRow.className = 'message-title';
 
         const roleEl = document.createElement('strong');
-        let roleText = message.value.role;
+        roleEl.textContent = message.value.role;
+        titleRow.appendChild(roleEl);
 
+        let detailsText = '';
         if (message.value.role === 'assistant') {
             const details = [];
             if (message.value.agent && this.agentManager) {
@@ -326,16 +328,18 @@ class ChatUI {
                 details.push(message.value.model);
             }
             if (details.length > 0) {
-                roleText += ` (${details.join(', ')})`;
+                detailsText = ` (${details.join(', ')})`;
             }
         } else if (message.value.agent && this.agentManager) {
             const agent = this.agentManager.getAgent(message.value.agent);
             if (agent) {
-                roleText += ` (${agent.name})`;
+                detailsText = ` (${agent.name})`;
             }
         }
-        roleEl.textContent = roleText;
-        titleRow.appendChild(roleEl);
+
+        if (detailsText) {
+            titleRow.appendChild(document.createTextNode(detailsText));
+        }
 
         // Hook for adding controls to the title row
         pluginManager.trigger('onRenderMessageTitle', titleRow, message);
