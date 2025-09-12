@@ -47,18 +47,24 @@ function makeEditable(contentEl, message, onSave) {
     textarea.focus();
     textarea.style.height = textarea.scrollHeight + 'px';
 
+    let isSaving = false;
+
     const cleanup = () => {
         textarea.remove();
         contentEl.style.display = '';
+        // Remove listeners to be safe
+        textarea.removeEventListener('blur', save);
+        textarea.removeEventListener('keydown', handleKeydown);
     };
 
     const save = () => {
+        if (isSaving) return;
+        isSaving = true;
         onSave(textarea.value);
         cleanup();
     };
 
-    textarea.addEventListener('blur', save);
-    textarea.addEventListener('keydown', (e) => {
+    const handleKeydown = (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             save();
@@ -66,7 +72,10 @@ function makeEditable(contentEl, message, onSave) {
             e.preventDefault();
             cleanup();
         }
-    });
+    };
+
+    textarea.addEventListener('blur', save);
+    textarea.addEventListener('keydown', handleKeydown);
     textarea.addEventListener('input', () => {
         textarea.style.height = 'auto';
         textarea.style.height = textarea.scrollHeight + 'px';
