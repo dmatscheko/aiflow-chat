@@ -306,6 +306,32 @@ textarea.edit-in-place {
     overflow: hidden; /* Hide scrollbar */
 }
 
+.edit-container {
+    width: 100%;
+}
+
+.edit-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.edit-save-btn {
+    background-color: var(--accent-color);
+}
+.edit-save-btn:hover {
+    opacity: 0.9;
+}
+
+.edit-cancel-btn {
+    background-color: var(--button-bg-color);
+}
+.edit-cancel-btn:hover {
+    background-color: var(--button-hover-bg-color);
+}
+
+
 .message-controls {
     display: inline-flex;
     align-items: center;

@@ -40,21 +40,38 @@ function createControlButton(title, svgHTML, onClick) {
  */
 function makeEditable(contentEl, message, onSave) {
     contentEl.style.display = 'none';
+
+    const editorContainer = document.createElement('div');
+    editorContainer.className = 'edit-container';
+
     const textarea = document.createElement('textarea');
     textarea.className = 'edit-in-place';
     textarea.value = message.value.content || '';
-    contentEl.parentElement.insertBefore(textarea, contentEl.nextSibling);
+    editorContainer.appendChild(textarea);
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'edit-buttons';
+    editorContainer.appendChild(buttonContainer);
+
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save';
+    saveButton.className = 'edit-save-btn';
+    buttonContainer.appendChild(saveButton);
+
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.className = 'edit-cancel-btn';
+    buttonContainer.appendChild(cancelButton);
+
+    contentEl.parentElement.insertBefore(editorContainer, contentEl.nextSibling);
     textarea.focus();
     textarea.style.height = textarea.scrollHeight + 'px';
 
     let isSaving = false;
 
     const cleanup = () => {
-        textarea.remove();
+        editorContainer.remove();
         contentEl.style.display = '';
-        // Remove listeners to be safe
-        textarea.removeEventListener('blur', save);
-        textarea.removeEventListener('keydown', handleKeydown);
     };
 
     const save = () => {
@@ -64,7 +81,10 @@ function makeEditable(contentEl, message, onSave) {
         cleanup();
     };
 
-    const handleKeydown = (e) => {
+    saveButton.addEventListener('click', save);
+    cancelButton.addEventListener('click', cleanup);
+
+    textarea.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             save();
@@ -72,10 +92,8 @@ function makeEditable(contentEl, message, onSave) {
             e.preventDefault();
             cleanup();
         }
-    };
+    });
 
-    textarea.addEventListener('blur', save);
-    textarea.addEventListener('keydown', handleKeydown);
     textarea.addEventListener('input', () => {
         textarea.style.height = 'auto';
         textarea.style.height = textarea.scrollHeight + 'px';
@@ -157,14 +175,13 @@ const uiControlsPlugin = {
             'Edit Message',
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>',
             () => {
-                if (message.value.role !== 'assistant') {
-                    const contentEl = titleRow.parentElement.querySelector('.message-content');
-                    if (contentEl) {
-                        makeEditable(contentEl, message, (newText) => {
-                            message.value.content = newText;
-                            chatLog.notify();
-                        });
-                    }
+                const contentEl = titleRow.parentElement.querySelector('.message-content');
+                if (contentEl) {
+                    makeEditable(contentEl, message, (newText) => {
+                        message.value.content = newText;
+                        chatLog.deleteMessagesAfter(message);
+                        appInstance.chatManager.continueConversation(appInstance.chatManager.getActiveChat());
+                    });
                 }
             }
         );
@@ -176,9 +193,7 @@ const uiControlsPlugin = {
         );
 
         controlsContainer.appendChild(addBtn);
-        if (message.value.role !== 'assistant') {
-            controlsContainer.appendChild(editBtn);
-        }
+        controlsContainer.appendChild(editBtn);
         controlsContainer.appendChild(delBtn);
     }
 };

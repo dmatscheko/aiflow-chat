@@ -336,6 +336,17 @@ export class ChatLog {
     }
 
     /**
+     * Deletes all messages that follow the given message in the active conversation path.
+     * @param {Message} message - The message to start deletion from.
+     */
+    deleteMessagesAfter(message) {
+        if (message) {
+            message.answerAlternatives = null;
+            this.notify();
+        }
+    }
+
+    /**
      * Subscribes a callback function to be called on any change.
      * @param {() => void} callback
      */
