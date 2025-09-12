@@ -163,7 +163,6 @@ const uiControlsPlugin = {
                         makeEditable(contentEl, message, (newText) => {
                             message.value.content = newText;
                             chatLog.notify();
-                            appInstance.chatManager.continueConversation(appInstance.chatManager.getActiveChat());
                         });
                     }
                 }
