@@ -208,14 +208,7 @@ const titleBarPlugin = {
 
             if (activeFlow) {
                 titleParts.push(' | Flow: ');
-                titleParts.push({
-                    text: activeFlow.name,
-                    onSave: (newName) => {
-                        activeFlow.name = newName;
-                        appInstance.flowsManager.updateFlow(activeFlow);
-                        appInstance.renderMainView();
-                    }
-                });
+                titleParts.push(activeFlow.name);
             }
 
 

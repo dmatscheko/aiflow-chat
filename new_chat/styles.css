@@ -185,6 +185,38 @@ h2 {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+}
+
+.editable-title-part {
+    cursor: pointer;
+}
+
+.inline-edit-btn {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    padding: 2px;
+    cursor: pointer;
+    border-radius: 4px;
+    opacity: 0; /* Hidden by default */
+    margin-left: 0.25rem;
+    transition: opacity 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.inline-edit-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.main-title-bar:hover .inline-edit-btn,
+.inline-edit-btn:hover {
+    opacity: 1;
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 #title-bar-controls {

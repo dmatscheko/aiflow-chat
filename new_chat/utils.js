@@ -124,29 +124,11 @@ export function ensureUniqueId(proposedId, prefix, existingIds) {
 export function makeEditable(containerEl, initialText, onSave, onCancel = null) {
     containerEl.style.display = 'none';
 
-    const editorContainer = document.createElement('div');
-    editorContainer.className = 'edit-container';
-
     const textarea = document.createElement('textarea');
     textarea.className = 'edit-in-place';
     textarea.value = initialText || '';
-    editorContainer.appendChild(textarea);
 
-    const buttonContainer = document.createElement('div');
-    buttonContainer.className = 'edit-buttons';
-    editorContainer.appendChild(buttonContainer);
-
-    const saveButton = document.createElement('button');
-    saveButton.textContent = 'Save';
-    saveButton.className = 'edit-save-btn';
-    buttonContainer.appendChild(saveButton);
-
-    const cancelButton = document.createElement('button');
-    cancelButton.textContent = 'Cancel';
-    cancelButton.className = 'edit-cancel-btn';
-    buttonContainer.appendChild(cancelButton);
-
-    containerEl.parentElement.insertBefore(editorContainer, containerEl);
+    containerEl.parentElement.insertBefore(textarea, containerEl);
 
     // Use setTimeout to ensure the element is rendered and visible before focusing and resizing.
     setTimeout(() => {
@@ -158,7 +140,7 @@ export function makeEditable(containerEl, initialText, onSave, onCancel = null) 
     let isSaving = false;
 
     const cleanup = () => {
-        editorContainer.remove();
+        textarea.remove();
         containerEl.style.display = '';
     };
 
@@ -176,8 +158,7 @@ export function makeEditable(containerEl, initialText, onSave, onCancel = null) 
         cleanup();
     };
 
-    saveButton.addEventListener('click', save);
-    cancelButton.addEventListener('click', cancel);
+    textarea.addEventListener('blur', save);
 
     textarea.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
