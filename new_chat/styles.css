@@ -285,6 +285,13 @@ h2 {
     /* Add any specific content styling here if needed */
 }
 
+.message-content[contenteditable="true"] {
+    outline: 1px solid var(--accent-color);
+    background-color: var(--input-bg-color);
+    padding: 0.5rem;
+    border-radius: 4px;
+}
+
 .message-controls {
     display: inline-flex;
     align-items: center;

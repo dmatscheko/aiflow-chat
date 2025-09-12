@@ -5,6 +5,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
+import { responseProcessor } from '../plugins/chats-plugin.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -87,9 +88,41 @@ const uiControlsPlugin = {
             'New Message Alternative',
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H5a1 1 0 1 1 0-2h6V5a1 1 0 0 1 1-1z" fill="currentColor"/></svg>',
             () => {
-                // For now, just add a blank alternative.
-                // A more advanced implementation would involve the message input form.
-                chatLog.addAlternative(message, { role: message.value.role, content: 'New alternative' });
+                const newMsg = chatLog.addAlternative(message, { role: message.value.role, content: null });
+
+                if (message.value.role === 'assistant') {
+                    responseProcessor.scheduleProcessing(appInstance);
+                } else {
+                    // Make the new message editable in-place
+                    const messageEl = titleRow.parentElement;
+                    const contentEl = messageEl.querySelector('.message-content');
+                    if (contentEl) {
+                        contentEl.contentEditable = 'true';
+                        contentEl.focus();
+                        const originalContent = newMsg.value.content || '';
+
+                        const saveChanges = () => {
+                            newMsg.value.content = contentEl.innerText;
+                            contentEl.contentEditable = 'false';
+                            chatLog.notify();
+                            contentEl.removeEventListener('blur', saveChanges);
+                            contentEl.removeEventListener('keydown', handleKeydown);
+                        };
+
+                        const handleKeydown = (e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                saveChanges();
+                            } else if (e.key === 'Escape') {
+                                contentEl.innerText = originalContent;
+                                saveChanges();
+                            }
+                        };
+
+                        contentEl.addEventListener('blur', saveChanges);
+                        contentEl.addEventListener('keydown', handleKeydown);
+                    }
+                }
             }
         );
 
