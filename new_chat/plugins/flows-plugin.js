@@ -649,10 +649,7 @@ const flowsPlugin = {
                     onSave: (newName) => {
                         flow.name = newName;
                         flowsManager.updateFlow(flow);
-                        flowsManager.renderFlowList();
-                        // No need to re-render view, just update title bar
-                        const titleEl = document.querySelector('#main-panel .main-title-bar .title');
-                        if (titleEl) titleEl.querySelector('.editable-title-part').textContent = newName;
+                        flowsManager.app.setView('flow-editor', flow.id);
                     }
                 });
             } else {

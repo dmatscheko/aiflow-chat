@@ -193,6 +193,18 @@ h2 {
     cursor: pointer;
 }
 
+.edit-in-place-input {
+    background-color: var(--input-bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--accent-color);
+    border-radius: 4px;
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    margin: 0;
+}
+
 .inline-edit-btn {
     background: none;
     border: none;

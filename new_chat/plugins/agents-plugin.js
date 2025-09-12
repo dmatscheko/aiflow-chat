@@ -351,6 +351,7 @@ class AgentManager {
                 text: agent.name,
                 onSave: (newName) => {
                     this.updateAgentProperty(agent.id, 'name', newName);
+                    this.app.setView('agent-editor', agent.id);
                 }
             });
         }
