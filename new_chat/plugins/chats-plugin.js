@@ -7,6 +7,7 @@
 import { pluginManager } from '../plugin-manager.js';
 import { ChatLog } from '../chat-data.js';
 import { debounce, generateUniqueId, ensureUniqueId } from '../utils.js';
+import { processToolCalls } from '../tool-processor.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -307,6 +308,9 @@ class ChatUI {
         const el = document.createElement('div');
         el.classList.add('message', `role-${message.value.role}`);
 
+        const titleRow = document.createElement('div');
+        titleRow.className = 'message-title';
+
         const roleEl = document.createElement('strong');
         let roleText = message.value.role;
 
@@ -317,14 +321,19 @@ class ChatUI {
             }
         }
         roleEl.textContent = roleText;
+        titleRow.appendChild(roleEl);
+
+        // Hook for adding controls to the title row
+        pluginManager.trigger('onRenderMessageTitle', titleRow, message);
 
         const contentEl = document.createElement('div');
+        contentEl.className = 'message-content';
         contentEl.textContent = message.value.content || '';
 
         // Allow plugins to modify the content element (e.g., for rich formatting)
         pluginManager.trigger('onFormatMessageContent', contentEl, message);
 
-        el.appendChild(roleEl);
+        el.appendChild(titleRow);
         el.appendChild(contentEl);
 
         return el;

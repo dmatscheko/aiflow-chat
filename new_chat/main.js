@@ -19,6 +19,7 @@ import './plugins/formatting-plugin.js';
 import './plugins/title-bar-plugin.js';
 import './plugins/mobile-style-plugin.js';
 import './plugins/custom-dropdown-plugin.js';
+import './plugins/ui-controls-plugin.js';
 
 /**
  * @typedef {import('./chat-data.js').Message} Message

@@ -14,6 +14,7 @@
  * @property {MessageRole} role - The role of the message author.
  * @property {string | null} content - The content of the message.
  * @property {string} [agent] - The ID of the agent used for this message.
+ * @property {string} [model] - The model used for the message.
  * @property {object} [metadata] - Optional metadata, e.g., for sources.
  */
 
@@ -250,6 +251,89 @@ export class ChatLog {
         };
 
         return findPath(this.rootAlternatives, []);
+    }
+
+    /**
+     * Finds the Alternatives object that contains the given message.
+     * @param {Message} targetMessage The message to find.
+     * @returns {Alternatives | null}
+     */
+    findAlternatives(targetMessage) {
+        if (!this.rootAlternatives) {
+            return null;
+        }
+
+        const find = (alternatives) => {
+            if (alternatives.messages.includes(targetMessage)) {
+                return alternatives;
+            }
+            for (const message of alternatives.messages) {
+                if (message.answerAlternatives) {
+                    const found = find(message.answerAlternatives);
+                    if (found) {
+                        return found;
+                    }
+                }
+            }
+            return null;
+        };
+
+        return find(this.rootAlternatives);
+    }
+
+    /**
+     * Adds a new message as an alternative to an existing message.
+     * @param {Message} existingMessage - The message to add an alternative to.
+     * @param {MessageValue} newContent - The content for the new alternative message.
+     * @returns {Message} The newly created message.
+     */
+    addAlternative(existingMessage, newContent) {
+        const alternatives = this.findAlternatives(existingMessage);
+        if (alternatives) {
+            const newMessage = alternatives.addMessage(newContent);
+            this.notify();
+            return newMessage;
+        }
+        return null;
+    }
+
+    /**
+     * Deletes a message or a message alternative.
+     * @param {Message} messageToDelete - The message to delete.
+     */
+    deleteMessage(messageToDelete) {
+        const alternatives = this.findAlternatives(messageToDelete);
+        if (!alternatives) return;
+
+        const index = alternatives.messages.indexOf(messageToDelete);
+        if (index > -1) {
+            alternatives.messages.splice(index, 1);
+            if (alternatives.messages.length === 0) {
+                // If this was the last alternative, we need to remove the whole `Alternatives` node
+                // This is a bit tricky, we need to find the parent message
+                // For now, we'll leave an empty alternative list, which should be handled by the UI
+            } else if (alternatives.activeMessageIndex >= index) {
+                alternatives.activeMessageIndex = Math.max(0, alternatives.activeMessageIndex - 1);
+            }
+            this.notify();
+        }
+    }
+
+    /**
+     * Cycles through the alternatives for a given message.
+     * @param {Message} message - The message to cycle alternatives for.
+     * @param {'next' | 'prev'} direction - The direction to cycle.
+     */
+    cycleAlternatives(message, direction) {
+        const alternatives = this.findAlternatives(message);
+        if (alternatives && alternatives.messages.length > 1) {
+            if (direction === 'next') {
+                alternatives.activeMessageIndex = (alternatives.activeMessageIndex + 1) % alternatives.messages.length;
+            } else {
+                alternatives.activeMessageIndex = (alternatives.activeMessageIndex - 1 + alternatives.messages.length) % alternatives.messages.length;
+            }
+            this.notify();
+        }
     }
 
     /**
