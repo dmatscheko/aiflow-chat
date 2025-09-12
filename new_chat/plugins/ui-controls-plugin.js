@@ -42,26 +42,16 @@ const uiControlsPlugin = {
     },
 
     /**
-     * @param {HTMLElement} contentEl
+     * @param {HTMLElement} titleRow
      * @param {Message} message
      */
-    onFormatMessageContent(contentEl, message) {
+    onRenderMessageTitle(titleRow, message) {
         const chatLog = appInstance.chatManager.getActiveChat()?.log;
         if (!chatLog) return;
 
-        const el = contentEl.parentElement;
-        if (!el) return;
-
-        let controlsContainer = el.querySelector('.message-controls');
-        if (controlsContainer) {
-            // Clear existing controls to prevent duplication on re-renders
-            controlsContainer.innerHTML = '';
-        } else {
-            controlsContainer = document.createElement('div');
-            controlsContainer.className = 'message-controls';
-            // Add it after the role element
-            el.insertBefore(controlsContainer, contentEl);
-        }
+        const controlsContainer = document.createElement('div');
+        controlsContainer.className = 'message-controls';
+        titleRow.appendChild(controlsContainer);
 
         const alternatives = chatLog.findAlternatives(message);
 

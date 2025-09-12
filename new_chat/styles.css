@@ -270,10 +270,19 @@ h2 {
     max-width: 100%;
     text-align: center;
 }
-.message strong {
-    display: block;
+.message-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 0.5rem;
+}
+
+.message-title strong {
     text-transform: capitalize;
+}
+
+.message-content {
+    /* Add any specific content styling here if needed */
 }
 
 .message-controls {
