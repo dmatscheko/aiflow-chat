@@ -314,7 +314,21 @@ class ChatUI {
         const roleEl = document.createElement('strong');
         let roleText = message.value.role;
 
-        if (message.value.agent && this.agentManager) {
+        if (message.value.role === 'assistant') {
+            const details = [];
+            if (message.value.agent && this.agentManager) {
+                const agent = this.agentManager.getAgent(message.value.agent);
+                if (agent) {
+                    details.push(agent.name);
+                }
+            }
+            if (message.value.model) {
+                details.push(message.value.model);
+            }
+            if (details.length > 0) {
+                roleText += ` (${details.join(', ')})`;
+            }
+        } else if (message.value.agent && this.agentManager) {
             const agent = this.agentManager.getAgent(message.value.agent);
             if (agent) {
                 roleText += ` (${agent.name})`;
@@ -501,6 +515,9 @@ class ResponseProcessor {
             // Pass the original agent object and the final effective config to the plugin hook
             const agent = agentId ? app.agentManager.getAgent(agentId) : null;
             payload = await pluginManager.triggerAsync('beforeApiCall', payload, effectiveConfig, agent);
+
+            // Store the model used for this message
+            assistantMsg.value.model = payload.model;
 
             const reader = await app.apiService.streamChat(
                 payload,
