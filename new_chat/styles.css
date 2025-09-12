@@ -281,6 +281,16 @@ h2 {
     text-transform: capitalize;
 }
 
+.message-title-text {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.message-details {
+    opacity: 0.7;
+}
+
 .message-content {
     /* Add any specific content styling here if needed */
 }

@@ -311,20 +311,32 @@ class ChatUI {
         const titleRow = document.createElement('div');
         titleRow.className = 'message-title';
 
-        const roleEl = document.createElement('strong');
-        let roleText = message.value.role;
+        const titleTextEl = document.createElement('div');
+        titleTextEl.className = 'message-title-text';
 
-        if (message.value.agent && this.agentManager) {
-            const agent = this.agentManager.getAgent(message.value.agent);
-            if (agent) {
-                roleText += ` (${agent.name})`;
+        const roleEl = document.createElement('strong');
+        roleEl.textContent = message.value.role;
+        titleTextEl.appendChild(roleEl);
+
+        if (message.value.role === 'assistant') {
+            const details = [];
+        
+            if (message.value.agent && this.agentManager) {
+                const agent = this.agentManager.getAgent(message.value.agent);
+                if (agent?.name) details.push(agent.name);
+            }
+            
+            if (message.value.model) details.push(message.value.model);
+            
+            if (details.length > 0) {
+                const detailsEl = document.createElement('span');
+                detailsEl.className = 'message-details';
+                detailsEl.textContent = details.join(' - ');
+                titleTextEl.appendChild(detailsEl);
             }
         }
-        roleEl.textContent = roleText;
-        titleRow.appendChild(roleEl);
 
-        // Hook for adding controls to the title row
-        pluginManager.trigger('onRenderMessageTitle', titleRow, message);
+        titleRow.appendChild(titleTextEl);
 
         const contentEl = document.createElement('div');
         contentEl.className = 'message-content';
@@ -335,6 +347,9 @@ class ChatUI {
 
         el.appendChild(titleRow);
         el.appendChild(contentEl);
+
+        // Hook for adding controls after the message element is fully constructed.
+        pluginManager.trigger('onMessageRendered', el, message);
 
         return el;
     }
@@ -501,6 +516,9 @@ class ResponseProcessor {
             // Pass the original agent object and the final effective config to the plugin hook
             const agent = agentId ? app.agentManager.getAgent(agentId) : null;
             payload = await pluginManager.triggerAsync('beforeApiCall', payload, effectiveConfig, agent);
+
+            // Store the model used for this message
+            assistantMsg.value.model = payload.model;
 
             const reader = await app.apiService.streamChat(
                 payload,
