@@ -64,8 +64,15 @@ function makeEditable(contentEl, message, onSave, onCancel = null) {
     buttonContainer.appendChild(cancelButton);
 
     contentEl.parentElement.insertBefore(editorContainer, contentEl.nextSibling);
-    textarea.focus();
-    textarea.style.height = textarea.scrollHeight + 'px';
+
+    // Use setTimeout to ensure the element is rendered and visible before focusing and resizing.
+    // This is crucial for the "New Message Alternative" path, where `makeEditable` is called
+    // immediately after a re-render.
+    setTimeout(() => {
+        textarea.focus();
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    }, 0);
 
     let isSaving = false;
 
