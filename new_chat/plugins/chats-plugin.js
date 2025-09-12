@@ -188,6 +188,24 @@ class ChatManager {
         this.app.dom.stopButton.addEventListener('click', () => {
             if (this.app.abortController) this.app.abortController.abort();
         });
+
+        this.app.dom.messageInput.addEventListener('keydown', (e) => {
+            // If an edit-in-place textarea is active, don't do anything.
+            // This prevents conflicts with the edit-in-place keyboard shortcuts.
+            if (document.querySelector('.edit-in-place')) {
+                return;
+            }
+
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                this.handleFormSubmit();
+            } else if (e.key === 'Escape') {
+                if (this.app.abortController) {
+                    this.app.abortController.abort();
+                }
+                e.target.blur();
+            }
+        });
         const chatAreaControls = document.getElementById('chat-area-controls');
         if (chatAreaControls) {
             chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '', chat);
