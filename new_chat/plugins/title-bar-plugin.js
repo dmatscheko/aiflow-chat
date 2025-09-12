@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { importJson, exportJson, makeEditable } from '../utils.js';
+import { importJson, exportJson, makeSingleLineEditable } from '../utils.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -63,7 +63,7 @@ export function createTitleBar(titleParts, controls = [], buttons = []) {
 
             const triggerEdit = () => {
                 const newSpan = titleEl.querySelector(`.editable-title-part[data-original-text="${part.text}"]`);
-                makeEditable(newSpan, part.text, part.onSave);
+                makeSingleLineEditable(newSpan, part.text, part.onSave);
             };
 
             span.dataset.originalText = part.text; // Add a marker to re-find the element

@@ -176,11 +176,6 @@ class AgentManager {
             if (path === 'name') {
                 const agentListItem = document.querySelector(`.list-item[data-id="${agentId}"] span`);
                 if (agentListItem) agentListItem.textContent = value;
-                // Also update the title bar if it's the active view
-                if (this.app.activeView.type === 'agent-editor' && this.app.activeView.id === agentId) {
-                    const titleEl = document.querySelector('#main-panel .main-title-bar .title');
-                    if (titleEl) titleEl.textContent = value;
-                }
             }
         }
     }
