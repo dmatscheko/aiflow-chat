@@ -191,25 +191,6 @@ const titleBarPlugin = {
                 }
             ];
 
-            if (activeAgent) {
-                titleParts.push(' | Agent: ');
-                if (activeAgent.id !== 'agent-default') {
-                    titleParts.push({
-                        text: activeAgent.name,
-                        onSave: (newName) => {
-                            appInstance.agentManager.updateAgentProperty(activeAgent.id, 'name', newName);
-                            appInstance.renderMainView();
-                        }
-                    });
-                } else {
-                    titleParts.push(activeAgent.name);
-                }
-            }
-
-            if (activeFlow) {
-                titleParts.push(' | Flow: ');
-                titleParts.push(activeFlow.name);
-            }
 
 
             const controls = [
