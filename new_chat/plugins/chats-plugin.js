@@ -310,10 +310,20 @@ class ChatUI {
         const roleEl = document.createElement('strong');
         let roleText = message.value.role;
 
-        if (message.value.agent && this.agentManager) {
-            const agent = this.agentManager.getAgent(message.value.agent);
-            if (agent) {
-                roleText += ` (${agent.name})`;
+        if (message.value.role === 'assistant') {
+            const details = [];
+            if (message.value.agent && this.agentManager) {
+                const agent = this.agentManager.getAgent(message.value.agent);
+                if (agent) {
+                    details.push(agent.name);
+                }
+            }
+            if (message.value.model) {
+                details.push(message.value.model);
+            }
+
+            if (details.length > 0) {
+                roleText += ` (${details.join(', ')})`;
             }
         }
         roleEl.textContent = roleText;
@@ -474,6 +484,7 @@ class ResponseProcessor {
             // --- Get effective configuration using the new centralized method ---
             const agentId = assistantMsg.value.agent;
             const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
+            assistantMsg.value.model = effectiveConfig.model;
 
             // Add the system prompt if it exists in the effective configuration.
             if (effectiveConfig.systemPrompt) {

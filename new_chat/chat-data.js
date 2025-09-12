@@ -14,6 +14,7 @@
  * @property {MessageRole} role - The role of the message author.
  * @property {string | null} content - The content of the message.
  * @property {string} [agent] - The ID of the agent used for this message.
+ * @property {string} [model] - The model used for the message.
  * @property {object} [metadata] - Optional metadata, e.g., for sources.
  */
 
