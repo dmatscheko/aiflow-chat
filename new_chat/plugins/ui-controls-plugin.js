@@ -32,6 +32,47 @@ function createControlButton(title, svgHTML, onClick) {
     return button;
 }
 
+/**
+ * Makes a message's content editable in-place.
+ * @param {HTMLElement} contentEl - The content element of the message.
+ * @param {Message} message - The message object.
+ * @param {(newText: string) => void} onSave - Callback to execute when saving.
+ */
+function makeEditable(contentEl, message, onSave) {
+    contentEl.style.display = 'none';
+    const textarea = document.createElement('textarea');
+    textarea.className = 'edit-in-place';
+    textarea.value = message.value.content || '';
+    contentEl.parentElement.insertBefore(textarea, contentEl.nextSibling);
+    textarea.focus();
+    textarea.style.height = textarea.scrollHeight + 'px';
+
+    const cleanup = () => {
+        textarea.remove();
+        contentEl.style.display = '';
+    };
+
+    const save = () => {
+        onSave(textarea.value);
+        cleanup();
+    };
+
+    textarea.addEventListener('blur', save);
+    textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            save();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cleanup();
+        }
+    });
+    textarea.addEventListener('input', () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    });
+}
+
 
 const uiControlsPlugin = {
     name: 'ui-controls',
@@ -88,39 +129,31 @@ const uiControlsPlugin = {
             'New Message Alternative',
             '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 4a1 1 0 0 1 1 1v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H5a1 1 0 1 1 0-2h6V5a1 1 0 0 1 1-1z" fill="currentColor"/></svg>',
             () => {
-                const newMsg = chatLog.addAlternative(message, { role: message.value.role, content: null });
-
                 if (message.value.role === 'assistant') {
+                    chatLog.addAlternative(message, { role: 'assistant', content: null, agent: message.value.agent });
                     responseProcessor.scheduleProcessing(appInstance);
                 } else {
-                    // Make the new message editable in-place
-                    const messageEl = titleRow.parentElement;
-                    const contentEl = messageEl.querySelector('.message-content');
+                    const contentEl = titleRow.parentElement.querySelector('.message-content');
                     if (contentEl) {
-                        contentEl.contentEditable = 'true';
-                        contentEl.focus();
-                        const originalContent = newMsg.value.content || '';
+                        makeEditable(contentEl, message, (newText) => {
+                            chatLog.addAlternative(message, { role: message.value.role, content: newText });
+                        });
+                    }
+                }
+            }
+        );
 
-                        const saveChanges = () => {
-                            newMsg.value.content = contentEl.innerText;
-                            contentEl.contentEditable = 'false';
+        const editBtn = createControlButton(
+            'Edit Message',
+            '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>',
+            () => {
+                if (message.value.role !== 'assistant') {
+                    const contentEl = titleRow.parentElement.querySelector('.message-content');
+                    if (contentEl) {
+                        makeEditable(contentEl, message, (newText) => {
+                            message.value.content = newText;
                             chatLog.notify();
-                            contentEl.removeEventListener('blur', saveChanges);
-                            contentEl.removeEventListener('keydown', handleKeydown);
-                        };
-
-                        const handleKeydown = (e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                saveChanges();
-                            } else if (e.key === 'Escape') {
-                                contentEl.innerText = originalContent;
-                                saveChanges();
-                            }
-                        };
-
-                        contentEl.addEventListener('blur', saveChanges);
-                        contentEl.addEventListener('keydown', handleKeydown);
+                        });
                     }
                 }
             }
@@ -133,6 +166,9 @@ const uiControlsPlugin = {
         );
 
         controlsContainer.appendChild(addBtn);
+        if (message.value.role !== 'assistant') {
+            controlsContainer.appendChild(editBtn);
+        }
         controlsContainer.appendChild(delBtn);
     }
 };

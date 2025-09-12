@@ -292,6 +292,20 @@ h2 {
     border-radius: 4px;
 }
 
+textarea.edit-in-place {
+    width: 100%;
+    box-sizing: border-box;
+    background-color: var(--input-bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--accent-color);
+    border-radius: 4px;
+    padding: 0.5rem;
+    font-family: inherit;
+    font-size: inherit;
+    resize: none;
+    overflow: hidden; /* Hide scrollbar */
+}
+
 .message-controls {
     display: inline-flex;
     align-items: center;
