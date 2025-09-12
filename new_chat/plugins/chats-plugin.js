@@ -7,6 +7,7 @@
 import { pluginManager } from '../plugin-manager.js';
 import { ChatLog } from '../chat-data.js';
 import { debounce, generateUniqueId, ensureUniqueId } from '../utils.js';
+import { processToolCalls } from '../tool-processor.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -194,20 +195,52 @@ class ChatManager {
         }
     }
 
-    async handleFormSubmit(options = {}) {
-        const { isContinuation = false, agentId = null } = options;
+    async handleFormSubmit() {
         const activeChat = this.getActiveChat();
         if (!activeChat) return;
-        if (!isContinuation) {
-            const userInput = this.app.dom.messageInput.value.trim();
-            if (!userInput) return;
-            activeChat.log.addMessage({ role: 'user', content: userInput });
-            this.app.dom.messageInput.value = '';
-            activeChat.draftMessage = '';
-            this.saveChats();
+
+        const userInput = this.app.dom.messageInput.value.trim();
+        if (!userInput) return;
+
+        activeChat.log.addMessage({ role: 'user', content: userInput });
+        this.app.dom.messageInput.value = '';
+        activeChat.draftMessage = '';
+        this.saveChats();
+
+        this.continueConversation(activeChat);
+    }
+
+    async continueConversation(chat) {
+        if (!chat) return;
+        const lastMessage = chat.log.getLastMessage();
+        if (!lastMessage) return;
+
+        if (lastMessage.value.role === 'assistant' && lastMessage.value.content) {
+            const agentId = lastMessage.value.agent || chat.agent || null;
+            const effectiveConfig = this.app.agentManager.getEffectiveApiConfig(agentId);
+            const mcpUrl = effectiveConfig.mcpServer;
+            if (mcpUrl) {
+                const tools = await this.app.mcp.getTools(mcpUrl);
+                await processToolCalls(
+                    this.app,
+                    chat,
+                    lastMessage,
+                    tools,
+                    () => true, // No filtering for now
+                    (call, msg) => this.app.mcp.executeMcpCall(call, msg, mcpUrl)
+                );
+                // If processToolCalls found something, it will have already queued the next step.
+                // We check if a new pending message was added.
+                if (chat.log.findNextPendingMessage()) {
+                    return;
+                }
+            }
         }
-        const finalAgentId = agentId || activeChat.agent || null;
-        activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
+
+        // If no tool calls were processed or if the last message wasn't an assistant,
+        // add a new assistant message to continue the conversation.
+        const agentId = chat.agent || null;
+        chat.log.addMessage({ role: 'assistant', content: null, agent: agentId });
         responseProcessor.scheduleProcessing(this.app);
     }
 }

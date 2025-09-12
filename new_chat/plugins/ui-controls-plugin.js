@@ -136,7 +136,8 @@ const uiControlsPlugin = {
                     const contentEl = titleRow.parentElement.querySelector('.message-content');
                     if (contentEl) {
                         makeEditable(contentEl, message, (newText) => {
-                            chatLog.addAlternative(message, { role: message.value.role, content: newText });
+                            const newMsg = chatLog.addAlternative(message, { role: message.value.role, content: newText });
+                            appInstance.chatManager.continueConversation(appInstance.chatManager.getActiveChat());
                         });
                     }
                 }
@@ -153,6 +154,7 @@ const uiControlsPlugin = {
                         makeEditable(contentEl, message, (newText) => {
                             message.value.content = newText;
                             chatLog.notify();
+                            appInstance.chatManager.continueConversation(appInstance.chatManager.getActiveChat());
                         });
                     }
                 }
