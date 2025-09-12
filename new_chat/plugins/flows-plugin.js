@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId } from '../utils.js';
+import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId, generateUniqueName } from '../utils.js';
 import { responseProcessor } from './chats-plugin.js';
 import { createTitleBar } from './title-bar-plugin.js';
 
@@ -512,12 +512,11 @@ const flowsPlugin = {
                 flowsManager.renderFlowList();
 
                 document.getElementById('add-flow-btn').addEventListener('click', () => {
-                    const name = prompt('Enter a name for the new flow:');
-                    if (name) {
-                        const newFlow = flowsManager.addFlow({ name, steps: [], connections: [] });
-                        flowsManager.renderFlowList();
-                        flowsManager.app.setView('flow-editor', newFlow.id);
-                    }
+                    const existingNames = flowsManager.flows.map(f => f.name);
+                    const name = generateUniqueName('New Flow', existingNames);
+                    const newFlow = flowsManager.addFlow({ name, steps: [], connections: [] });
+                    flowsManager.renderFlowList();
+                    flowsManager.app.setView('flow-editor', newFlow.id);
                 });
 
                 document.getElementById('flow-list').addEventListener('click', (e) => {
@@ -643,7 +642,24 @@ const flowsPlugin = {
                 ];
             }
 
-            const titleBar = createTitleBar(title, [], buttons);
+            const titleParts = [];
+            if (flow) {
+                titleParts.push({
+                    text: title,
+                    onSave: (newName) => {
+                        flow.name = newName;
+                        flowsManager.updateFlow(flow);
+                        flowsManager.renderFlowList();
+                        // No need to re-render view, just update title bar
+                        const titleEl = document.querySelector('#main-panel .main-title-bar .title');
+                        if (titleEl) titleEl.querySelector('.editable-title-part').textContent = newName;
+                    }
+                });
+            } else {
+                titleParts.push(title);
+            }
+
+            const titleBar = createTitleBar(titleParts, [], buttons);
             mainPanel.prepend(titleBar);
         }
         flowsManager.updateActiveFlowInList();

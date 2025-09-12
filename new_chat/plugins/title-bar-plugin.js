@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { importJson, exportJson } from '../utils.js';
+import { importJson, exportJson, makeEditable } from '../utils.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -37,18 +37,43 @@ let appInstance = null;
 /**
  * Creates a standardized title bar for a main panel view.
  *
- * @param {string} title - The title to display in the h2 tag.
+ * @param {Array<string|{text: string, onSave: (newText: string) => void}>} titleParts - An array of strings or editable title part objects.
  * @param {TitleBarControl[]} [controls=[]] - An array of control objects to add to the controls area.
  * @param {TitleBarButton[]} [buttons=[]] - An array of button objects to add to the buttons area.
  * @returns {HTMLElement} The generated title bar element.
  */
-export function createTitleBar(title, controls = [], buttons = []) {
+export function createTitleBar(titleParts, controls = [], buttons = []) {
     const titleBar = document.createElement('div');
     titleBar.className = 'main-title-bar';
 
     const titleEl = document.createElement('h2');
     titleEl.className = 'title';
-    titleEl.textContent = title;
+
+    titleParts.forEach(part => {
+        if (typeof part === 'string') {
+            titleEl.appendChild(document.createTextNode(part));
+        } else {
+            const span = document.createElement('span');
+            span.className = 'editable-title-part';
+            span.textContent = part.text;
+
+            const editBtn = document.createElement('button');
+            editBtn.className = 'inline-edit-btn';
+            editBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>';
+
+            const triggerEdit = () => {
+                const newSpan = titleEl.querySelector(`.editable-title-part[data-original-text="${part.text}"]`);
+                makeEditable(newSpan, part.text, part.onSave);
+            };
+
+            span.dataset.originalText = part.text; // Add a marker to re-find the element
+            span.addEventListener('click', triggerEdit);
+            editBtn.addEventListener('click', triggerEdit);
+
+            titleEl.appendChild(span);
+            titleEl.appendChild(editBtn);
+        }
+    });
 
     const controlsContainer = document.createElement('div');
     controlsContainer.id = 'title-bar-controls';
@@ -151,6 +176,49 @@ const titleBarPlugin = {
                 existingTitleBar.remove();
             }
 
+            const activeAgent = appInstance.agentManager.getAgent(chat.agent);
+            const activeFlow = appInstance.flowsManager.getFlow(chat.flow);
+
+            const titleParts = [
+                {
+                    text: chat.title,
+                    onSave: (newTitle) => {
+                        chat.title = newTitle;
+                        appInstance.chatManager.saveChats();
+                        appInstance.chatManager.renderChatList();
+                        appInstance.renderMainView(); // Re-render to update title bar
+                    }
+                }
+            ];
+
+            if (activeAgent) {
+                titleParts.push(' | Agent: ');
+                if (activeAgent.id !== 'agent-default') {
+                    titleParts.push({
+                        text: activeAgent.name,
+                        onSave: (newName) => {
+                            appInstance.agentManager.updateAgentProperty(activeAgent.id, 'name', newName);
+                            appInstance.renderMainView();
+                        }
+                    });
+                } else {
+                    titleParts.push(activeAgent.name);
+                }
+            }
+
+            if (activeFlow) {
+                titleParts.push(' | Flow: ');
+                titleParts.push({
+                    text: activeFlow.name,
+                    onSave: (newName) => {
+                        activeFlow.name = newName;
+                        appInstance.flowsManager.updateFlow(activeFlow);
+                        appInstance.renderMainView();
+                    }
+                });
+            }
+
+
             const controls = [
                 {
                     id: 'agent-selector-container',
@@ -162,6 +230,7 @@ const titleBarPlugin = {
                                 const selectedAgentId = e.target.value;
                                 chat.agent = selectedAgentId === 'agent-default' ? null : selectedAgentId;
                                 appInstance.chatManager.debouncedSave();
+                                appInstance.renderMainView(); // Re-render to update title
                             });
                         }
                     }
@@ -176,6 +245,7 @@ const titleBarPlugin = {
                                 const selectedFlowId = e.target.value;
                                 chat.flow = selectedFlowId || null;
                                 appInstance.chatManager.debouncedSave();
+                                appInstance.renderMainView(); // Re-render to update title
                             });
                         }
                         const runFlowBtn = container.querySelector('#run-chat-flow-btn');
@@ -221,7 +291,7 @@ const titleBarPlugin = {
                 }
             ];
 
-            const titleBar = createTitleBar(chat.title, controls, buttons);
+            const titleBar = createTitleBar(titleParts, controls, buttons);
             mainPanel.prepend(titleBar);
         }
     }

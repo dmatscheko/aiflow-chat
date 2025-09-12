@@ -347,12 +347,21 @@ class AgentManager {
                 }
             }
         ];
-        const titleBar = createTitleBar(agent.name, [], buttons);
+        const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
+        const titleParts = [];
+        if (isDefaultAgent) {
+            titleParts.push(agent.name);
+        } else {
+            titleParts.push({
+                text: agent.name,
+                onSave: (newName) => {
+                    this.updateAgentProperty(agent.id, 'name', newName);
+                }
+            });
+        }
+        const titleBar = createTitleBar(titleParts, [], buttons);
         mainPanel.prepend(titleBar);
         // --- End Title Bar ---
-
-
-        const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
 
         const modelSettingDefs = [
             { id: 'apiUrl', label: 'API URL', type: 'text', placeholder: 'e.g. https://api.someai.com/' },
