@@ -9,6 +9,7 @@
     --accent-color: #007acc;
     --message-user-bg: #004a7c;
     --message-assistant-bg: #333;
+    --message-tool-bg: #222;
 }
 
 body {
@@ -318,6 +319,10 @@ h2 {
     font-size: 0.9rem;
     max-width: 100%;
     text-align: center;
+}
+.message.role-tool {
+    background-color: var(--message-tool-bg);
+    align-self: flex-start;
 }
 .message-title {
     display: flex;
