@@ -274,8 +274,8 @@ export function generateUniqueName(baseName, existingNames) {
         return baseName;
     }
     let i = 2;
-    while (existingNames.includes(`${baseName} (${i})`)) {
+    while (existingNames.includes(`${baseName} ${i}`)) {
         i++;
     }
-    return `${baseName} (${i})`;
+    return `${baseName} ${i}`;
 }
