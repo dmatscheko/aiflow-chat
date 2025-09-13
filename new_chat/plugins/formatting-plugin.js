@@ -119,6 +119,7 @@ const formattingPlugin = {
          * @param {Message} message - The message object.
          */
         onMessageRendered(messageEl, message) {
+            messageEl.classList.add('hljs-message');
             const contentToCopy = message.value.content || '';
             messageEl.dataset.plaintext = encodeURIComponent(contentToCopy.trim());
 
@@ -210,6 +211,9 @@ class ClipBadge {
 
     addTo(container) {
         container.querySelectorAll('pre.hljs, .language-table').forEach(el => this.addBadge(el));
+        if (container.classList.contains('hljs-message')) {
+            this.addBadge(container);
+        }
     }
 
     addBadge(highlightEl) {
