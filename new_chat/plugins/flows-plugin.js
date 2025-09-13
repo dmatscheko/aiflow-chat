@@ -525,13 +525,19 @@ const flowsPlugin = {
                     const id = item.dataset.id;
                     if (e.target.classList.contains('delete-button')) {
                         e.stopPropagation();
-                        if (confirm('Delete this flow?')) {
+                        const flow = flowsManager.getFlow(id);
+                        const doDelete = () => {
                             flowsManager.deleteFlow(id);
                             flowsManager.renderFlowList();
-                            // If the deleted flow was active, show the default view
                             if (flowsManager.app.activeView.id === id) {
                                 flowsManager.app.setView('flow-editor', null);
                             }
+                        };
+
+                        if (flow && flow.steps.length === 0) {
+                            doDelete();
+                        } else if (confirm('Delete this flow?')) {
+                            doDelete();
                         }
                     } else {
                         flowsManager.app.setView('flow-editor', id);
