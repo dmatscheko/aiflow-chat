@@ -13,11 +13,9 @@ import { pluginManager } from '../plugin-manager.js';
  */
 
 const formattingPlugin = {
-    name: 'formatting',
-    hooks: {
-        /**
-         * Formats the message content.
-         * This hook is the core of the formatting process. It takes the content element,
+    /**
+     * Formats the message content.
+     * This hook is the core of the formatting process. It takes the content element,
          * performs a series of transformations, and populates it with the final HTML.
          * @param {HTMLElement} contentEl - The HTML element containing the raw message content.
          * @param {Message} message - The message object.
@@ -146,7 +144,6 @@ const formattingPlugin = {
             const clipBadge = new ClipBadge({ autoRun: false });
             clipBadge.addTo(messageEl);
         }
-    }
 };
 
 pluginManager.register(formattingPlugin);
