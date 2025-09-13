@@ -649,6 +649,7 @@ const flowsPlugin = {
                     onSave: (newName) => {
                         flow.name = newName;
                         flowsManager.updateFlow(flow);
+                        flowsManager.renderFlowList();
                         flowsManager.app.setView('flow-editor', flow.id);
                     }
                 });
