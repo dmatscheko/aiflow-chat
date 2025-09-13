@@ -144,6 +144,11 @@ const formattingPlugin = {
 
             const clipBadge = new ClipBadge({ autoRun: false });
             clipBadge.addTo(messageEl);
+
+            const titleRow = messageEl.querySelector('.message-title');
+            if (titleRow) {
+                titleRow.style.paddingRight = '40px';
+            }
         }
 };
 
