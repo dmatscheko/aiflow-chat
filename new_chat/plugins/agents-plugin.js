@@ -176,11 +176,6 @@ class AgentManager {
             if (path === 'name') {
                 const agentListItem = document.querySelector(`.list-item[data-id="${agentId}"] span`);
                 if (agentListItem) agentListItem.textContent = value;
-                // Also update the title bar if it's the active view
-                if (this.app.activeView.type === 'agent-editor' && this.app.activeView.id === agentId) {
-                    const titleEl = document.querySelector('#main-panel .main-title-bar .title');
-                    if (titleEl) titleEl.textContent = value;
-                }
             }
         }
     }
@@ -347,12 +342,22 @@ class AgentManager {
                 }
             }
         ];
-        const titleBar = createTitleBar(agent.name, [], buttons);
+        const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
+        const titleParts = [];
+        if (isDefaultAgent) {
+            titleParts.push(agent.name);
+        } else {
+            titleParts.push({
+                text: agent.name,
+                onSave: (newName) => {
+                    this.updateAgentProperty(agent.id, 'name', newName);
+                    this.app.setView('agent-editor', agent.id);
+                }
+            });
+        }
+        const titleBar = createTitleBar(titleParts, [], buttons);
         mainPanel.prepend(titleBar);
         // --- End Title Bar ---
-
-
-        const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
 
         const modelSettingDefs = [
             { id: 'apiUrl', label: 'API URL', type: 'text', placeholder: 'e.g. https://api.someai.com/' },

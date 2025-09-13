@@ -6,6 +6,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { responseProcessor } from '../plugins/chats-plugin.js';
+import { makeEditable } from '../utils.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -32,87 +33,6 @@ function createControlButton(title, svgHTML, onClick) {
     return button;
 }
 
-/**
- * Makes a message's content editable in-place.
- * @param {HTMLElement} contentEl - The content element of the message.
- * @param {Message} message - The message object.
- * @param {(newText: string) => void} onSave - Callback to execute when saving.
- */
-function makeEditable(contentEl, message, onSave, onCancel = null) {
-    contentEl.style.display = 'none';
-
-    const editorContainer = document.createElement('div');
-    editorContainer.className = 'edit-container';
-
-    const textarea = document.createElement('textarea');
-    textarea.className = 'edit-in-place';
-    textarea.value = message.value.content || '';
-    editorContainer.appendChild(textarea);
-
-    const buttonContainer = document.createElement('div');
-    buttonContainer.className = 'edit-buttons';
-    editorContainer.appendChild(buttonContainer);
-
-    const saveButton = document.createElement('button');
-    saveButton.textContent = 'Save';
-    saveButton.className = 'edit-save-btn';
-    buttonContainer.appendChild(saveButton);
-
-    const cancelButton = document.createElement('button');
-    cancelButton.textContent = 'Cancel';
-    cancelButton.className = 'edit-cancel-btn';
-    buttonContainer.appendChild(cancelButton);
-
-    contentEl.parentElement.insertBefore(editorContainer, contentEl.nextSibling);
-
-    // Use setTimeout to ensure the element is rendered and visible before focusing and resizing.
-    // This is crucial for the "New Message Alternative" path, where `makeEditable` is called
-    // immediately after a re-render.
-    setTimeout(() => {
-        textarea.focus();
-        textarea.style.height = 'auto';
-        textarea.style.height = textarea.scrollHeight + 'px';
-    }, 0);
-
-    let isSaving = false;
-
-    const cleanup = () => {
-        editorContainer.remove();
-        contentEl.style.display = '';
-    };
-
-    const save = () => {
-        if (isSaving) return;
-        isSaving = true;
-        onSave(textarea.value);
-        cleanup();
-    };
-
-    const cancel = () => {
-        if (onCancel) {
-            onCancel();
-        }
-        cleanup();
-    };
-
-    saveButton.addEventListener('click', save);
-    cancelButton.addEventListener('click', cancel);
-
-    textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            save();
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            cancel();
-        }
-    });
-
-    textarea.addEventListener('input', () => {
-        textarea.style.height = 'auto';
-        textarea.style.height = textarea.scrollHeight + 'px';
-    });
-}
 
 
 const uiControlsPlugin = {
@@ -175,7 +95,7 @@ const uiControlsPlugin = {
         const editBtn = createControlButton('Edit Message', '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>', () => {
             const contentEl = el.querySelector('.message-content');
             if (contentEl) {
-                makeEditable(contentEl, message, (newText) => {
+                makeEditable(contentEl, message.value.content, (newText) => {
                     message.value.content = newText;
                     chatLog.notify();
                 });
@@ -193,7 +113,7 @@ const uiControlsPlugin = {
             if (contentEl) {
                 makeEditable(
                     contentEl,
-                    message,
+                    message.value.content,
                     (newText) => { // onSave
                         message.value.content = newText;
                         chatLog.notify();

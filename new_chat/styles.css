@@ -185,6 +185,55 @@ h2 {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+}
+
+.editable-title-part {
+    cursor: pointer;
+}
+
+.edit-in-place-input {
+    background-color: var(--input-bg-color);
+    color: var(--text-color);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.1rem 0.25rem;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    margin: 0;
+}
+
+.edit-in-place-input:focus {
+    border-color: var(--accent-color);
+    outline: none;
+}
+
+.inline-edit-btn {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    padding: 2px;
+    cursor: pointer;
+    border-radius: 4px;
+    opacity: 0; /* Hidden by default */
+    margin-left: 0.25rem;
+    transition: opacity 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.inline-edit-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.main-title-bar:hover .inline-edit-btn,
+.inline-edit-btn:hover {
+    opacity: 1;
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 #title-bar-controls {

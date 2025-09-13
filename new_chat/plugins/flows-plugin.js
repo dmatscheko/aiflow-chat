@@ -6,7 +6,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId } from '../utils.js';
+import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId, generateUniqueName } from '../utils.js';
 import { responseProcessor } from './chats-plugin.js';
 import { createTitleBar } from './title-bar-plugin.js';
 
@@ -512,12 +512,11 @@ const flowsPlugin = {
                 flowsManager.renderFlowList();
 
                 document.getElementById('add-flow-btn').addEventListener('click', () => {
-                    const name = prompt('Enter a name for the new flow:');
-                    if (name) {
-                        const newFlow = flowsManager.addFlow({ name, steps: [], connections: [] });
-                        flowsManager.renderFlowList();
-                        flowsManager.app.setView('flow-editor', newFlow.id);
-                    }
+                    const existingNames = flowsManager.flows.map(f => f.name);
+                    const name = generateUniqueName('New Flow', existingNames);
+                    const newFlow = flowsManager.addFlow({ name, steps: [], connections: [] });
+                    flowsManager.renderFlowList();
+                    flowsManager.app.setView('flow-editor', newFlow.id);
                 });
 
                 document.getElementById('flow-list').addEventListener('click', (e) => {
@@ -526,13 +525,20 @@ const flowsPlugin = {
                     const id = item.dataset.id;
                     if (e.target.classList.contains('delete-button')) {
                         e.stopPropagation();
-                        if (confirm('Delete this flow?')) {
+                        const flow = flowsManager.getFlow(id);
+                        const doDelete = () => {
                             flowsManager.deleteFlow(id);
                             flowsManager.renderFlowList();
                             // If the deleted flow was active, show the default view
                             if (flowsManager.app.activeView.id === id) {
                                 flowsManager.app.setView('flow-editor', null);
                             }
+                        };
+
+                        if (flow && flow.steps.length === 0) {
+                            doDelete();
+                        } else if (confirm('Delete this flow?')) {
+                            doDelete();
                         }
                     } else {
                         flowsManager.app.setView('flow-editor', id);
@@ -643,7 +649,22 @@ const flowsPlugin = {
                 ];
             }
 
-            const titleBar = createTitleBar(title, [], buttons);
+            const titleParts = [];
+            if (flow) {
+                titleParts.push({
+                    text: title,
+                    onSave: (newName) => {
+                        flow.name = newName;
+                        flowsManager.updateFlow(flow);
+                        flowsManager.renderFlowList();
+                        flowsManager.app.setView('flow-editor', flow.id);
+                    }
+                });
+            } else {
+                titleParts.push(title);
+            }
+
+            const titleBar = createTitleBar(titleParts, [], buttons);
             mainPanel.prepend(titleBar);
         }
         flowsManager.updateActiveFlowInList();

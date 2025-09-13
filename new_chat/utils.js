@@ -112,3 +112,170 @@ export function ensureUniqueId(proposedId, prefix, existingIds) {
     }
     return proposedId;
 }
+
+/**
+ * Makes a container's content editable in-place.
+ * Replaces the container's content with a textarea for editing.
+ * @param {HTMLElement} containerEl - The element to make editable.
+ * @param {string} initialText - The initial text to populate the editor with.
+ * @param {(newText: string) => void} onSave - Callback to execute when saving.
+ * @param {() => void} [onCancel] - Optional callback to execute on cancellation.
+ */
+/**
+ * Makes a container's content editable in-place using a single-line input.
+ * Replaces the container's content with an input field for editing.
+ * Saves on Enter or blur, cancels on Escape.
+ * @param {HTMLElement} containerEl - The element to make editable.
+ * @param {string} initialText - The initial text to populate the editor with.
+ * @param {(newText: string) => void} onSave - Callback to execute when saving.
+ * @param {() => void} [onCancel] - Optional callback to execute on cancellation.
+ */
+export function makeSingleLineEditable(containerEl, initialText, onSave, onCancel = null) {
+    containerEl.style.display = 'none';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'edit-in-place-input';
+    input.value = initialText || '';
+
+    containerEl.parentElement.insertBefore(input, containerEl);
+
+    setTimeout(() => {
+        input.focus();
+        input.select();
+    }, 0);
+
+    let isSaving = false;
+
+    const cleanup = () => {
+        input.remove();
+        containerEl.style.display = '';
+    };
+
+    const save = () => {
+        if (isSaving) return;
+        isSaving = true;
+        onSave(input.value);
+        cleanup();
+    };
+
+    const cancel = () => {
+        if (onCancel) {
+            onCancel();
+        }
+        cleanup();
+    };
+
+    input.addEventListener('blur', save);
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            save();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancel();
+        }
+    });
+}
+
+/**
+ * Makes a container's content editable in-place with a multi-line textarea.
+ * Replaces the container's content with a textarea and Save/Cancel buttons.
+ * Saves on button click or Enter, cancels on button click or Escape.
+ * @param {HTMLElement} containerEl - The element to make editable.
+ * @param {string} initialText - The initial text to populate the editor with.
+ * @param {(newText: string) => void} onSave - Callback to execute when saving.
+ * @param {() => void} [onCancel] - Optional callback to execute on cancellation.
+ */
+export function makeEditable(containerEl, initialText, onSave, onCancel = null) {
+    containerEl.style.display = 'none';
+
+    const editorContainer = document.createElement('div');
+    editorContainer.className = 'edit-container';
+
+    const textarea = document.createElement('textarea');
+    textarea.className = 'edit-in-place';
+    textarea.value = initialText || '';
+    editorContainer.appendChild(textarea);
+
+    const buttonContainer = document.createElement('div');
+    buttonContainer.className = 'edit-buttons';
+    editorContainer.appendChild(buttonContainer);
+
+    const saveButton = document.createElement('button');
+    saveButton.textContent = 'Save';
+    saveButton.className = 'edit-save-btn';
+    buttonContainer.appendChild(saveButton);
+
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.className = 'edit-cancel-btn';
+    buttonContainer.appendChild(cancelButton);
+
+    containerEl.parentElement.insertBefore(editorContainer, containerEl);
+
+    setTimeout(() => {
+        textarea.focus();
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    }, 0);
+
+    let isSaving = false;
+
+    const cleanup = () => {
+        editorContainer.remove();
+        containerEl.style.display = '';
+    };
+
+    const save = () => {
+        if (isSaving) return;
+        isSaving = true;
+        onSave(textarea.value);
+        cleanup();
+    };
+
+    const cancel = () => {
+        if (onCancel) {
+            onCancel();
+        }
+        cleanup();
+    };
+
+    saveButton.addEventListener('click', save);
+    cancelButton.addEventListener('click', cancel);
+
+    textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            save();
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancel();
+        }
+    });
+
+    textarea.addEventListener('input', () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    });
+}
+
+
+/**
+ * Generates a unique name from a base name by appending a number in parentheses if needed.
+ * e.g., "New Flow" -> "New Flow (2)"
+ * @param {string} baseName The desired base name.
+ * @param {string[]} existingNames A list of names that already exist.
+ * @returns {string} A unique name.
+ */
+export function generateUniqueName(baseName, existingNames) {
+    if (!existingNames.includes(baseName)) {
+        return baseName;
+    }
+    let i = 2;
+    while (existingNames.includes(`${baseName} (${i})`)) {
+        i++;
+    }
+    return `${baseName} (${i})`;
+}

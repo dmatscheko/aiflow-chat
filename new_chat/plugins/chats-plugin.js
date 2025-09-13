@@ -590,6 +590,10 @@ class ResponseProcessor {
                 if (firstUserMessage) {
                     chat.title = firstUserMessage.content.substring(0, 20) + '...';
                     this.app.chatManager.saveChats(); // Save title change
+                    // If the updated chat is the currently active one, re-render the main view to update the title bar
+                    if (this.app.activeView.id === chat.id) {
+                        this.app.renderMainView();
+                    }
                 }
             }
             this.app.chatManager.renderChatList();
