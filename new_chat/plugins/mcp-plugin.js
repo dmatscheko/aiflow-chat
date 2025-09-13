@@ -15,7 +15,24 @@ import { processToolCalls as genericProcessToolCalls } from '../tool-processor.j
  * @typedef {import('./agents-plugin.js').Agent} Agent
  */
 
-const toolsHeader = `### MCP Tools:\n...`; // Content is the same as before
+const toolsHeader = `### MCP Tools:
+
+You can use tool calls. Make sure to follow the following XML-inspired format:
+<dma:tool_call name="example_tool_name">
+<parameter name="example_arg_name1">
+example_arg_value1
+</parameter>
+<parameter name="example_arg_name2">
+example_arg_value2
+</parameter>
+</dma:tool_call>
+Do not escape any of the tool call arguments. The arguments will be parsed as normal text. There is one exception: If you need to write </dma:tool_call> or </parameter> as value inside a <parameter>, write it like <\/dma:tool_call> or <\/parameter>.
+
+You can use multiple tools in one message, but either use tools or write an answer in a message. Use tools only if you need them.
+
+IMPORTANT: Write files only if explicitely instructed to do so.
+
+#### Available Tools:\n\n`;
 
 /**
  * Singleton class to manage all MCP (Model Context Protocol) communication.
