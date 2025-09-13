@@ -341,7 +341,12 @@ h2 {
 }
 
 .message-content {
-    overflow-x: auto;
+    /* Add any specific content styling here if needed */
+}
+
+.message-content pre {
+    white-space: pre-wrap;
+    word-break: break-all;
 }
 
 .message-content[contenteditable="true"] {
