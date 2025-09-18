@@ -7,8 +7,6 @@
 import { pluginManager } from '../plugin-manager.js';
 import { ChatLog } from '../chat-data.js';
 import { debounce, generateUniqueId, ensureUniqueId } from '../utils.js';
-import { processToolCalls } from '../tool-processor.js';
-
 /**
  * @typedef {import('../main.js').App} App
  * @typedef {import('../main.js').View} View
@@ -422,13 +420,13 @@ class ResponseProcessor {
     }
 
     /**
-     * Schedules a processing check. If not already processing, it starts the loop.
+     * Schedules a processing check. If not already processing, it starts the robust processing loop.
      * @param {App} app - The main application instance.
      */
     scheduleProcessing(app) {
         this.app = app;
         if (!this.isProcessing) {
-            this.findAndProcessNext();
+            this.processLoop();
         }
     }
 
@@ -442,49 +440,75 @@ class ResponseProcessor {
     }
 
     /**
-     * Notifies all completion subscribers and clears the list.
+     * Notifies all completion subscribers that all work is done.
+     * Dispatches a global event `ai-all-responses-completed` on the document.
      * @private
      */
     notifyCompletion() {
+        console.log('All AI and tool responses are complete.');
+        document.dispatchEvent(new CustomEvent('ai-all-responses-completed'));
         this.completionSubscribers.forEach(cb => cb());
         this.completionSubscribers = []; // Clear subscribers after notification
     }
 
     /**
-     * Finds the next pending message across all chats and processes it.
-     * This method forms a loop by calling itself after each message is processed,
-     * ensuring sequential execution.
-     * If no pending message is found, it stops the loop and notifies completion subscribers.
+     * Finds the next pending message across all chats.
+     * @returns {{chat: Chat, message: Message} | null} The chat and message to process, or null if none.
      * @private
      */
-    async findAndProcessNext() {
-        this.isProcessing = true;
-
-        let workFound = false;
-        if (this.app) {
-            for (const chat of this.app.chatManager.chats) {
-                const pendingMessage = chat.log.findNextPendingMessage();
-                if (pendingMessage) {
-                    // Found a message to process
-                    await this.processMessage(chat, pendingMessage);
-                    workFound = true;
-                    // After processing, immediately look for the next piece of work.
-                    // This creates a recursive loop that continues until all work is done.
-                    this.findAndProcessNext();
-                    return; // Exit the current function call
-                }
+    _findNextPendingMessage() {
+        if (!this.app) return null;
+        for (const chat of this.app.chatManager.chats) {
+            const pendingMessage = chat.log.findNextPendingMessage();
+            if (pendingMessage) {
+                return { chat, message: pendingMessage };
             }
         }
+        return null;
+    }
 
-        if (!workFound) {
-            // No pending messages were found in any chat
+    /**
+     * The main processing loop.
+     * It continuously finds and processes pending messages until no more work is found.
+     * This robust loop prevents race conditions between AI responses and subsequent tool calls.
+     * @private
+     */
+    async processLoop() {
+        if (this.isProcessing) return; // Prevent re-entrancy
+        this.isProcessing = true;
+
+        try {
+            while (true) {
+                const workItem = this._findNextPendingMessage();
+                if (!workItem) {
+                    break; // No more pending messages, exit the loop.
+                }
+
+                const { chat, message } = workItem;
+                // Process the API call for the message.
+                await this.processMessage(chat, message);
+
+                // After the response is complete, check for tool calls and process them.
+                // The `onResponseComplete` hook is expected to return `true` if it scheduled new work.
+                const results = await pluginManager.triggerAsync('onResponseComplete', message, chat);
+                const toolWorkScheduled = results.some(res => res === true);
+
+                // If tools scheduled more work, the loop will find it on the next iteration.
+                // If not, and there are no other pending messages, the loop will exit.
+            }
+        } catch (error) {
+            console.error('Error in processing loop:', error);
+            // Optionally, update the UI to show a global error state.
+        } finally {
             this.isProcessing = false;
+            // This is now the single, safe place to notify completion.
             this.notifyCompletion();
         }
     }
 
+
     /**
-     * Processes a single pending assistant message.
+     * Processes a single pending assistant message by making an API call.
      * This involves fetching settings, constructing the API payload, making the
      * API call, and streaming the response back into the message content.
      * @param {Chat} chat - The chat object the message belongs to.
@@ -585,19 +609,19 @@ class ResponseProcessor {
         } finally {
             app.abortController = null;
             app.dom.stopButton.style.display = 'none';
+            // Post-processing like setting the title
             if (chat.title === 'New Chat') {
                 const firstUserMessage = chat.log.getActiveMessageValues().find(m => m.role === 'user');
                 if (firstUserMessage) {
                     chat.title = firstUserMessage.content.substring(0, 20) + '...';
                     this.app.chatManager.saveChats(); // Save title change
-                    // If the updated chat is the currently active one, re-render the main view to update the title bar
                     if (this.app.activeView.id === chat.id) {
                         this.app.renderMainView();
                     }
                 }
             }
             this.app.chatManager.renderChatList();
-            await pluginManager.triggerAsync('onResponseComplete', assistantMsg, chat);
+            // The 'onResponseComplete' trigger is now handled in the main processLoop.
         }
     }
 }

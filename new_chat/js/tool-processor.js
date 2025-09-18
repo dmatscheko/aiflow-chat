@@ -4,8 +4,6 @@
 
 'use strict';
 
-import { responseProcessor } from './plugins/chats-plugin.js';
-
 /**
  * @typedef {import('./chat-data.js').Message} Message
  * @typedef {import('./main.js').App} App
@@ -131,20 +129,22 @@ function parseToolCalls(content, tools = []) {
 /**
  * A generic function to process tool calls found in a message.
  * It parses, filters, executes, and then formats the results into a new
- * 'tool' role message, and then queues up the next assistant turn.
+ * 'tool' role message. If tool calls were processed, it queues up the next
+ * assistant turn by creating a new pending message.
  * @param {App} app - The main application instance.
  * @param {Chat} chat - The chat object this message belongs to.
  * @param {Message} message - The message containing tool calls.
  * @param {ToolSchema[]} tools - A list of available tools with their schemas.
  * @param {ToolFilterCallback} filterCallback - A function to filter which tool calls to process.
  * @param {ToolExecuteCallback} executeCallback - An async function to execute a tool call and return the result.
+ * @returns {Promise<boolean>} A promise that resolves to `true` if tool calls were processed and a new turn was queued, `false` otherwise.
  */
 async function processToolCalls(app, chat, message, tools, filterCallback, executeCallback) {
     const { toolCalls, positions, isSelfClosings } = parseToolCalls(message.value.content, tools);
-    if (toolCalls.length === 0) return;
+    if (toolCalls.length === 0) return false;
 
     const applicableCalls = toolCalls.filter(filterCallback);
-    if (applicableCalls.length === 0) return;
+    if (applicableCalls.length === 0) return false;
 
     const promises = applicableCalls.map(call => executeCallback(call, message));
     const results = await Promise.all(promises);
@@ -182,8 +182,9 @@ async function processToolCalls(app, chat, message, tools, filterCallback, execu
         chat.log.addMessage({ role: 'tool', content: toolContents });
         // After adding tool results, queue up the next step for the AI.
         chat.log.addMessage({ role: 'assistant', content: null });
-        responseProcessor.scheduleProcessing(app);
+        return true;
     }
+    return false;
 }
 
 export { parseToolCalls, processToolCalls };

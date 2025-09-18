@@ -407,12 +407,12 @@ const mcpPluginDefinition = {
         const agentId = message.agent || null;
         const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
         const mcpUrl = effectiveConfig.mcpServer;
-        if (!mcpUrl) return;
+        if (!mcpUrl) return false;
 
         const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (!tools || tools.length === 0) return;
+        if (!tools || tools.length === 0) return false;
 
-        await genericProcessToolCalls(
+        return await genericProcessToolCalls(
             app,
             activeChat,
             message,
