@@ -151,22 +151,64 @@ class FlowsManager {
             render: (step, agentOptions) => `<h4>Multi Prompt</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea><label>Number of alternatives:</label><input type="number" class="flow-step-count flow-step-input" data-id="${step.id}" data-key="count" value="${step.data.count || 1}" min="1" max="10"></div>`,
             onUpdate: (step, target) => { step.data[target.dataset.key] = target.dataset.key === 'count' ? parseInt(target.value, 10) : target.value; },
             execute: (step, context) => {
-                console.log("Executing Multi-Prompt (not fully implemented, runs once)");
                 if (!step.data.prompt) return context.stopFlow('Multi Prompt step is not configured.');
-                context.app.dom.messageInput.value = step.data.prompt;
-                context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+
+                const runner = flowsManager.activeFlowRunner;
+                if (!runner) return context.stopFlow('Flow runner not active.');
+
+                const chat = context.app.chatManager.getActiveChat();
+                if (!chat) return context.stopFlow('No active chat.');
+
+                // Add the user message that starts the multi-prompt
+                chat.log.addMessage({ role: 'user', content: step.data.prompt });
+                // Add a placeholder for the first assistant message
+                const assistantPlaceholder = chat.log.addMessage({ role: 'assistant', content: null, agent: step.data.agentId });
+
+                runner.multiPromptInfo = {
+                    active: true,
+                    step: step,
+                    counter: 1,
+                    // The first message is the one we will add alternatives to
+                    baseMessage: assistantPlaceholder,
+                };
+
+                // Trigger the processing of the pending message
+                context.app.responseProcessor.scheduleProcessing(context.app);
             },
         });
 
         this._defineStep('consolidator', {
             label: 'Alt. Consolidator',
-            getDefaults: () => ({ prePrompt: 'Please choose the best of the following answers (or if better than any single answer the best parts of the best answers combined):', postPrompt: 'Explain your choice.', agentId: '' }),
-            render: (step, agentOptions) => `<h4>Alternatives Consolidator</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Text before alternatives:</label><textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea><label>Text after alternatives:</label><textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea></div>`,
-            onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
+            getDefaults: () => ({ prePrompt: 'Please choose the best of the following answers (or if better than any single answer the best parts of the best answers combined):', postPrompt: 'Explain your choice.', agentId: '', onlyLastAnswer: false }),
+            render: (step, agentOptions) => `<h4>Alternatives Consolidator</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Text before alternatives:</label><textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea><label>Text after alternatives:</label><textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea><label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}>Only include each last answer</label></div>`,
+            onUpdate: (step, target) => {
+                const key = target.dataset.key;
+                if (key === 'onlyLastAnswer') {
+                    step.data[key] = target.checked;
+                } else {
+                    step.data[key] = target.value;
+                }
+            },
             execute: (step, context) => {
-                console.log("Executing Consolidator (not implemented)");
-                const nextStep = context.getNextStep(step.id);
-                if (nextStep) context.executeStep(nextStep); else context.stopFlow();
+                const chat = context.app.chatManager.getActiveChat();
+                if (!chat) return context.stopFlow('No active chat found.');
+
+                const lastMessageWithAlts = chat.log.messages.slice().reverse().find(m => m.alternatives && m.alternatives.length > 0);
+
+                if (!lastMessageWithAlts) {
+                    return context.stopFlow('Consolidator could not find a preceding step with alternatives.');
+                }
+
+                const allMessages = [lastMessageWithAlts.content, ...lastMessageWithAlts.alternatives];
+                const consolidatedContent = allMessages.map((alt, i) => {
+                    // In the new simplified structure, we assume 'onlyLastAnswer' is the default
+                    // and we just get the content directly.
+                    return `--- ALTERNATIVE ${i + 1} ---\n${alt}`;
+                }).join('\n\n');
+
+                const finalPrompt = `${step.data.prePrompt || ''}\n\n${consolidatedContent}\n\n${step.data.postPrompt || ''}`;
+                context.app.dom.messageInput.value = finalPrompt;
+                context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
             },
         });
 
@@ -176,7 +218,7 @@ class FlowsManager {
             render: (step, agentOptions) => `<h4>Echo Answer</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Text before AI answer:</label><textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea><label>Text after AI answer:</label><textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea></div>`,
             onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
             execute: (step, context) => {
-                console.log("Executing Echo Answer (not implemented)");
+                // console.log("Executing Echo Answer (not implemented)");
                 const nextStep = context.getNextStep(step.id);
                 if (nextStep) context.executeStep(nextStep); else context.stopFlow();
             },
@@ -184,11 +226,31 @@ class FlowsManager {
 
         this._defineStep('clear-history', {
             label: 'Clear History',
-            getDefaults: () => ({ clearFrom: 1 }),
-            render: (step) => `<h4>Clear History</h4><div class="flow-step-content"><label>Clear from message # (1 is last):</label><input type="number" class="flow-step-clear-from flow-step-input" data-id="${step.id}" data-key="clearFrom" value="${step.data.clearFrom || 1}" min="1"></div>`,
-            onUpdate: (step, target) => { step.data.clearFrom = parseInt(target.value, 10); },
+            getDefaults: () => ({ clearFrom: 2, clearTo: 1, clearToBeginning: true }),
+            render: (step) => `<h4>Clear History</h4>
+                <div class="flow-step-content">
+                    <label>From answer #:</label>
+                    <input type="number" class="flow-step-clear-from flow-step-input" data-id="${step.id}" data-key="clearFrom" value="${step.data.clearFrom || 1}" min="1">
+                    <div class="clear-history-to-container" style="${step.data.clearToBeginning ? 'display: none;' : ''}">
+                        <label>To answer #:</label>
+                        <input type="number" class="flow-step-clear-to flow-step-input" data-id="${step.id}" data-key="clearTo" value="${step.data.clearTo || 1}" min="1">
+                    </div>
+                    <label class="flow-step-checkbox-label">
+                        <input type="checkbox" class="flow-step-clear-beginning flow-step-input" data-id="${step.id}" data-key="clearToBeginning" ${step.data.clearToBeginning ? 'checked' : ''}>
+                        Clear to beginning
+                    </label>
+                    <small>(1 is the last answer)<br><br></small>
+                </div>`,
+            onUpdate: (step, target, renderAndConnect) => {
+                const key = target.dataset.key;
+                const value = target.type === 'checkbox' ? target.checked : parseInt(target.value, 10);
+                step.data[key] = value;
+                if (key === 'clearToBeginning') {
+                    renderAndConnect();
+                }
+            },
             execute: (step, context) => {
-                console.log("Executing Clear History (not implemented)");
+                // console.log("Executing Clear History (not implemented)");
                 const nextStep = context.getNextStep(step.id);
                 if (nextStep) context.executeStep(nextStep); else context.stopFlow();
             },
@@ -200,8 +262,7 @@ class FlowsManager {
             render: (step) => `<h4>Branching Prompt</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea></div>`,
             onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
             execute: (step, context) => {
-                console.log("Executing Branching Prompt (not implemented)");
-                const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.content || '';
+                const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
                 let isMatch = false;
                 try {
                     switch(step.data.conditionType) {
@@ -221,8 +282,7 @@ class FlowsManager {
             render: (step) => `<h4>Conditional Stop</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea><label>On Match:</label><select class="flow-step-on-match flow-step-input" data-id="${step.id}" data-key="onMatch"><option value="stop" ${step.data.onMatch === 'stop' ? 'selected' : ''}>Stop flow</option><option value="continue" ${step.data.onMatch === 'continue' ? 'selected' : ''}>Must match to continue</option></select></div>`,
             onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
             execute: (step, context) => {
-                console.log("Executing Conditional Stop (not implemented)");
-                const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.content || '';
+                const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
                 let isMatch = false;
                 try {
                     switch(step.data.conditionType) {
@@ -345,6 +405,9 @@ class FlowsManager {
             if (!stepDef) return;
             const node = document.createElement('div');
             node.className = `flow-step-card flow-step-${step.type}`;
+            if (step.data.isMinimized) {
+                node.classList.add('minimized');
+            }
             node.dataset.id = step.id;
             node.style.left = `${step.x}px`;
             node.style.top = `${step.y}px`;
@@ -353,7 +416,7 @@ class FlowsManager {
             if (step.type === 'branching-prompt') {
                 outputConnectors = `<div class="connector-group"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="pass"><span class="connector-label">Pass</span></div><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="fail"><span class="connector-label">Fail</span></div></div>`;
             }
-            node.innerHTML = `<div class="connector top" data-id="${step.id}" data-type="in"></div>${stepDef.render(step, selectedAgentOptions)}<div class="flow-step-footer"><button class="delete-flow-step-btn" data-id="${step.id}">Delete</button></div>${outputConnectors}`;
+            node.innerHTML = `<button class="minimize-flow-step-btn" data-id="${step.id}">${step.data.isMinimized ? '+' : '-'}</button><div class="connector top" data-id="${step.id}" data-type="in"></div>${stepDef.render(step, selectedAgentOptions)}<div class="flow-step-footer"><button class="delete-flow-step-btn" data-id="${step.id}">Delete</button></div>${outputConnectors}`;
             nodeContainer.appendChild(node);
         });
         // Connection rendering is now handled separately with a timeout
@@ -468,6 +531,7 @@ class FlowRunner {
         this.manager = manager;
         this.currentStepId = null;
         this.isRunning = false;
+        this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
     }
 
     start() {
@@ -482,6 +546,7 @@ class FlowRunner {
     stop(message = 'Flow stopped.') {
         this.isRunning = false;
         this.currentStepId = null;
+        this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
         console.log(message);
         this.manager.activeFlowRunner = null;
     }
@@ -620,7 +685,9 @@ const flowsPlugin = {
                         onClick: (e) => {
                             const type = e.target.dataset.stepType;
                             if (type && flowsManager.stepTypes[type]) {
-                                flow.steps.push({ id: `step-${Date.now()}`, type, x: 50, y: 50, data: flowsManager.stepTypes[type].getDefaults() });
+                                const stepData = flowsManager.stepTypes[type].getDefaults();
+                                stepData.isMinimized = false;
+                                flow.steps.push({ id: `step-${Date.now()}`, type, x: 50, y: 50, data: stepData });
                                 flowsManager.updateFlow(flow);
                                 renderAndConnect();
                             }
@@ -663,24 +730,33 @@ const flowsPlugin = {
                 canvas.addEventListener('change', (e) => {
                     const step = flow.steps.find(s => s.id === e.target.dataset.id);
                     if (step && flowsManager.stepTypes[step.type]?.onUpdate) {
-                        flowsManager.stepTypes[step.type].onUpdate(step, e.target);
+                        flowsManager.stepTypes[step.type].onUpdate(step, e.target, renderAndConnect);
                         debouncedUpdate();
                     }
                 });
                 canvas.addEventListener('click', (e) => {
-                    if (e.target.classList.contains('delete-flow-step-btn')) {
-                        const stepId = e.target.dataset.id;
+                    const target = e.target;
+                    if (target.classList.contains('delete-flow-step-btn')) {
+                        const stepId = target.dataset.id;
                         flow.steps = flow.steps.filter(s => s.id !== stepId);
                         flow.connections = flow.connections.filter(c => c.from !== stepId && c.to !== stepId);
                         flowsManager.updateFlow(flow);
                         renderAndConnect();
-                    } else if (e.target.classList.contains('delete-connection-btn')) {
-                        const { from, to, outputName } = e.target.dataset;
+                    } else if (target.classList.contains('delete-connection-btn')) {
+                        const { from, to, outputName } = target.dataset;
                         flow.connections = flow.connections.filter(c =>
                             !(c.from === from && c.to === to && (c.outputName || 'default') === outputName)
                         );
                         flowsManager.updateFlow(flow);
                         renderAndConnect();
+                    } else if (target.classList.contains('minimize-flow-step-btn')) {
+                        const stepId = target.dataset.id;
+                        const step = flow.steps.find(s => s.id === stepId);
+                        if (step) {
+                            step.data.isMinimized = !step.data.isMinimized;
+                            flowsManager.updateFlow(flow);
+                            renderAndConnect();
+                        }
                     }
                 });
 
@@ -731,11 +807,42 @@ const flowsPlugin = {
      * @returns {boolean} - `true` if the flow proceeded and scheduled new work, `false` otherwise.
      */
     onResponseComplete(message, chat) {
-        // The flows plugin only acts when the AI is idle, indicated by a null message.
-        if (message !== null || !flowsManager.activeFlowRunner) {
+        const runner = flowsManager.activeFlowRunner;
+        if (!runner || !runner.isRunning) {
             return false;
         }
-        return flowsManager.activeFlowRunner.continue();
+
+        // --- Multi-Prompt Handling ---
+        if (runner.multiPromptInfo.active) {
+            const info = runner.multiPromptInfo;
+            const step = info.step;
+
+            if (info.counter < step.data.count) {
+                info.counter++;
+                // Add a new alternative with a pending message
+                chat.log.addAlternative(info.baseMessage, { role: 'assistant', content: null, agent: step.data.agentId });
+                // Trigger the processing of the new pending message
+                this.app.responseProcessor.scheduleProcessing(this.app);
+                return true; // Flow is still active, handled work.
+            } else {
+                // Multi-prompt is finished
+                runner.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
+                const nextStep = runner.getNextStep(step.id);
+                if (nextStep) {
+                    runner.executeStep(nextStep);
+                } else {
+                    runner.stop('Flow execution complete.');
+                }
+                return true;
+            }
+        }
+
+        // The flows plugin only acts when the AI is idle, indicated by a null message.
+        if (message !== null) {
+            return false;
+        }
+
+        return runner.continue();
     }
 };
 
