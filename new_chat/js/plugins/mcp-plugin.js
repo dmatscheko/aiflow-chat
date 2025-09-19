@@ -403,6 +403,11 @@ const mcpPluginDefinition = {
     },
 
     async onResponseComplete(message, activeChat) {
+        // This handler is for tool calls. If there's no message, it's an idle check, so do nothing.
+        if (!message) {
+            return false;
+        }
+
         const app = mcpPluginSingleton.getApp();
         const agentId = message.agent || null;
         const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
