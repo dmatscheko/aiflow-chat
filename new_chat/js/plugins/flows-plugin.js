@@ -331,10 +331,14 @@ class FlowsManager {
     /** @param {Flow} flow */
     renderFlow(flow) {
         const nodeContainer = document.getElementById('flow-node-container');
+        if (!nodeContainer) return;
+        nodeContainer.innerHTML = ''; // Clear only the nodes
+
         const svgLayer = document.getElementById('flow-svg-layer');
-        if (!nodeContainer || !svgLayer) return;
-        nodeContainer.innerHTML = '';
-        svgLayer.innerHTML = '<defs><marker id="arrowhead" viewBox="0 0 10 10" refX="15" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--text-color)"></path></marker></defs>';
+        if (svgLayer && !svgLayer.querySelector('defs')) {
+            svgLayer.innerHTML = '<defs><marker id="arrowhead" viewBox="0 0 10 10" refX="15" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--text-color)"></path></marker></defs>';
+        }
+
         const agentOptions = this.app.agentManager.agents.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
         flow.steps.forEach(step => {
             const stepDef = this.stepTypes[step.type];
@@ -342,7 +346,8 @@ class FlowsManager {
             const node = document.createElement('div');
             node.className = `flow-step-card flow-step-${step.type}`;
             node.dataset.id = step.id;
-            node.style.left = `${step.x}px`; node.style.top = `${step.y}px`;
+            node.style.left = `${step.x}px`;
+            node.style.top = `${step.y}px`;
             const selectedAgentOptions = this.app.agentManager.agents.map(a => `<option value="${a.id}" ${step.data.agentId === a.id ? 'selected' : ''}>${a.name}</option>`).join('');
             let outputConnectors = `<div class="connector-group"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="default"></div></div>`;
             if (step.type === 'branching-prompt') {
@@ -351,7 +356,7 @@ class FlowsManager {
             node.innerHTML = `<div class="connector top" data-id="${step.id}" data-type="in"></div>${stepDef.render(step, selectedAgentOptions)}<div class="flow-step-footer"><button class="delete-flow-step-btn" data-id="${step.id}">Delete</button></div>${outputConnectors}`;
             nodeContainer.appendChild(node);
         });
-        this.updateConnections(flow);
+        // Connection rendering is now handled separately with a timeout
     }
 
     /** @param {string | null} activeFlowId */
@@ -434,7 +439,12 @@ class FlowsManager {
                 if (fromNode.dataset.id !== toNode.dataset.id) {
                     flow.connections.push({ from: fromNode.dataset.id, to: toNode.dataset.id, outputName: this.connectionInfo.fromConnector.dataset.outputName });
                     debouncedUpdate();
-                    this.renderFlow(flow);
+                    // Re-render to show the new connection
+                    const renderAndConnect = () => {
+                        this.renderFlow(flow);
+                        setTimeout(() => this.updateConnections(flow), 0);
+                    };
+                    renderAndConnect();
                 }
             }
         }
@@ -612,7 +622,7 @@ const flowsPlugin = {
                             if (type && flowsManager.stepTypes[type]) {
                                 flow.steps.push({ id: `step-${Date.now()}`, type, x: 50, y: 50, data: flowsManager.stepTypes[type].getDefaults() });
                                 flowsManager.updateFlow(flow);
-                                flowsManager.renderFlow(flow);
+                                renderAndConnect();
                             }
                         }
                     },
@@ -638,7 +648,14 @@ const flowsPlugin = {
                 ];
 
                 const debouncedUpdate = debounce(() => flowsManager.updateFlow(flow), 500);
-                flowsManager.renderFlow(flow);
+
+                const renderAndConnect = () => {
+                    flowsManager.renderFlow(flow);
+                    setTimeout(() => flowsManager.updateConnections(flow), 0);
+                };
+
+                renderAndConnect(); // Initial render
+
                 const canvas = document.getElementById('flow-canvas');
                 canvas.addEventListener('mousedown', (e) => flowsManager._handleCanvasMouseDown(e, flow, debouncedUpdate));
                 canvas.addEventListener('mousemove', (e) => flowsManager._handleCanvasMouseMove(e, flow));
@@ -656,14 +673,14 @@ const flowsPlugin = {
                         flow.steps = flow.steps.filter(s => s.id !== stepId);
                         flow.connections = flow.connections.filter(c => c.from !== stepId && c.to !== stepId);
                         flowsManager.updateFlow(flow);
-                        flowsManager.renderFlow(flow);
+                        renderAndConnect();
                     } else if (e.target.classList.contains('delete-connection-btn')) {
                         const { from, to, outputName } = e.target.dataset;
                         flow.connections = flow.connections.filter(c =>
                             !(c.from === from && c.to === to && (c.outputName || 'default') === outputName)
                         );
                         flowsManager.updateFlow(flow);
-                        flowsManager.renderFlow(flow);
+                        renderAndConnect();
                     }
                 });
 
