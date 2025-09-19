@@ -64,6 +64,26 @@ let flowsManager = null;
  * @class
  */
 class FlowsManager {
+    _findLastMessageWithAlternatives(chatLog) {
+        if (!chatLog.rootAlternatives) {
+            return null;
+        }
+        const messages = [];
+        let current = chatLog.rootAlternatives.getActiveMessage();
+        while (current) {
+            messages.push(current);
+            current = current.getActiveAnswer();
+        }
+
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const msg = messages[i];
+            if (msg && msg.answerAlternatives && msg.answerAlternatives.messages.length > 1) {
+                return msg;
+            }
+        }
+        return null;
+    }
+
     /** @param {App} app */
     constructor(app) {
         /** @type {App} */
@@ -190,21 +210,21 @@ class FlowsManager {
                 }
             },
             execute: (step, context) => {
-                const chat = context.app.chatManager.getActiveChat();
-                if (!chat) return context.stopFlow('No active chat found.');
+                const chatLog = context.app.chatManager.getActiveChat()?.log;
+                if (!chatLog) return context.stopFlow('No active chat.');
 
-                const lastMessageWithAlts = chat.log.messages.slice().reverse().find(m => m.alternatives && m.alternatives.length > 0);
+                const sourceMessage = this._findLastMessageWithAlternatives(chatLog);
 
-                if (!lastMessageWithAlts) {
+                if (!sourceMessage) {
                     return context.stopFlow('Consolidator could not find a preceding step with alternatives.');
                 }
 
-                const allMessages = [lastMessageWithAlts.content, ...lastMessageWithAlts.alternatives];
-                const consolidatedContent = allMessages.map((alt, i) => {
-                    // In the new simplified structure, we assume 'onlyLastAnswer' is the default
-                    // and we just get the content directly.
-                    return `--- ALTERNATIVE ${i + 1} ---\n${alt}`;
+                const allAlternativeMessages = sourceMessage.answerAlternatives.messages;
+                const consolidatedContent = allAlternativeMessages.map((msg, i) => {
+                    const content = msg.value.content || '';
+                    return `--- ALTERNATIVE ${i + 1} ---\n${content}`;
                 }).join('\n\n');
+
 
                 const finalPrompt = `${step.data.prePrompt || ''}\n\n${consolidatedContent}\n\n${step.data.postPrompt || ''}`;
                 context.app.dom.messageInput.value = finalPrompt;
@@ -813,7 +833,7 @@ const flowsPlugin = {
         }
 
         // --- Multi-Prompt Handling ---
-        if (runner.multiPromptInfo.active) {
+        if (runner.multiPromptInfo.active && message === null) { // Only act when the AI is idle
             const info = runner.multiPromptInfo;
             const step = info.step;
 
@@ -837,12 +857,12 @@ const flowsPlugin = {
             }
         }
 
-        // The flows plugin only acts when the AI is idle, indicated by a null message.
-        if (message !== null) {
-            return false;
+        // If not handling multi-prompt, or if a message just completed, run the default continuation.
+        if (message === null) {
+            return runner.continue();
         }
 
-        return runner.continue();
+        return false;
     }
 };
 
