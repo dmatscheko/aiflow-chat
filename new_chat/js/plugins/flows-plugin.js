@@ -7,7 +7,6 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId, generateUniqueName } from '../utils.js';
-import { responseProcessor } from './chats-plugin.js';
 import { createTitleBar } from './title-bar-plugin.js';
 
 /**
@@ -473,20 +472,6 @@ class FlowRunner {
         const conn = this.flow.connections.find(c => c.from === stepId && (c.outputName || 'default') === outputName);
         return conn ? this.flow.steps.find(s => s.id === conn.to) : undefined;
     }
-
-    continue() {
-        if (!this.isRunning || !this.currentStepId) return;
-        const proceed = () => {
-            const stepDef = this.manager.stepTypes[this.flow.steps.find(s => s.id === this.currentStepId)?.type];
-            if (stepDef?.execute?.toString().includes('handleFormSubmit')) {
-                const nextStep = this.getNextStep(this.currentStepId);
-                if (nextStep) this.executeStep(nextStep);
-                else this.stop('Flow execution complete.');
-            }
-        };
-        if (responseProcessor.isProcessing) responseProcessor.subscribeToCompletion(proceed);
-        else proceed();
-    }
 }
 
 
@@ -670,11 +655,42 @@ const flowsPlugin = {
         flowsManager.updateActiveFlowInList();
     },
 
-    /** @param {Message} message, @param {Chat} chat */
+    /**
+     * This handler is called by the ResponseProcessor when the AI is idle.
+     * It checks if a flow is running and proceeds to the next step if the
+     * previous step was a prompt that just completed.
+     * @param {Message | null} message - The message that was just completed, or null if it's an idle check.
+     * @param {Chat} chat - The active chat instance.
+     * @returns {boolean} - `true` if the flow proceeded and scheduled new work, `false` otherwise.
+     */
     onResponseComplete(message, chat) {
-        if (flowsManager.activeFlowRunner) {
-            flowsManager.activeFlowRunner.continue();
+        // The flows plugin only acts when the AI is idle, indicated by a null message.
+        if (message !== null || !flowsManager.activeFlowRunner) {
+            return false;
         }
+
+        const runner = flowsManager.activeFlowRunner;
+        if (!runner.isRunning || !runner.currentStepId) {
+            return false;
+        }
+
+        // Check if the last executed step was a prompt-type step.
+        // The flow should only continue automatically after such steps.
+        const lastStep = runner.flow.steps.find(s => s.id === runner.currentStepId);
+        const stepDef = lastStep ? runner.manager.stepTypes[lastStep.type] : null;
+
+        if (stepDef && stepDef.execute.toString().includes('handleFormSubmit')) {
+            const nextStep = runner.getNextStep(runner.currentStepId);
+            if (nextStep) {
+                runner.executeStep(nextStep);
+                return true; // A new step was executed.
+            } else {
+                runner.stop('Flow execution complete.');
+                return false; // Flow finished, no new work.
+            }
+        }
+
+        return false; // The last step was not a prompt, so we wait.
     }
 };
 
