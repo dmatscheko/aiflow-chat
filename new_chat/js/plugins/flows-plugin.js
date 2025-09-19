@@ -842,7 +842,7 @@ const flowsPlugin = {
                 // Add a new alternative with a pending message
                 chat.log.addAlternative(info.baseMessage, { role: 'assistant', content: null, agent: step.data.agentId });
                 // Trigger the processing of the new pending message
-                this.app.responseProcessor.scheduleProcessing(this.app);
+                flowsManager.app.responseProcessor.scheduleProcessing(flowsManager.app);
                 return true; // Flow is still active, handled work.
             } else {
                 // Multi-prompt is finished
