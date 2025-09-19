@@ -135,6 +135,34 @@ class PluginManager {
 
         return result;
     }
+
+    /**
+     * Asynchronously triggers a specific hook, executing all registered callbacks in registration order.
+     * This method is designed for hooks where handlers can perform an action and prevent subsequent
+     * handlers from running.
+     * @param {string} hookName - The name of the hook to trigger.
+     * @param {...any} args - Arguments to pass to the hook's callbacks.
+     * @returns {Promise<boolean>} A promise that resolves to `true` if any handler returned `true`,
+     * indicating that an action was taken. Resolves to `false` otherwise.
+     */
+    async triggerSequentially(hookName, ...args) {
+        const callbacks = this.hooks[hookName];
+        if (!callbacks || callbacks.length === 0) {
+            return false;
+        }
+
+        for (const callback of callbacks) {
+            const wasHandled = await callback(...args);
+            if (wasHandled === true) {
+                // If a handler returns true, it signifies it has handled the event,
+                // so we stop processing and return true.
+                return true;
+            }
+        }
+
+        // If no handler returned true, it means no action was taken.
+        return false;
+    }
 }
 
 // Export a singleton instance

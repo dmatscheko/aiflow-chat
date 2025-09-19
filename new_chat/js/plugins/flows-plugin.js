@@ -7,7 +7,6 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId, generateUniqueName } from '../utils.js';
-import { responseProcessor } from './chats-plugin.js';
 import { createTitleBar } from './title-bar-plugin.js';
 
 /**
@@ -161,7 +160,7 @@ class FlowsManager {
 
         this._defineStep('consolidator', {
             label: 'Alt. Consolidator',
-            getDefaults: () => ({ prePrompt: 'Please choose the best of the following answers:', postPrompt: 'Explain your choice.', agentId: '' }),
+            getDefaults: () => ({ prePrompt: 'Please choose the best of the following answers (or if better than any single answer the best parts of the best answers combined):', postPrompt: 'Explain your choice.', agentId: '' }),
             render: (step, agentOptions) => `<h4>Alternatives Consolidator</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Text before alternatives:</label><textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea><label>Text after alternatives:</label><textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea></div>`,
             onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
             execute: (step, context) => {
@@ -474,18 +473,21 @@ class FlowRunner {
         return conn ? this.flow.steps.find(s => s.id === conn.to) : undefined;
     }
 
+    /** @returns {boolean} - `true` if the flow proceeded and scheduled new work, `false` otherwise. */
     continue() {
-        if (!this.isRunning || !this.currentStepId) return;
-        const proceed = () => {
-            const stepDef = this.manager.stepTypes[this.flow.steps.find(s => s.id === this.currentStepId)?.type];
-            if (stepDef?.execute?.toString().includes('handleFormSubmit')) {
-                const nextStep = this.getNextStep(this.currentStepId);
-                if (nextStep) this.executeStep(nextStep);
-                else this.stop('Flow execution complete.');
+        if (!this.isRunning || !this.currentStepId) return false;
+
+        const stepDef = this.manager.stepTypes[this.flow.steps.find(s => s.id === this.currentStepId)?.type];
+        if (stepDef?.execute?.toString().includes('handleFormSubmit')) {
+            const nextStep = this.getNextStep(this.currentStepId);
+            if (nextStep) {
+                this.executeStep(nextStep);
+                return true; // A new step was executed.
+            } else {
+                this.stop('Flow execution complete.');
+                return false; // Flow finished, no new work.
             }
-        };
-        if (responseProcessor.isProcessing) responseProcessor.subscribeToCompletion(proceed);
-        else proceed();
+        }
     }
 }
 
@@ -670,11 +672,20 @@ const flowsPlugin = {
         flowsManager.updateActiveFlowInList();
     },
 
-    /** @param {Message} message, @param {Chat} chat */
+    /**
+     * This handler is called by the ResponseProcessor when the AI is idle.
+     * It checks if a flow is running and proceeds to the next step if the
+     * previous step was a prompt that just completed.
+     * @param {Message | null} message - The message that was just completed, or null if it's an idle check.
+     * @param {Chat} chat - The active chat instance.
+     * @returns {boolean} - `true` if the flow proceeded and scheduled new work, `false` otherwise.
+     */
     onResponseComplete(message, chat) {
-        if (flowsManager.activeFlowRunner) {
-            flowsManager.activeFlowRunner.continue();
+        // The flows plugin only acts when the AI is idle, indicated by a null message.
+        if (message !== null || !flowsManager.activeFlowRunner) {
+            return false;
         }
+        return flowsManager.activeFlowRunner.continue();
     }
 };
 

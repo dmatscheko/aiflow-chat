@@ -5,7 +5,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { responseProcessor } from '../plugins/chats-plugin.js';
+import { responseProcessor } from '../response-processor.js';
 import { makeEditable } from '../utils.js';
 
 /**

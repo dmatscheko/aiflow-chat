@@ -10,6 +10,7 @@ import threading
 import webbrowser
 import logging
 import argparse
+import time
 import signal
 import sys
 from fastmcp import FastMCP
@@ -22,6 +23,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     Custom HTTP request handler to serve static files and the API configuration.
     """
 
+    proxy_port = 3000  # Default, will be overridden
+
     def log_message(self, format, *args):
         """Logs an HTTP request."""
         logging.info(f"WEB: {format % args}")
@@ -29,16 +32,21 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         """Handles GET requests."""
         if self.path == "/api/config":
+            host_header = self.headers.get("Host")
+            if host_header:
+                client_host = host_header.split(":")[0]
+            else:
+                client_host = "127.0.0.1"
             self.send_response(200)
             self.send_header("Content-type", "application/json")
             self.end_headers()
-            config = {"mcp_endpoint": "http://127.0.0.1:3001/mcp"}
+            config = {"mcp_endpoint": f"http://{client_host}:{self.proxy_port}/mcp"}
             self.wfile.write(json.dumps(config).encode("utf-8"))
         else:
             super().do_GET()
 
 
-def run_file_server():
+def run_file_server(file_host, file_port):
     """
     Runs the static file server.
     """
@@ -50,8 +58,9 @@ def run_file_server():
 
         allow_reuse_address = True
 
-    with ReuseTCPServer(("", 8001), CustomHandler) as server:
-        logging.info("WEB: Serving static files at http://localhost:8001")
+    log_host = "127.0.0.1" if file_host in ["0.0.0.0", ""] else file_host
+    with ReuseTCPServer((file_host, file_port), CustomHandler) as server:
+        logging.info(f"WEB: Serving static files at http://{log_host}:{file_port}")
         server.serve_forever()
 
 
@@ -108,6 +117,10 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Run MCP proxy and web server")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable debug logging")
+    parser.add_argument("--proxy-host", default="127.0.0.1", help="Host IP for the MCP proxy (default: 127.0.0.1)")
+    parser.add_argument("--proxy-port", type=int, default=3000, help="Port for the MCP proxy (default: 3000)")
+    parser.add_argument("--file-host", default="127.0.0.1", help="Host IP for the file server (default: 127.0.0.1)")
+    parser.add_argument("--file-port", type=int, default=8000, help="Port for the file server (default: 8000)")
     args = parser.parse_args()
 
     level = logging.DEBUG if args.verbose else logging.INFO
@@ -119,13 +132,25 @@ def main():
     mcp_servers = load_config()
     proxy_info = setup_proxy(mcp_servers)
 
-    threading.Thread(target=run_file_server, daemon=True).start()
-    webbrowser.open("http://localhost:8001")
+    CustomHandler.proxy_port = args.proxy_port
+
+    file_log_host = "127.0.0.1" if args.file_host in ["0.0.0.0", ""] else args.file_host
+    proxy_log_host = "127.0.0.1" if args.proxy_host in ["0.0.0.0", ""] else args.proxy_host
+
+    threading.Thread(target=run_file_server, args=(args.file_host, args.file_port), daemon=True).start()
+
+    webbrowser.open(f"http://{file_log_host}:{args.file_port}")
 
     if proxy_info:
         proxy, cors = proxy_info
-        logging.info("MCP: Starting proxy at http://127.0.0.1:3001/mcp")
-        proxy.run(transport="http", host="127.0.0.1", port=3001, middleware=cors)
+        logging.info(f"MCP: Starting proxy at http://{proxy_log_host}:{args.proxy_port}/mcp")
+        # This is a blocking call
+        proxy.run(transport="http", host=args.proxy_host, port=args.proxy_port, middleware=cors)
+    else:
+        logging.info("No MCP proxy to run. Serving files only.")
+        # Keep the main thread alive so the daemon file server thread can run.
+        while True:
+            time.sleep(1)
 
 
 if __name__ == "__main__":
