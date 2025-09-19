@@ -609,6 +609,28 @@ button:hover {
     white-space: nowrap;
 }
 
+.delete-connection-btn {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background-color: #ff4d4d;
+    border: 1px solid #ff0000;
+    color: white;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 12;
+    padding: 0;
+    line-height: 14px;
+    text-align: center;
+    font-size: 14px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.delete-connection-btn:hover {
+    opacity: 1;
+}
+
 
 /* --- Dropdown Styles --- */
 .dropdown {
@@ -766,4 +788,33 @@ hr.divider {
 
 .setting__control-wrapper .custom-dropdown {
     flex-grow: 1;
+}
+
+/* --- Special Flow Step Styles --- */
+.flow-step-simple-prompt {
+    background-color: hsla(0, 0%, 35%, 0.8);
+}
+
+.flow-step-conditional-stop {
+    background-color: hsla(0, 20%, 35%, 0.8);
+}
+
+.flow-step-echo-answer {
+    background-color: hsla(200, 20%, 35%, 0.8);
+}
+
+.flow-step-multi-prompt {
+    background-color: hsla(145, 20%, 35%, 0.8);
+}
+
+.flow-step-branching-prompt {
+    background-color: hsla(30, 20%, 35%, 0.8);
+}
+
+.flow-step-consolidator {
+    background-color: hsla(280, 20%, 35%, 0.8);
+}
+
+.flow-step-clear-history {
+    background-color: hsla(0, 0%, 15%, 0.8);
 }

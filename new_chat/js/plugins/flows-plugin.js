@@ -287,24 +287,44 @@ class FlowsManager {
         const nodeContainer = document.getElementById('flow-node-container');
         const svgLayer = document.getElementById('flow-svg-layer');
         if (!nodeContainer || !svgLayer) return;
+
+        // Clear previous connections and buttons
         svgLayer.querySelectorAll('line').forEach(l => l.remove());
+        nodeContainer.querySelectorAll('.delete-connection-btn').forEach(btn => btn.remove());
+
         flow.connections.forEach(conn => {
             const fromNode = nodeContainer.querySelector(`[data-id="${conn.from}"]`);
             const toNode = nodeContainer.querySelector(`[data-id="${conn.to}"]`);
             if (!fromNode || !toNode) return;
+
             const outConn = fromNode.querySelector(`.connector.bottom[data-output-name="${conn.outputName || 'default'}"]`);
             const inConn = toNode.querySelector('.connector.top');
             if (!outConn || !inConn) return;
+
             const x1 = fromNode.offsetLeft + outConn.offsetLeft + outConn.offsetWidth / 2;
             const y1 = fromNode.offsetTop + outConn.offsetTop + outConn.offsetHeight / 2;
             const x2 = toNode.offsetLeft + inConn.offsetLeft + inConn.offsetWidth / 2;
             const y2 = toNode.offsetTop + inConn.offsetTop + inConn.offsetHeight / 2;
+
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             line.setAttribute('x1', x1); line.setAttribute('y1', y1);
             line.setAttribute('x2', x2); line.setAttribute('y2', y2);
-            line.setAttribute('stroke', 'var(--text-color)'); line.setAttribute('stroke-width', '2');
+            line.setAttribute('stroke', 'var(--text-color)');
+            line.setAttribute('stroke-width', '2');
             line.setAttribute('marker-end', 'url(#arrowhead)');
             svgLayer.appendChild(line);
+
+            // Add delete button at the midpoint of the connection
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-connection-btn';
+            deleteBtn.innerHTML = '&times;';
+            deleteBtn.dataset.from = conn.from;
+            deleteBtn.dataset.to = conn.to;
+            deleteBtn.dataset.outputName = conn.outputName || 'default';
+            deleteBtn.style.position = 'absolute';
+            deleteBtn.style.left = `${(x1 + x2) / 2 - 8}px`;
+            deleteBtn.style.top = `${(y1 + y2) / 2 - 8}px`;
+            nodeContainer.appendChild(deleteBtn);
         });
     }
 
@@ -320,7 +340,7 @@ class FlowsManager {
             const stepDef = this.stepTypes[step.type];
             if (!stepDef) return;
             const node = document.createElement('div');
-            node.className = 'flow-step-card';
+            node.className = `flow-step-card flow-step-${step.type}`;
             node.dataset.id = step.id;
             node.style.left = `${step.x}px`; node.style.top = `${step.y}px`;
             const selectedAgentOptions = this.app.agentManager.agents.map(a => `<option value="${a.id}" ${step.data.agentId === a.id ? 'selected' : ''}>${a.name}</option>`).join('');
@@ -374,15 +394,21 @@ class FlowsManager {
             this.dragInfo.target.style.top = `${e.clientY - this.dragInfo.offsetY}px`;
             this.updateConnections(flow);
         } else if (this.connectionInfo.active) {
+            const fromNode = this.connectionInfo.fromNode;
+            const outConn = this.connectionInfo.fromConnector;
             const wrapper = document.getElementById('flow-canvas-wrapper');
             const rect = wrapper.getBoundingClientRect();
-            const fromRect = this.connectionInfo.fromConnector.getBoundingClientRect();
-            const startX = fromRect.left - rect.left + fromRect.width / 2 + wrapper.scrollLeft;
-            const startY = fromRect.top - rect.top + fromRect.height / 2 + wrapper.scrollTop;
+
+            const startX = fromNode.offsetLeft + outConn.offsetLeft + outConn.offsetWidth / 2;
+            const startY = fromNode.offsetTop + outConn.offsetTop + outConn.offsetHeight / 2;
+
             const endX = e.clientX - rect.left + wrapper.scrollLeft;
             const endY = e.clientY - rect.top + wrapper.scrollTop;
-            this.connectionInfo.tempLine.setAttribute('x1', startX); this.connectionInfo.tempLine.setAttribute('y1', startY);
-            this.connectionInfo.tempLine.setAttribute('x2', endX); this.connectionInfo.tempLine.setAttribute('y2', endY);
+
+            this.connectionInfo.tempLine.setAttribute('x1', startX);
+            this.connectionInfo.tempLine.setAttribute('y1', startY);
+            this.connectionInfo.tempLine.setAttribute('x2', endX);
+            this.connectionInfo.tempLine.setAttribute('y2', endY);
         } else if (this.panInfo.active) {
             e.preventDefault();
             const wrapper = document.getElementById('flow-canvas-wrapper');
@@ -629,6 +655,13 @@ const flowsPlugin = {
                         const stepId = e.target.dataset.id;
                         flow.steps = flow.steps.filter(s => s.id !== stepId);
                         flow.connections = flow.connections.filter(c => c.from !== stepId && c.to !== stepId);
+                        flowsManager.updateFlow(flow);
+                        flowsManager.renderFlow(flow);
+                    } else if (e.target.classList.contains('delete-connection-btn')) {
+                        const { from, to, outputName } = e.target.dataset;
+                        flow.connections = flow.connections.filter(c =>
+                            !(c.from === from && c.to === to && (c.outputName || 'default') === outputName)
+                        );
                         flowsManager.updateFlow(flow);
                         flowsManager.renderFlow(flow);
                     }
