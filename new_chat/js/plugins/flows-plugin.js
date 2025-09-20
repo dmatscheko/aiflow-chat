@@ -389,14 +389,10 @@ class FlowsManager {
                 const clearFrom = step.data.clearFrom || 1;
                 const clearTo = step.data.clearToBeginning ? userMessageIndices.length : (step.data.clearTo || 1);
 
-                // Ensure 'from' and 'to' create a valid range, regardless of user input order.
-                const rangeStart = Math.min(clearFrom, clearTo);
-                const rangeEnd = Math.max(clearFrom, clearTo);
+                const fromUserIndex = userMessageIndices.length - clearTo;
+                const toUserIndex = userMessageIndices.length - clearFrom;
 
-                const fromUserIndex = userMessageIndices.length - rangeEnd;
-                const toUserIndex = userMessageIndices.length - rangeStart;
-
-                if (fromUserIndex < 0 || toUserIndex < 0) {
+                if (fromUserIndex < 0 || toUserIndex < 0 || fromUserIndex > toUserIndex) {
                     return context.stopFlow('Invalid range for Clear History.');
                 }
 
@@ -405,10 +401,14 @@ class FlowsManager {
                     ? userMessageIndices[toUserIndex + 1]
                     : activeMessages.length;
 
-                const messagesToDelete = activeMessages.slice(startMsgIndexInActivePath, endMsgIndexInActivePath);
-
-                for (let i = messagesToDelete.length - 1; i >= 0; i--) {
-                    chatLog.deleteMessage(messagesToDelete[i]);
+                // Iterate backwards by index to safely delete from the array.
+                // This avoids issues with re-indexing that can occur when deleting
+                // items from an array while iterating over it.
+                for (let i = endMsgIndexInActivePath - 1; i >= startMsgIndexInActivePath; i--) {
+                    const message = activeMessages[i];
+                    if (message) {
+                        chatLog.deleteMessage(message);
+                    }
                 }
 
                 const nextStep = context.getNextStep(step.id);
