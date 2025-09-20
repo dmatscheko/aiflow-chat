@@ -374,6 +374,53 @@ export class ChatLog {
     }
 
     /**
+     * Deletes a conversational chain based on a starting message, per user specifications.
+     * @param {Message} startMessage - The message that initiates the deletion.
+     */
+    deleteChain(startMessage) {
+        const role = startMessage.value.role;
+
+        if (role === 'user' || role === 'system') {
+            // If the start message is from a user or system, delete only that message.
+            this.deleteMessageAndPreserveChildren(startMessage);
+            return;
+        }
+
+        if (role === 'assistant' || role === 'tool') {
+            const activeMessages = this.getActiveMessages();
+            const startIndex = activeMessages.indexOf(startMessage);
+            if (startIndex === -1) return;
+
+            // Find the upper boundary (the preceding user/system message).
+            let upperBoundIndex = -1;
+            for (let i = startIndex - 1; i >= 0; i--) {
+                const msgRole = activeMessages[i].value.role;
+                if (msgRole === 'user' || msgRole === 'system') {
+                    upperBoundIndex = i;
+                    break;
+                }
+            }
+
+            // Find the lower boundary (the next user message).
+            let lowerBoundIndex = activeMessages.length;
+            for (let i = startIndex + 1; i < activeMessages.length; i++) {
+                if (activeMessages[i].value.role === 'user') {
+                    lowerBoundIndex = i;
+                    break;
+                }
+            }
+
+            // Identify all messages to delete in the chain.
+            const messagesToDelete = activeMessages.slice(upperBoundIndex + 1, lowerBoundIndex);
+
+            // Delete them in reverse order to avoid index issues.
+            for (let i = messagesToDelete.length - 1; i >= 0; i--) {
+                this.deleteMessageAndPreserveChildren(messagesToDelete[i]);
+            }
+        }
+    }
+
+    /**
      * Cycles through the alternatives for a given message.
      * @param {Message} message - The message to cycle alternatives for.
      * @param {'next' | 'prev'} direction - The direction to cycle.
