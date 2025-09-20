@@ -389,10 +389,14 @@ class FlowsManager {
                 const clearFrom = step.data.clearFrom || 1;
                 const clearTo = step.data.clearToBeginning ? userMessageIndices.length : (step.data.clearTo || 1);
 
-                const fromUserIndex = userMessageIndices.length - clearTo;
-                const toUserIndex = userMessageIndices.length - clearFrom;
+                // Ensure 'from' and 'to' create a valid range, regardless of user input order.
+                const rangeStart = Math.min(clearFrom, clearTo);
+                const rangeEnd = Math.max(clearFrom, clearTo);
 
-                if (fromUserIndex < 0 || toUserIndex < 0 || fromUserIndex > toUserIndex) {
+                const fromUserIndex = userMessageIndices.length - rangeEnd;
+                const toUserIndex = userMessageIndices.length - rangeStart;
+
+                if (fromUserIndex < 0 || toUserIndex < 0) {
                     return context.stopFlow('Invalid range for Clear History.');
                 }
 
