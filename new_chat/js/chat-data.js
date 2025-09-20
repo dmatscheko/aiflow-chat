@@ -193,6 +193,23 @@ export class ChatLog {
     }
 
     /**
+     * Returns an array of all message instances in the active path.
+     * @returns {Message[]}
+     */
+    getActiveMessages() {
+        const result = [];
+        if (!this.rootAlternatives) {
+            return result;
+        }
+        let current = this.rootAlternatives.getActiveMessage();
+        while (current) {
+            result.push(current);
+            current = current.getActiveAnswer();
+        }
+        return result;
+    }
+
+    /**
      * Finds the first pending assistant message in the log.
      * A pending message is one with a role of 'assistant' and content of null.
      * @returns {Message | null}
