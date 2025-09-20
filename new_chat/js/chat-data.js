@@ -193,6 +193,23 @@ export class ChatLog {
     }
 
     /**
+     * Returns an array of all message instances in the active path.
+     * @returns {Message[]}
+     */
+    getActiveMessages() {
+        const result = [];
+        if (!this.rootAlternatives) {
+            return result;
+        }
+        let current = this.rootAlternatives.getActiveMessage();
+        while (current) {
+            result.push(current);
+            current = current.getActiveAnswer();
+        }
+        return result;
+    }
+
+    /**
      * Finds the first pending assistant message in the log.
      * A pending message is one with a role of 'assistant' and content of null.
      * @returns {Message | null}
@@ -309,13 +326,98 @@ export class ChatLog {
         if (index > -1) {
             alternatives.messages.splice(index, 1);
             if (alternatives.messages.length === 0) {
-                // If this was the last alternative, we need to remove the whole `Alternatives` node
-                // This is a bit tricky, we need to find the parent message
-                // For now, we'll leave an empty alternative list, which should be handled by the UI
+                // If this was the last alternative, we need to remove the whole `Alternatives` node.
+                // This is complex and currently left for the UI to handle by not displaying empty nodes.
             } else if (alternatives.activeMessageIndex >= index) {
                 alternatives.activeMessageIndex = Math.max(0, alternatives.activeMessageIndex - 1);
             }
             this.notify();
+        }
+    }
+
+    /**
+     * Deletes a message but preserves its children by re-parenting them to the deleted message's parent.
+     * This is achieved by replacing the message in its parent's `Alternatives.messages` array
+     * with its own children messages. This preserves sibling messages.
+     * @param {Message} messageToDelete - The message to delete.
+     */
+    deleteMessageAndPreserveChildren(messageToDelete) {
+        const alternatives = this.findAlternatives(messageToDelete);
+        if (!alternatives) return;
+
+        const index = alternatives.messages.indexOf(messageToDelete);
+        if (index === -1) return;
+
+        const children = messageToDelete.answerAlternatives ? messageToDelete.answerAlternatives.messages : [];
+
+        // Replace the message with its children in the parent's message list.
+        alternatives.messages.splice(index, 1, ...children);
+
+        // Adjust the active index to maintain a coherent conversational flow.
+        if (alternatives.activeMessageIndex === index) {
+            // If the deleted message was active, we try to keep the conversation flowing.
+            if (messageToDelete.answerAlternatives && children.length > 0) {
+                // If the deleted message had an active child, make that child the new active message.
+                // This preserves the active path through the conversation tree.
+                alternatives.activeMessageIndex = index + messageToDelete.answerAlternatives.activeMessageIndex;
+            } else {
+                // If there are no children, the active message becomes the one before the deleted one.
+                alternatives.activeMessageIndex = Math.max(0, index - 1);
+            }
+        } else if (alternatives.activeMessageIndex > index) {
+            // The active message was after the deleted one, so its index needs to be adjusted
+            // by the number of children inserted minus the one message removed.
+            alternatives.activeMessageIndex += children.length - 1;
+        }
+
+        this.notify();
+    }
+
+    /**
+     * Deletes one turn (a conversational chain of assistant and tool, or a user or system message) based on a starting message.
+     * @param {Message} startMessage - The message that initiates the deletion.
+     */
+    deleteMessageChain(startMessage) {
+        const role = startMessage.value.role;
+
+        if (role !== 'assistant' && role !== 'tool') {
+            // If the start message is from a user or system (not assistant or tool), delete only that message.
+            this.deleteMessageAndPreserveChildren(startMessage);
+            return;
+        }
+
+        if (role === 'assistant' || role === 'tool') {
+            const activeMessages = this.getActiveMessages();
+            const startIndex = activeMessages.indexOf(startMessage);
+            if (startIndex === -1) return;
+
+            // Find the index before the preceding user/system message up the chat log or the beginning of the chat log.
+            let lowerBoundIndex = startIndex;
+            for (let i = startIndex - 1; i >= 0; i--) {
+                const msgRole = activeMessages[i].value.role;
+                if (msgRole !== 'assistant' && msgRole !== 'tool') {
+                    break;
+                }
+                lowerBoundIndex = i;
+            }
+
+            // Find the index before the next user/system message down the chat log or end of the chat log.
+            let upperBoundIndex = startIndex;
+            for (let i = startIndex + 1; i < activeMessages.length; i++) {
+                const msgRole = activeMessages[i].value.role;
+                if (msgRole !== 'assistant' && msgRole !== 'tool') {
+                    break;
+                }
+                upperBoundIndex = i;
+            }
+
+            // Identify all messages to delete in the chain.
+            const messagesToDelete = activeMessages.slice(lowerBoundIndex, upperBoundIndex + 1);
+
+            // Delete them in reverse order.
+            for (let i = messagesToDelete.length - 1; i >= 0; i--) {
+                this.deleteMessageAndPreserveChildren(messagesToDelete[i]);
+            }
         }
     }
 
