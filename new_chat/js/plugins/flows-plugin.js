@@ -382,33 +382,56 @@ class FlowsManager {
                 if (!chatLog) return context.stopFlow('No active chat.');
 
                 const activeMessages = chatLog.getActiveMessages();
-                const userMessageIndices = activeMessages
-                    .map((msg, i) => msg.value.role === 'user' ? i : -1)
-                    .filter(i => i !== -1);
+                if (activeMessages.length === 0) return;
+
+                // Group messages into "steps". A user message is a step, and a
+                // subsequent block of non-user messages is another step.
+                const steps = [];
+                let currentStep = [];
+                activeMessages.forEach(msg => {
+                    if (msg.value.role === 'user') {
+                        if (currentStep.length > 0) {
+                            steps.push(currentStep);
+                        }
+                        steps.push([msg]); // User message is its own step
+                        currentStep = [];
+                    } else {
+                        currentStep.push(msg);
+                    }
+                });
+                if (currentStep.length > 0) {
+                    steps.push(currentStep);
+                }
 
                 const clearFrom = step.data.clearFrom || 1;
-                const clearTo = step.data.clearToBeginning ? userMessageIndices.length : (step.data.clearTo || 1);
+                const clearTo = step.data.clearToBeginning ? steps.length : (step.data.clearTo || 1);
 
-                const fromUserIndex = userMessageIndices.length - clearTo;
-                const toUserIndex = userMessageIndices.length - clearFrom;
+                const startIndex = steps.length - clearTo;
+                const endIndex = steps.length - clearFrom;
 
-                if (fromUserIndex < 0 || toUserIndex < 0 || fromUserIndex > toUserIndex) {
+                if (startIndex < 0 || endIndex < 0 || startIndex > endIndex) {
                     return context.stopFlow('Invalid range for Clear History.');
                 }
 
-                const startMsgIndexInActivePath = userMessageIndices[fromUserIndex];
-                const endMsgIndexInActivePath = (toUserIndex + 1 < userMessageIndices.length)
-                    ? userMessageIndices[toUserIndex + 1]
-                    : activeMessages.length;
-
-                // Iterate backwards by index to safely delete from the array.
-                // This avoids issues with re-indexing that can occur when deleting
-                // items from an array while iterating over it.
-                for (let i = endMsgIndexInActivePath - 1; i >= startMsgIndexInActivePath; i--) {
-                    const message = activeMessages[i];
-                    if (message) {
-                        chatLog.deleteMessage(message);
+                // Determine the correct deletion action for each step.
+                const actions = [];
+                for (let i = startIndex; i <= endIndex; i++) {
+                    if (steps[i] && steps[i].length > 0) {
+                        const message = steps[i][0];
+                        const isUserStep = message.value.role === 'user';
+                        // For user steps, we preserve children. For AI steps, we delete the whole chain.
+                        const deletionFunction = isUserStep
+                            ? chatLog.deleteMessageAndPreserveChildren
+                            : chatLog.deleteMessage;
+                        actions.push({ message, func: deletionFunction });
                     }
+                }
+
+                // Execute the actions in reverse to avoid index shifting issues.
+                for (let i = actions.length - 1; i >= 0; i--) {
+                    const action = actions[i];
+                    // Bind the function to the chatLog context before calling it.
+                    action.func.bind(chatLog)(action.message);
                 }
 
                 const nextStep = context.getNextStep(step.id);
