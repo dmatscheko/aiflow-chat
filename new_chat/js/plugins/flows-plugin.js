@@ -84,6 +84,72 @@ class FlowsManager {
         return null;
     }
 
+    _extractContentFromBranch(startMessage, onlyLast) {
+        const contents = [];
+        const roleMapping = {
+            user: 'User',
+            assistant: 'AI',
+            system: 'System',
+        };
+
+        function traverse(message, currentPath) {
+            if (!message || !message.value) return;
+
+            const role = roleMapping[message.value.role] || message.value.role;
+            const formattedMessage = `**${role}:** ${message.value.content || ''}`;
+            const newPath = [...currentPath, formattedMessage];
+
+            const hasAnswers = message.answerAlternatives && message.answerAlternatives.messages.length > 0;
+
+            if (!hasAnswers) { // It's a leaf node
+                if (onlyLast) {
+                    contents.push(message.value.content || '');
+                } else {
+                    contents.push(newPath.join('\n\n'));
+                }
+                return;
+            }
+
+            for (const alt of message.answerAlternatives.messages) {
+                traverse(alt, newPath);
+            }
+        }
+
+        traverse(startMessage, []);
+        return contents.join('\n\n---\n\n'); // Join content from different leaf branches
+    }
+
+    _findLastAnswerChain(chatLog) {
+        const activeMessages = chatLog.getActiveMessages();
+        let endOfAiAnswerRange = -1;
+
+        for (let i = activeMessages.length - 1; i >= 0; i--) {
+            if (activeMessages[i].value.role === 'assistant') {
+                endOfAiAnswerRange = i;
+                break;
+            }
+        }
+
+        if (endOfAiAnswerRange === -1) {
+            return { startMessage: null, userMessage: null };
+        }
+
+        let startOfAiAnswerRange = endOfAiAnswerRange;
+        for (let i = endOfAiAnswerRange - 1; i >= 0; i--) {
+            if (activeMessages[i].value.role !== 'assistant') {
+                break;
+            }
+            startOfAiAnswerRange = i;
+        }
+
+        const userMessage = activeMessages[startOfAiAnswerRange - 1] || null;
+        return {
+            startMessage: activeMessages[startOfAiAnswerRange],
+            userMessage: userMessage,
+        };
+    }
+
+
     /** @param {App} app */
     constructor(app) {
         /** @type {App} */
@@ -219,12 +285,10 @@ class FlowsManager {
                     return context.stopFlow('Consolidator could not find a preceding step with alternatives.');
                 }
 
-                const allAlternativeMessages = sourceMessage.answerAlternatives.messages;
-                const consolidatedContent = allAlternativeMessages.map((msg, i) => {
-                    const content = msg.value.content || '';
-                    return `--- ALTERNATIVE ${i + 1} ---\n${content}`;
+                const consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
+                    const turnContent = this._extractContentFromBranch(alternativeStartMessage, step.data.onlyLastAnswer);
+                    return `--- ALTERNATIVE ${i + 1} ---\n${turnContent}`;
                 }).join('\n\n');
-
 
                 const finalPrompt = `${step.data.prePrompt || ''}\n\n${consolidatedContent}\n\n${step.data.postPrompt || ''}`;
                 context.app.dom.messageInput.value = finalPrompt;
@@ -234,73 +298,108 @@ class FlowsManager {
 
         this._defineStep('echo-answer', {
             label: 'Echo Answer',
-            getDefaults: () => ({ prePrompt: 'Is this idea and code correct? Be concise.\n\n\n', postPrompt: '', agentId: '' }),
-            render: (step, agentOptions) => `<h4>Echo Answer</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Text before AI answer:</label><textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea><label>Text after AI answer:</label><textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea></div>`,
-            onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
+            getDefaults: () => ({
+                prePrompt: 'Is this idea and code correct? Be concise.\n\n\n',
+                postPrompt: '',
+                agentId: '',
+                deleteAIAnswer: true,
+                deleteUserMessage: true,
+                onlyLastAnswer: false,
+            }),
+            render: (step, agentOptions) => `<h4>Echo Answer</h4><div class="flow-step-content">
+                ${getAgentsDropdown(step, agentOptions)}
+                <label>Text before AI answer:</label>
+                <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea>
+                <label>Text after AI answer:</label>
+                <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea>
+                <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-ai flow-step-input" data-id="${step.id}" data-key="deleteAIAnswer" ${step.data.deleteAIAnswer ? 'checked' : ''}> Delete original AI answer</label>
+                <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-user flow-step-input" data-id="${step.id}" data-key="deleteUserMessage" ${step.data.deleteUserMessage ? 'checked' : ''}> Delete original user message</label>
+                <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}> Only include last answer</label>
+            </div>`,
+            onUpdate: (step, target) => {
+                const key = target.dataset.key;
+                const value = target.type === 'checkbox' ? target.checked : target.value;
+                step.data[key] = value;
+            },
             execute: (step, context) => {
-                // console.log("Executing Echo Answer (not implemented)");
-                const nextStep = context.getNextStep(step.id);
-                if (nextStep) context.executeStep(nextStep); else context.stopFlow();
+                const chatLog = context.app.chatManager.getActiveChat()?.log;
+                if (!chatLog) return context.stopFlow('No active chat.');
+
+                const { startMessage, userMessage } = this._findLastAnswerChain(chatLog);
+
+                if (!startMessage) {
+                    return context.stopFlow('Echo Answer step could not find an AI answer to process.');
+                }
+
+                const fullAnswerText = this._extractContentFromBranch(startMessage, step.data.onlyLastAnswer);
+
+                const newPrompt = `${step.data.prePrompt || ''}\n\n${fullAnswerText}\n\n${step.data.postPrompt || ''}`;
+
+                // Delete the original messages. Order is important.
+                // If we delete the user message, the entire AI answer chain attached to it is also removed.
+                if (step.data.deleteUserMessage && userMessage) {
+                    chatLog.deleteMessage(userMessage);
+                } else if (step.data.deleteAIAnswer && startMessage) {
+                    // Otherwise, if we're only deleting the AI answer, just delete its starting message.
+                    // The rest of the chain will be garbage collected.
+                    chatLog.deleteMessage(startMessage);
+                }
+
+                // Now, submit the new prompt.
+                context.app.dom.messageInput.value = newPrompt;
+                context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
             },
         });
 
         this._defineStep('clear-history', {
             label: 'Clear History',
-            getDefaults: () => ({ clearFrom: 2, clearTo: 1, clearToBeginning: true }),
+            getDefaults: () => ({ clearToBeginning: true }),
             render: (step) => `<h4>Clear History</h4>
                 <div class="flow-step-content">
-                    <label>From answer #:</label>
-                    <input type="number" class="flow-step-clear-from flow-step-input" data-id="${step.id}" data-key="clearFrom" value="${step.data.clearFrom || 1}" min="1">
-                    <div class="clear-history-to-container" style="${step.data.clearToBeginning ? 'display: none;' : ''}">
-                        <label>To answer #:</label>
-                        <input type="number" class="flow-step-clear-to flow-step-input" data-id="${step.id}" data-key="clearTo" value="${step.data.clearTo || 1}" min="1">
-                    </div>
                     <label class="flow-step-checkbox-label">
                         <input type="checkbox" class="flow-step-clear-beginning flow-step-input" data-id="${step.id}" data-key="clearToBeginning" ${step.data.clearToBeginning ? 'checked' : ''}>
                         Clear to beginning
                     </label>
-                    <small>(1 is the last answer)<br><br></small>
+                    <small>If unchecked, clears history up to the point where this flow step is triggered.</small>
                 </div>`,
-            onUpdate: (step, target, renderAndConnect) => {
-                const key = target.dataset.key;
-                const value = target.type === 'checkbox' ? target.checked : parseInt(target.value, 10);
-                step.data[key] = value;
-                if (key === 'clearToBeginning') {
-                    renderAndConnect();
+            onUpdate: (step, target) => {
+                if (target.dataset.key === 'clearToBeginning') {
+                    step.data.clearToBeginning = target.checked;
                 }
             },
             execute: (step, context) => {
                 const chatLog = context.app.chatManager.getActiveChat()?.log;
                 if (!chatLog) return context.stopFlow('No active chat.');
 
-                const activeMessages = chatLog.getActiveMessages();
-                const userMessageIndices = activeMessages
-                    .map((msg, i) => msg.value.role === 'user' ? i : -1)
-                    .filter(i => i !== -1);
-
-                const clearFrom = step.data.clearFrom || 1;
-                const clearTo = step.data.clearToBeginning ? userMessageIndices.length : (step.data.clearTo || 1);
-
-                const fromUserIndex = userMessageIndices.length - clearTo;
-                const toUserIndex = userMessageIndices.length - clearFrom;
-
-                if (fromUserIndex < 0 || toUserIndex < 0 || fromUserIndex > toUserIndex) {
-                    return context.stopFlow('Invalid range for Clear History.');
+                if (step.data.clearToBeginning) {
+                    chatLog.rootAlternatives = null;
+                } else {
+                    const activePath = chatLog.getActiveMessages();
+                    // We need at least two messages for this to be meaningful.
+                    // The parent message, and the current message which triggers the flow.
+                    if (activePath.length >= 2) {
+                        const parentOfLast = activePath[activePath.length - 2];
+                        if (parentOfLast && parentOfLast.answerAlternatives) {
+                            // The new root of the chat is the list of alternatives
+                            // that contains the current message. This preserves the current
+                            // message and its siblings, while deleting all predecessors.
+                            chatLog.rootAlternatives = parentOfLast.answerAlternatives;
+                        }
+                    } else if (activePath.length > 0) {
+                        // If there's only one message (or a single path),
+                        // clearing "up to this point" means clearing nothing.
+                        // For clarity, we could log this, but doing nothing is correct.
+                    }
                 }
 
-                const startMsgIndexInActivePath = userMessageIndices[fromUserIndex];
-                const endMsgIndexInActivePath = (toUserIndex + 1 < userMessageIndices.length)
-                    ? userMessageIndices[toUserIndex + 1]
-                    : activeMessages.length;
-
-                const messagesToDelete = activeMessages.slice(startMsgIndexInActivePath, endMsgIndexInActivePath);
-
-                for (let i = messagesToDelete.length - 1; i >= 0; i--) {
-                    chatLog.deleteMessage(messagesToDelete[i]);
-                }
+                chatLog.notify(); // Notify UI of the change
 
                 const nextStep = context.getNextStep(step.id);
-                if (nextStep) context.executeStep(nextStep); else context.stopFlow();
+                if (nextStep) {
+                    context.executeStep(nextStep);
+                } else {
+                    context.stopFlow('Flow execution complete.');
+                }
             },
         });
 
@@ -452,10 +551,8 @@ class FlowsManager {
             const stepDef = this.stepTypes[step.type];
             if (!stepDef) return;
             const node = document.createElement('div');
-            node.className = `flow-step-card flow-step-${step.type}`;
-            if (step.data.isMinimized) {
-                node.classList.add('minimized');
-            }
+            const cardClass = `flow-step-card flow-step-${step.type} ${step.data.isMinimized ? 'minimized' : ''}`;
+            node.className = cardClass.trim();
             node.dataset.id = step.id;
             node.style.left = `${step.x}px`;
             node.style.top = `${step.y}px`;
