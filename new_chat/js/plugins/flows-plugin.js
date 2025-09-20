@@ -427,7 +427,9 @@ class FlowsManager {
                 }
 
                 for (let i = totalTurns-clearFrom; i >= totalTurns-clearTo; i--) {
-                    chatLog.deleteMessageChain(turns[i][0]);
+                    turns[i].forEach(msg => {
+                        chatLog.deleteMessageAndPreserveChildren(msg);
+                    });
                 }
             },
         });
@@ -470,8 +472,6 @@ class FlowsManager {
                 if ((isMatch && step.data.onMatch === 'stop') || (!isMatch && step.data.onMatch === 'continue')) {
                     return context.stopFlow('Flow stopped by conditional stop.');
                 }
-                const nextStep = context.getNextStep(step.id);
-                if (nextStep) context.executeStep(nextStep); else context.stopFlow();
             },
         });
     }

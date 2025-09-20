@@ -374,54 +374,6 @@ export class ChatLog {
     }
 
     /**
-     * Deletes one turn (a conversational chain of assistant and tool, or a user or system message) based on a starting message.
-     * @param {Message} startMessage - The message that initiates the deletion.
-     */
-    deleteMessageChain(startMessage) {
-        const role = startMessage.value.role;
-
-        if (role !== 'assistant' && role !== 'tool') {
-            // If the start message is from a user or system (not assistant or tool), delete only that message.
-            this.deleteMessageAndPreserveChildren(startMessage);
-            return;
-        }
-
-        if (role === 'assistant' || role === 'tool') {
-            const activeMessages = this.getActiveMessages();
-            const startIndex = activeMessages.indexOf(startMessage);
-            if (startIndex === -1) return;
-
-            // Find the index before the preceding user/system message up the chat log or the beginning of the chat log.
-            let lowerBoundIndex = startIndex;
-            for (let i = startIndex - 1; i >= 0; i--) {
-                const msgRole = activeMessages[i].value.role;
-                if (msgRole !== 'assistant' && msgRole !== 'tool') {
-                    break;
-                }
-                lowerBoundIndex = i;
-            }
-
-            // Find the index before the next user/system message down the chat log or end of the chat log.
-            let upperBoundIndex = startIndex;
-            for (let i = startIndex + 1; i < activeMessages.length; i++) {
-                const msgRole = activeMessages[i].value.role;
-                if (msgRole !== 'assistant' && msgRole !== 'tool') {
-                    break;
-                }
-                upperBoundIndex = i;
-            }
-
-            // Identify all messages to delete in the chain.
-            const messagesToDelete = activeMessages.slice(lowerBoundIndex, upperBoundIndex + 1);
-
-            // Delete them in reverse order.
-            for (let i = messagesToDelete.length - 1; i >= 0; i--) {
-                this.deleteMessageAndPreserveChildren(messagesToDelete[i]);
-            }
-        }
-    }
-
-    /**
      * Cycles through the alternatives for a given message.
      * @param {Message} message - The message to cycle alternatives for.
      * @param {'next' | 'prev'} direction - The direction to cycle.
