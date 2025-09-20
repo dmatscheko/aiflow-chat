@@ -431,6 +431,9 @@ class FlowsManager {
                         chatLog.deleteMessageAndPreserveChildren(msg);
                     });
                 }
+
+                const nextStep = context.getNextStep(step.id);
+                if (nextStep) context.executeStep(nextStep); else context.stopFlow();
             },
         });
 
@@ -472,6 +475,8 @@ class FlowsManager {
                 if ((isMatch && step.data.onMatch === 'stop') || (!isMatch && step.data.onMatch === 'continue')) {
                     return context.stopFlow('Flow stopped by conditional stop.');
                 }
+                const nextStep = context.getNextStep(step.id);
+                if (nextStep) context.executeStep(nextStep); else context.stopFlow();
             },
         });
     }
