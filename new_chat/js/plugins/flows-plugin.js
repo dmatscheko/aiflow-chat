@@ -381,54 +381,49 @@ class FlowsManager {
                 const chatLog = context.app.chatManager.getActiveChat()?.log;
                 if (!chatLog) return context.stopFlow('No active chat.');
 
-                const activeMessages = chatLog.getActiveMessages();
-                if (activeMessages.length === 0) return;
-
-                // Group messages into "steps". A user/system message is a step, and a
-                // subsequent block of assistant/tool messages is another step.
-                const steps = [];
-                let currentStep = [];
-                activeMessages.forEach(msg => {
-                    const role = msg.value.role;
-                    const isUserOrSystem = role === 'user' || role === 'system';
-
-                    if (isUserOrSystem) {
-                        if (currentStep.length > 0) {
-                            steps.push(currentStep);
+                // Helper function to build the steps array.
+                const buildSteps = () => {
+                    const messages = chatLog.getActiveMessages();
+                    const steps = [];
+                    let currentStep = [];
+                    messages.forEach(msg => {
+                        const role = msg.value.role;
+                        const isBoundary = role === 'user' || role === 'system';
+                        if (isBoundary) {
+                            if (currentStep.length > 0) steps.push(currentStep);
+                            steps.push([msg]);
+                            currentStep = [];
+                        } else {
+                            currentStep.push(msg);
                         }
-                        steps.push([msg]); // User/system message is its own step
-                        currentStep = [];
-                    } else {
-                        // All other messages (assistant/tool) are grouped into a single step.
-                        currentStep.push(msg);
-                    }
-                });
-                if (currentStep.length > 0) {
-                    steps.push(currentStep);
-                }
+                    });
+                    if (currentStep.length > 0) steps.push(currentStep);
+                    return steps;
+                };
 
+                const initialSteps = buildSteps();
                 const clearFrom = step.data.clearFrom || 1;
-                const clearTo = step.data.clearToBeginning ? steps.length : (step.data.clearTo || 1);
+                const clearTo = step.data.clearToBeginning ? initialSteps.length : (step.data.clearTo || 1);
+                const count = clearTo - clearFrom + 1;
 
-                const startIndex = steps.length - clearTo;
-                const endIndex = steps.length - clearFrom;
-
-                if (startIndex < 0 || endIndex < 0 || startIndex > endIndex) {
-                    return context.stopFlow('Invalid range for Clear History.');
+                if (count <= 0) {
+                    return; // Nothing to delete.
                 }
 
-                // Collect the first message of each step to be deleted.
-                const stepsToDelete = [];
-                for (let i = startIndex; i <= endIndex; i++) {
-                    if (steps[i] && steps[i].length > 0) {
-                        stepsToDelete.push(steps[i]);
+                for (let i = 0; i < count; i++) {
+                    const currentSteps = buildSteps();
+                    if (currentSteps.length === 0) break;
+
+                    // Always delete the Nth step from the end, where N is `clearFrom`.
+                    // This works because after deleting the Nth item, the (N+1)th item becomes the new Nth item.
+                    const targetIndex = currentSteps.length - clearFrom;
+
+                    if (targetIndex < 0) {
+                        context.stopFlow('Invalid range encountered during history deletion.');
+                        break;
                     }
-                }
 
-                // Iterate backwards through the steps and delete them.
-                for (let i = stepsToDelete.length - 1; i >= 0; i--) {
-                    const stepToDelete = stepsToDelete[i];
-                    // The `deleteChain` function handles the logic based on the role of the first message.
+                    const stepToDelete = currentSteps[targetIndex];
                     chatLog.deleteChain(stepToDelete[0]);
                 }
 
