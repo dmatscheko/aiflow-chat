@@ -270,7 +270,35 @@ class FlowsManager {
                 }
             },
             execute: (step, context) => {
-                // console.log("Executing Clear History (not implemented)");
+                const chatLog = context.app.chatManager.getActiveChat()?.log;
+                if (!chatLog) return context.stopFlow('No active chat.');
+
+                const activeMessages = chatLog.getActiveMessages();
+                const userMessageIndices = activeMessages
+                    .map((msg, i) => msg.value.role === 'user' ? i : -1)
+                    .filter(i => i !== -1);
+
+                const clearFrom = step.data.clearFrom || 1;
+                const clearTo = step.data.clearToBeginning ? userMessageIndices.length : (step.data.clearTo || 1);
+
+                const fromUserIndex = userMessageIndices.length - clearTo;
+                const toUserIndex = userMessageIndices.length - clearFrom;
+
+                if (fromUserIndex < 0 || toUserIndex < 0 || fromUserIndex > toUserIndex) {
+                    return context.stopFlow('Invalid range for Clear History.');
+                }
+
+                const startMsgIndexInActivePath = userMessageIndices[fromUserIndex];
+                const endMsgIndexInActivePath = (toUserIndex + 1 < userMessageIndices.length)
+                    ? userMessageIndices[toUserIndex + 1]
+                    : activeMessages.length;
+
+                const messagesToDelete = activeMessages.slice(startMsgIndexInActivePath, endMsgIndexInActivePath);
+
+                for (let i = messagesToDelete.length - 1; i >= 0; i--) {
+                    chatLog.deleteMessage(messagesToDelete[i]);
+                }
+
                 const nextStep = context.getNextStep(step.id);
                 if (nextStep) context.executeStep(nextStep); else context.stopFlow();
             },
