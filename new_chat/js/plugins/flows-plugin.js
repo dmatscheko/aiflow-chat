@@ -357,17 +357,17 @@ class FlowsManager {
             getDefaults: () => ({ clearFrom: 2, clearTo: 3, clearToBeginning: true }),
             render: (step) => `<h4>Clear History</h4>
                 <div class="flow-step-content">
-                    <label>From answer #:</label>
+                    <label>From turn #:</label>
                     <input type="number" class="flow-step-clear-from flow-step-input" data-id="${step.id}" data-key="clearFrom" value="${step.data.clearFrom || 1}" min="1">
                     <div class="clear-history-to-container" style="${step.data.clearToBeginning ? 'display: none;' : ''}">
-                        <label>To answer #:</label>
+                        <label>To turn #:</label>
                         <input type="number" class="flow-step-clear-to flow-step-input" data-id="${step.id}" data-key="clearTo" value="${step.data.clearTo || 1}" min="1">
                     </div>
                     <label class="flow-step-checkbox-label">
                         <input type="checkbox" class="flow-step-clear-beginning flow-step-input" data-id="${step.id}" data-key="clearToBeginning" ${step.data.clearToBeginning ? 'checked' : ''}>
                         Clear to beginning
                     </label>
-                    <small>(1 is the last answer)<br><br></small>
+                    <small>(1 is the last turn)<br><br></small>
                 </div>`,
             onUpdate: (step, target, renderAndConnect) => {
                 const key = target.dataset.key;
