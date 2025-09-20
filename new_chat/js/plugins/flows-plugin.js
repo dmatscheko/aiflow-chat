@@ -381,50 +381,68 @@ class FlowsManager {
                 const chatLog = context.app.chatManager.getActiveChat()?.log;
                 if (!chatLog) return context.stopFlow('No active chat.');
 
-                // Helper function to build the steps array.
-                const buildSteps = () => {
+                // Helper to group messages into turns. A turn starts with a user/system message.
+                const getTurns = () => {
                     const messages = chatLog.getActiveMessages();
-                    const steps = [];
-                    let currentStep = [];
+                    const turns = [];
+                    let currentTurn = null; // A turn is an array of messages
                     messages.forEach(msg => {
                         const role = msg.value.role;
-                        const isBoundary = role === 'user' || role === 'system';
-                        if (isBoundary) {
-                            if (currentStep.length > 0) steps.push(currentStep);
-                            steps.push([msg]);
-                            currentStep = [];
-                        } else {
-                            currentStep.push(msg);
+                        if (role === 'user' || role === 'system') {
+                            if (currentTurn) {
+                                turns.push(currentTurn);
+                            }
+                            currentTurn = [msg];
+                        } else if (currentTurn) {
+                            // Add assistant/tool messages to the current turn
+                            currentTurn.push(msg);
                         }
                     });
-                    if (currentStep.length > 0) steps.push(currentStep);
-                    return steps;
+                    if (currentTurn) {
+                        turns.push(currentTurn);
+                    }
+                    return turns;
                 };
 
-                const initialSteps = buildSteps();
+                const turns = getTurns();
+                const totalTurns = turns.length;
                 const clearFrom = step.data.clearFrom || 1;
-                const clearTo = step.data.clearToBeginning ? initialSteps.length : (step.data.clearTo || 1);
+                let clearTo = step.data.clearToBeginning ? totalTurns : (step.data.clearTo || 1);
+
+                // Clamp clearTo to the maximum possible value
+                if (clearTo > totalTurns) {
+                    clearTo = totalTurns;
+                }
+
                 const count = clearTo - clearFrom + 1;
 
                 if (count <= 0) {
-                    return; // Nothing to delete.
+                    const nextStep = context.getNextStep(step.id);
+                    if (nextStep) {
+                        context.executeStep(nextStep);
+                    } else {
+                        context.stopFlow();
+                    }
+                    return;
                 }
 
                 for (let i = 0; i < count; i++) {
-                    const currentSteps = buildSteps();
-                    if (currentSteps.length === 0) break;
+                    const currentTurns = getTurns();
+                    const numCurrentTurns = currentTurns.length;
 
-                    // Always delete the Nth step from the end, where N is `clearFrom`.
-                    // This works because after deleting the Nth item, the (N+1)th item becomes the new Nth item.
-                    const targetIndex = currentSteps.length - clearFrom;
+                    if (numCurrentTurns === 0) break;
 
-                    if (targetIndex < 0) {
-                        context.stopFlow('Invalid range encountered during history deletion.');
-                        break;
+                    const targetTurnIndex = numCurrentTurns - clearFrom;
+
+                    if (targetTurnIndex < 0) {
+                        context.stopFlow(`Invalid 'From turn #' value: ${clearFrom} is greater than remaining turns.`);
+                        return;
                     }
 
-                    const stepToDelete = currentSteps[targetIndex];
-                    chatLog.deleteChain(stepToDelete[0]);
+                    const turnToDelete = currentTurns[targetTurnIndex];
+                    if (turnToDelete && turnToDelete.length > 0) {
+                        chatLog.deleteChain(turnToDelete[0]);
+                    }
                 }
 
                 const nextStep = context.getNextStep(step.id);
