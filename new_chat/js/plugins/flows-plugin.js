@@ -426,9 +426,23 @@ class FlowsManager {
                     return;
                 }
 
-                for (let i = totalTurns-clearFrom; i >= totalTurns-clearTo; i--) {
+                for (let i = totalTurns - clearFrom; i >= totalTurns - clearTo; i--) {
+                    const processedAlternatives = new Set();
                     turns[i].forEach(msg => {
-                        chatLog.deleteMessageAndPreserveChildren(msg);
+                        const alternatives = chatLog.findAlternatives(msg);
+                        // Handle messages with alternatives (siblings)
+                        if (alternatives && alternatives.messages.length > 1) {
+                            if (!processedAlternatives.has(alternatives)) {
+                                const messagesToDelete = [...alternatives.messages];
+                                messagesToDelete.forEach(altMsg => {
+                                    chatLog.deleteMessageAndPreserveChildren(altMsg);
+                                });
+                                processedAlternatives.add(alternatives);
+                            }
+                        } else if (alternatives) {
+                            // Handle simple messages (part of a chain, no alternatives)
+                            chatLog.deleteMessageAndPreserveChildren(msg);
+                        }
                     });
                 }
 
