@@ -315,7 +315,7 @@ export class ChatLog {
     }
 
     /**
-     * Deletes a message or a message alternative.
+     * Deletes a message or a message alternative and all its children.
      * @param {Message} messageToDelete - The message to delete.
      */
     deleteMessage(messageToDelete) {
