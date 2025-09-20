@@ -326,13 +326,97 @@ export class ChatLog {
         if (index > -1) {
             alternatives.messages.splice(index, 1);
             if (alternatives.messages.length === 0) {
-                // If this was the last alternative, we need to remove the whole `Alternatives` node
-                // This is a bit tricky, we need to find the parent message
-                // For now, we'll leave an empty alternative list, which should be handled by the UI
+                // If this was the last alternative, we need to remove the whole `Alternatives` node.
+                // This is complex and currently left for the UI to handle by not displaying empty nodes.
             } else if (alternatives.activeMessageIndex >= index) {
                 alternatives.activeMessageIndex = Math.max(0, alternatives.activeMessageIndex - 1);
             }
             this.notify();
+        }
+    }
+
+    /**
+     * Deletes a message but preserves its children by re-parenting them to the deleted message's parent.
+     * This is achieved by replacing the message in its parent's `Alternatives.messages` array
+     * with its own children messages. This preserves sibling messages.
+     * @param {Message} messageToDelete - The message to delete.
+     */
+    deleteMessageAndPreserveChildren(messageToDelete) {
+        const alternatives = this.findAlternatives(messageToDelete);
+        if (!alternatives) return;
+
+        const index = alternatives.messages.indexOf(messageToDelete);
+        if (index === -1) return;
+
+        const children = messageToDelete.answerAlternatives ? messageToDelete.answerAlternatives.messages : [];
+
+        // Replace the message with its children in the parent's message list.
+        alternatives.messages.splice(index, 1, ...children);
+
+        // Adjust the active index to maintain a coherent conversational flow.
+        if (alternatives.activeMessageIndex === index) {
+            // If the deleted message was active, we try to keep the conversation flowing.
+            if (messageToDelete.answerAlternatives && children.length > 0) {
+                // If the deleted message had an active child, make that child the new active message.
+                // This preserves the active path through the conversation tree.
+                alternatives.activeMessageIndex = index + messageToDelete.answerAlternatives.activeMessageIndex;
+            } else {
+                // If there are no children, the active message becomes the one before the deleted one.
+                alternatives.activeMessageIndex = Math.max(0, index - 1);
+            }
+        } else if (alternatives.activeMessageIndex > index) {
+            // The active message was after the deleted one, so its index needs to be adjusted
+            // by the number of children inserted minus the one message removed.
+            alternatives.activeMessageIndex += children.length - 1;
+        }
+
+        this.notify();
+    }
+
+    /**
+     * Deletes a conversational chain based on a starting message, per user specifications.
+     * @param {Message} startMessage - The message that initiates the deletion.
+     */
+    deleteChain(startMessage) {
+        const role = startMessage.value.role;
+
+        if (role === 'user' || role === 'system') {
+            // If the start message is from a user or system, delete only that message.
+            this.deleteMessageAndPreserveChildren(startMessage);
+            return;
+        }
+
+        if (role === 'assistant' || role === 'tool') {
+            const activeMessages = this.getActiveMessages();
+            const startIndex = activeMessages.indexOf(startMessage);
+            if (startIndex === -1) return;
+
+            // Find the upper boundary (the preceding user/system message).
+            let upperBoundIndex = -1;
+            for (let i = startIndex - 1; i >= 0; i--) {
+                const msgRole = activeMessages[i].value.role;
+                if (msgRole === 'user' || msgRole === 'system') {
+                    upperBoundIndex = i;
+                    break;
+                }
+            }
+
+            // Find the lower boundary (the next user message).
+            let lowerBoundIndex = activeMessages.length;
+            for (let i = startIndex + 1; i < activeMessages.length; i++) {
+                if (activeMessages[i].value.role === 'user') {
+                    lowerBoundIndex = i;
+                    break;
+                }
+            }
+
+            // Identify all messages to delete in the chain.
+            const messagesToDelete = activeMessages.slice(upperBoundIndex + 1, lowerBoundIndex);
+
+            // Delete them in reverse order to avoid index issues.
+            for (let i = messagesToDelete.length - 1; i >= 0; i--) {
+                this.deleteMessageAndPreserveChildren(messagesToDelete[i]);
+            }
         }
     }
 

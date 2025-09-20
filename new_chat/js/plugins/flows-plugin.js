@@ -357,17 +357,17 @@ class FlowsManager {
             getDefaults: () => ({ clearFrom: 2, clearTo: 3, clearToBeginning: true }),
             render: (step) => `<h4>Clear History</h4>
                 <div class="flow-step-content">
-                    <label>From answer #:</label>
+                    <label>From turn #:</label>
                     <input type="number" class="flow-step-clear-from flow-step-input" data-id="${step.id}" data-key="clearFrom" value="${step.data.clearFrom || 1}" min="1">
                     <div class="clear-history-to-container" style="${step.data.clearToBeginning ? 'display: none;' : ''}">
-                        <label>To answer #:</label>
+                        <label>To turn #:</label>
                         <input type="number" class="flow-step-clear-to flow-step-input" data-id="${step.id}" data-key="clearTo" value="${step.data.clearTo || 1}" min="1">
                     </div>
                     <label class="flow-step-checkbox-label">
                         <input type="checkbox" class="flow-step-clear-beginning flow-step-input" data-id="${step.id}" data-key="clearToBeginning" ${step.data.clearToBeginning ? 'checked' : ''}>
                         Clear to beginning
                     </label>
-                    <small>(1 is the last answer)<br><br></small>
+                    <small>(1 is the last turn)<br><br></small>
                 </div>`,
             onUpdate: (step, target, renderAndConnect) => {
                 const key = target.dataset.key;
@@ -381,30 +381,50 @@ class FlowsManager {
                 const chatLog = context.app.chatManager.getActiveChat()?.log;
                 if (!chatLog) return context.stopFlow('No active chat.');
 
-                const activeMessages = chatLog.getActiveMessages();
-                const userMessageIndices = activeMessages
-                    .map((msg, i) => msg.value.role === 'user' ? i : -1)
-                    .filter(i => i !== -1);
+                // Helper function to build the steps array.
+                const buildSteps = () => {
+                    const messages = chatLog.getActiveMessages();
+                    const steps = [];
+                    let currentStep = [];
+                    messages.forEach(msg => {
+                        const role = msg.value.role;
+                        const isBoundary = role === 'user' || role === 'system';
+                        if (isBoundary) {
+                            if (currentStep.length > 0) steps.push(currentStep);
+                            steps.push([msg]);
+                            currentStep = [];
+                        } else {
+                            currentStep.push(msg);
+                        }
+                    });
+                    if (currentStep.length > 0) steps.push(currentStep);
+                    return steps;
+                };
 
+                const initialSteps = buildSteps();
                 const clearFrom = step.data.clearFrom || 1;
-                const clearTo = step.data.clearToBeginning ? userMessageIndices.length : (step.data.clearTo || 1);
+                const clearTo = step.data.clearToBeginning ? initialSteps.length : (step.data.clearTo || 1);
+                const count = clearTo - clearFrom + 1;
 
-                const fromUserIndex = userMessageIndices.length - clearTo;
-                const toUserIndex = userMessageIndices.length - clearFrom;
-
-                if (fromUserIndex < 0 || toUserIndex < 0 || fromUserIndex > toUserIndex) {
-                    return context.stopFlow('Invalid range for Clear History.');
+                if (count <= 0) {
+                    return; // Nothing to delete.
                 }
 
-                const startMsgIndexInActivePath = userMessageIndices[fromUserIndex];
-                const endMsgIndexInActivePath = (toUserIndex + 1 < userMessageIndices.length)
-                    ? userMessageIndices[toUserIndex + 1]
-                    : activeMessages.length;
+                for (let i = 0; i < count; i++) {
+                    const currentSteps = buildSteps();
+                    if (currentSteps.length === 0) break;
 
-                const messagesToDelete = activeMessages.slice(startMsgIndexInActivePath, endMsgIndexInActivePath);
+                    // Always delete the Nth step from the end, where N is `clearFrom`.
+                    // This works because after deleting the Nth item, the (N+1)th item becomes the new Nth item.
+                    const targetIndex = currentSteps.length - clearFrom;
 
-                for (let i = messagesToDelete.length - 1; i >= 0; i--) {
-                    chatLog.deleteMessage(messagesToDelete[i]);
+                    if (targetIndex < 0) {
+                        context.stopFlow('Invalid range encountered during history deletion.');
+                        break;
+                    }
+
+                    const stepToDelete = currentSteps[targetIndex];
+                    chatLog.deleteChain(stepToDelete[0]);
                 }
 
                 const nextStep = context.getNextStep(step.id);
