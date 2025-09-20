@@ -441,7 +441,7 @@ class FlowsManager {
 
                     const turnToDelete = currentTurns[targetTurnIndex];
                     if (turnToDelete && turnToDelete.length > 0) {
-                        chatLog.deleteChain(turnToDelete[0]);
+                        chatLog.deleteMessage(turnToDelete[0]);
                     }
                 }
 
