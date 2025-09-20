@@ -432,12 +432,11 @@ class FlowsManager {
                     turns[i].forEach(msg => {
                         const alternatives = chatLog.findAlternatives(msg);
                         if (alternatives && !processedAlternatives.has(alternatives)) {
-                            // Important: Create a copy of the messages array before iterating,
-                            // as we will be modifying the underlying array which can lead to
-                            // unexpected behavior during iteration.
+                            // Create a copy of the messages array before iterating,
+                            // because `deleteMessageAndPreserveChildren` modifies it.
                             const messagesToDelete = [...alternatives.messages];
                             messagesToDelete.forEach(altMsg => {
-                                chatLog.deleteMessage(altMsg);
+                                chatLog.deleteMessageAndPreserveChildren(altMsg);
                             });
                             processedAlternatives.add(alternatives);
                         }
