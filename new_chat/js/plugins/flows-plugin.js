@@ -426,9 +426,21 @@ class FlowsManager {
                     return;
                 }
 
-                for (let i = totalTurns-clearFrom; i >= totalTurns-clearTo; i--) {
+                const processedAlternatives = new Set();
+                for (let i = totalTurns - clearFrom; i >= totalTurns - clearTo; i--) {
+                    if (!turns[i]) continue;
                     turns[i].forEach(msg => {
-                        chatLog.deleteMessageAndPreserveChildren(msg);
+                        const alternatives = chatLog.findAlternatives(msg);
+                        if (alternatives && !processedAlternatives.has(alternatives)) {
+                            // Important: Create a copy of the messages array before iterating,
+                            // as we will be modifying the underlying array which can lead to
+                            // unexpected behavior during iteration.
+                            const messagesToDelete = [...alternatives.messages];
+                            messagesToDelete.forEach(altMsg => {
+                                chatLog.deleteMessage(altMsg);
+                            });
+                            processedAlternatives.add(alternatives);
+                        }
                     });
                 }
 
