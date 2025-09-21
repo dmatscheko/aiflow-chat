@@ -186,7 +186,12 @@ class ChatManager {
             this.handleFormSubmit();
         });
         this.app.dom.stopButton.addEventListener('click', () => {
-            if (this.app.abortController) this.app.abortController.abort();
+            if (this.app.flowsManager && this.app.flowsManager.activeFlowRunner) {
+                this.app.flowsManager.activeFlowRunner.stop('Flow stopped by user.');
+            }
+            if (this.app.abortController) {
+                this.app.abortController.abort();
+            }
         });
 
         this.app.dom.messageInput.addEventListener('keydown', (e) => {
