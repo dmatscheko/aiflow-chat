@@ -7,6 +7,8 @@
 
 /**
  * @typedef {import('./flows-plugin.js').FlowsManager} FlowsManager
+ * @typedef {import('../chat-data.js').ChatLog} ChatLog
+ * @typedef {import('../chat-data.js').Message} Message
  */
 
 const roleMapping = {
@@ -16,6 +18,11 @@ const roleMapping = {
     tool: 'Tool',
 };
 
+/**
+ * Finds the last message in a chat log that has more than one alternative answer.
+ * @param {ChatLog} chatLog The chat log to search.
+ * @returns {Message | null} The message with alternatives, or null if not found.
+ */
 function _findLastMessageWithAlternatives(chatLog) {
     if (!chatLog.rootAlternatives) {
         return null;
@@ -36,6 +43,12 @@ function _findLastMessageWithAlternatives(chatLog) {
     return null;
 }
 
+/**
+ * Extracts the full text content from a conversational branch starting from a given message.
+ * @param {Message} startMessage The message to start the traversal from.
+ * @param {boolean} onlyLast A flag to indicate if only the last message content of a branch should be returned.
+ * @returns {string} The concatenated content of the branch.
+ */
 function _extractContentFromBranch(startMessage, onlyLast) {
     const contents = [];
 
