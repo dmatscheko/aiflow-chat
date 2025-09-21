@@ -533,6 +533,7 @@ button:hover {
     padding-bottom: 5px;
     border-bottom: 1px solid var(--border-color);
     font-size: 1rem;
+    padding-left: 20px;
 }
 
 .flow-step-input {
@@ -607,6 +608,78 @@ button:hover {
     font-size: 0.8em;
     color: var(--text-color);
     white-space: nowrap;
+}
+
+.delete-connection-btn {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background-color: #ff4d4d;
+    border: 1px solid #ff0000;
+    color: white;
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 12;
+    padding: 0;
+    line-height: 14px;
+    text-align: center;
+    font-size: 14px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.delete-connection-btn:hover {
+    opacity: 1;
+}
+
+.flow-step-checkbox-label {
+    display: flex;
+    align-items: center;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.flow-step-checkbox-label input[type="checkbox"] {
+    margin: 0 5px 0 0;
+    width: auto;
+}
+
+.minimize-flow-step-btn {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+    width: 16px;
+    height: 16px;
+    background-color: var(--button-bg-color);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    border-radius: 4px;
+    cursor: pointer;
+    z-index: 12;
+    padding: 0;
+    line-height: 14px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.flow-step-card.minimized {
+    width: 125px;
+    height: 40px;
+    padding-top: 25px;
+}
+
+.flow-step-card.minimized .flow-step-content,
+.flow-step-card.minimized .flow-step-footer {
+    display: none;
+}
+
+.flow-step-card.minimized h4 {
+    font-size: 0.8em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0;
+    border-bottom: none;
 }
 
 
@@ -766,4 +839,33 @@ hr.divider {
 
 .setting__control-wrapper .custom-dropdown {
     flex-grow: 1;
+}
+
+/* --- Special Flow Step Styles --- */
+.flow-step-simple-prompt {
+    background-color: hsla(0, 0%, 35%, 0.8);
+}
+
+.flow-step-conditional-stop {
+    background-color: hsla(0, 20%, 35%, 0.8);
+}
+
+.flow-step-echo-answer {
+    background-color: hsla(200, 20%, 35%, 0.8);
+}
+
+.flow-step-multi-prompt {
+    background-color: hsla(145, 20%, 35%, 0.8);
+}
+
+.flow-step-branching-prompt {
+    background-color: hsla(30, 20%, 35%, 0.8);
+}
+
+.flow-step-consolidator {
+    background-color: hsla(280, 20%, 35%, 0.8);
+}
+
+.flow-step-clear-history {
+    background-color: hsla(0, 0%, 15%, 0.8);
 }

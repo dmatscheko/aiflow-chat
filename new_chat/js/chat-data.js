@@ -193,6 +193,23 @@ export class ChatLog {
     }
 
     /**
+     * Returns an array of all message instances in the active path.
+     * @returns {Message[]}
+     */
+    getActiveMessages() {
+        const result = [];
+        if (!this.rootAlternatives) {
+            return result;
+        }
+        let current = this.rootAlternatives.getActiveMessage();
+        while (current) {
+            result.push(current);
+            current = current.getActiveAnswer();
+        }
+        return result;
+    }
+
+    /**
      * Finds the first pending assistant message in the log.
      * A pending message is one with a role of 'assistant' and content of null.
      * @returns {Message | null}
@@ -298,7 +315,7 @@ export class ChatLog {
     }
 
     /**
-     * Deletes a message or a message alternative.
+     * Deletes a message or a message alternative and all its children.
      * @param {Message} messageToDelete - The message to delete.
      */
     deleteMessage(messageToDelete) {
@@ -309,14 +326,51 @@ export class ChatLog {
         if (index > -1) {
             alternatives.messages.splice(index, 1);
             if (alternatives.messages.length === 0) {
-                // If this was the last alternative, we need to remove the whole `Alternatives` node
-                // This is a bit tricky, we need to find the parent message
-                // For now, we'll leave an empty alternative list, which should be handled by the UI
+                // If this was the last alternative, we need to remove the whole `Alternatives` node.
+                // This is complex and currently left for the UI to handle by not displaying empty nodes.
             } else if (alternatives.activeMessageIndex >= index) {
                 alternatives.activeMessageIndex = Math.max(0, alternatives.activeMessageIndex - 1);
             }
             this.notify();
         }
+    }
+
+    /**
+     * Deletes a message but preserves its children by re-parenting them to the deleted message's parent.
+     * This is achieved by replacing the message in its parent's `Alternatives.messages` array
+     * with its own children messages. This preserves sibling messages.
+     * @param {Message} messageToDelete - The message to delete.
+     */
+    deleteMessageAndPreserveChildren(messageToDelete) {
+        const alternatives = this.findAlternatives(messageToDelete);
+        if (!alternatives) return;
+
+        const index = alternatives.messages.indexOf(messageToDelete);
+        if (index === -1) return;
+
+        const children = messageToDelete.answerAlternatives ? messageToDelete.answerAlternatives.messages : [];
+
+        // Replace the message with its children in the parent's message list.
+        alternatives.messages.splice(index, 1, ...children);
+
+        // Adjust the active index to maintain a coherent conversational flow.
+        if (alternatives.activeMessageIndex === index) {
+            // If the deleted message was active, we try to keep the conversation flowing.
+            if (messageToDelete.answerAlternatives && children.length > 0) {
+                // If the deleted message had an active child, make that child the new active message.
+                // This preserves the active path through the conversation tree.
+                alternatives.activeMessageIndex = index + messageToDelete.answerAlternatives.activeMessageIndex;
+            } else {
+                // If there are no children, the active message becomes the one before the deleted one.
+                alternatives.activeMessageIndex = Math.max(0, index - 1);
+            }
+        } else if (alternatives.activeMessageIndex > index) {
+            // The active message was after the deleted one, so its index needs to be adjusted
+            // by the number of children inserted minus the one message removed.
+            alternatives.activeMessageIndex += children.length - 1;
+        }
+
+        this.notify();
     }
 
     /**
