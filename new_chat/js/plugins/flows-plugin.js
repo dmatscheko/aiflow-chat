@@ -150,6 +150,33 @@ class FlowsManager {
         };
     }
 
+    /**
+     * @param {ChatLog} chatLog
+     * @returns {Message[][]}
+     */
+    _getTurns(chatLog) {
+        const messages = chatLog.getActiveMessages();
+        const turns = [];
+        let currentTurn = []; // A turn is an array of messages
+        messages.forEach(msg => {
+            const role = msg.value.role;
+            if (role !== 'assistant' && role !== 'tool') {
+                if (currentTurn.length > 0) {
+                    turns.push(currentTurn);
+                }
+                turns.push([msg]);
+                currentTurn = [];
+            } else {
+                // Add assistant/tool messages to the current turn
+                currentTurn.push(msg);
+            }
+        });
+        if (currentTurn.length > 0) {
+            turns.push(currentTurn);
+        }
+        return turns;
+    }
+
 
     /** @param {App} app */
     constructor(app) {
@@ -317,36 +344,59 @@ class FlowsManager {
                 <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-user flow-step-input" data-id="${step.id}" data-key="deleteUserMessage" ${step.data.deleteUserMessage ? 'checked' : ''}> Delete original user message</label>
                 <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}> Only include last answer</label>
             </div>`,
-            onUpdate: (step, target) => {
+            onUpdate: (step, target, renderAndConnect) => {
                 const key = target.dataset.key;
                 const value = target.type === 'checkbox' ? target.checked : target.value;
                 step.data[key] = value;
+
+                // If 'deleteUserMessage' is checked, 'deleteAIAnswer' must also be checked.
+                if (key === 'deleteUserMessage' && value) {
+                    step.data.deleteAIAnswer = true;
+                    // We need to re-render to update the checkbox state visually
+                    renderAndConnect();
+                }
+                if (key === 'deleteAIAnswer' && !value && step.data.deleteUserMessage) {
+                    step.data.deleteUserMessage = false;
+                    renderAndConnect();
+                }
             },
             execute: (step, context) => {
                 const chatLog = context.app.chatManager.getActiveChat()?.log;
                 if (!chatLog) return context.stopFlow('No active chat.');
 
-                const { startMessage, userMessage } = this._findLastAnswerChain(chatLog);
-
-                if (!startMessage) {
-                    return context.stopFlow('Echo Answer step could not find an AI answer to process.');
+                const turns = this._getTurns(chatLog);
+                if (turns.length < 2) {
+                    return context.stopFlow('Echo Answer: Not enough turns in the chat.');
                 }
 
-                const fullAnswerText = this._extractContentFromBranch(startMessage, step.data.onlyLastAnswer);
+                const lastTurn = turns[turns.length - 1];
+                const userTurn = turns[turns.length - 2];
 
-                const newPrompt = `${step.data.prePrompt || ''}\n\n${fullAnswerText}\n\n${step.data.postPrompt || ''}`;
+                const isLastTurnAi = lastTurn.every(msg => msg.value.role === 'assistant' || msg.value.role === 'tool');
 
-                // Delete the original messages. Order is important.
-                // If we delete the user message, the entire AI answer chain attached to it is also removed.
-                if (step.data.deleteUserMessage && userMessage) {
-                    chatLog.deleteMessage(userMessage);
-                } else if (step.data.deleteAIAnswer && startMessage) {
-                    // Otherwise, if we're only deleting the AI answer, just delete its starting message.
-                    // The rest of the chain will be garbage collected.
-                    chatLog.deleteMessage(startMessage);
+                if (!isLastTurnAi) {
+                    return context.stopFlow('Echo Answer: Last turn is not an AI turn.');
                 }
 
-                // Now, submit the new prompt.
+                let contentToEcho = '';
+                if (step.data.onlyLastAnswer) {
+                    const lastMessage = lastTurn[lastTurn.length - 1];
+                    contentToEcho = lastMessage.value.content || '';
+                } else {
+                    contentToEcho = lastTurn.map(msg => `**${msg.value.role}:** ${msg.value.content || ''}`).join('\n\n');
+                }
+
+                const newPrompt = `${step.data.prePrompt || ''}${contentToEcho}${step.data.postPrompt || ''}`;
+
+                if (step.data.deleteUserMessage) {
+                    // This will delete the user message and the entire AI turn that follows it.
+                    const userMessageToDelete = userTurn[0];
+                    chatLog.deleteMessage(userMessageToDelete);
+                } else if (step.data.deleteAIAnswer) {
+                    // Delete each message in the AI turn individually.
+                    [...lastTurn].reverse().forEach(msg => chatLog.deleteMessage(msg));
+                }
+
                 context.app.dom.messageInput.value = newPrompt;
                 context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
             },
@@ -381,31 +431,7 @@ class FlowsManager {
                 const chatLog = context.app.chatManager.getActiveChat()?.log;
                 if (!chatLog) return context.stopFlow('No active chat.');
 
-                // Helper to group messages into turns. A turn is either a user/system message or starts before a user/system message or the beginning of the chat log and ends before a user/system message or the end of the chat log.
-                const getTurns = () => {
-                    const messages = chatLog.getActiveMessages();
-                    const turns = [];
-                    let currentTurn = []; // A turn is an array of messages
-                    messages.forEach(msg => {
-                        const role = msg.value.role;
-                        if (role !== 'assistant' && role !== 'tool') {
-                            if (currentTurn.length > 0) {
-                                turns.push(currentTurn);
-                            }
-                            turns.push([msg]);
-                            currentTurn = [];
-                        } else {
-                            // Add assistant/tool messages to the current turn
-                            currentTurn.push(msg);
-                        }
-                    });
-                    if (currentTurn.length > 0) {
-                        turns.push(currentTurn);
-                    }
-                    return turns;
-                };
-
-                const turns = getTurns();
+                const turns = this._getTurns(chatLog);
                 const totalTurns = turns.length;
                 let clearFrom = step.data.clearFrom || 1;
                 let clearTo = step.data.clearToBeginning ? totalTurns : (step.data.clearTo || 1);
