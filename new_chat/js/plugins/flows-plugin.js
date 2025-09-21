@@ -86,17 +86,11 @@ class FlowsManager {
 
     _extractContentFromBranch(startMessage, onlyLast) {
         const contents = [];
-        const roleMapping = {
-            user: 'User',
-            assistant: 'AI',
-            system: 'System',
-            tool: 'Tool',
-        };
 
-        function traverse(message, currentPath) {
+        const traverse = (message, currentPath) => {
             if (!message || !message.value) return;
 
-            const role = roleMapping[message.value.role] || message.value.role;
+            const role = this.roleMapping[message.value.role] || message.value.role;
             const formattedMessage = `**${role}:** ${message.value.content || ''}`;
             const newPath = [...currentPath, formattedMessage];
 
@@ -194,6 +188,13 @@ class FlowsManager {
         this.panInfo = {};
         /** @type {object} */
         this.connectionInfo = {};
+
+        this.roleMapping = {
+            user: 'User',
+            assistant: 'AI',
+            system: 'System',
+            tool: 'Tool',
+        };
 
         this._defineSteps();
     }
@@ -383,7 +384,10 @@ class FlowsManager {
                     const lastMessage = lastTurn[lastTurn.length - 1];
                     contentToEcho = lastMessage.value.content || '';
                 } else {
-                    contentToEcho = lastTurn.map(msg => `**${msg.value.role}:** ${msg.value.content || ''}`).join('\n\n');
+                    contentToEcho = lastTurn.map(msg => {
+                        const role = this.roleMapping[msg.value.role] || msg.value.role;
+                        return `**${role}:** ${msg.value.content || ''}`;
+                    }).join('\n\n');
                 }
 
                 const newPrompt = `${step.data.prePrompt || ''}${contentToEcho}${step.data.postPrompt || ''}`;
