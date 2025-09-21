@@ -185,9 +185,7 @@ class ChatManager {
             e.preventDefault();
             this.handleFormSubmit();
         });
-        this.app.dom.stopButton.addEventListener('click', () => {
-            if (this.app.abortController) this.app.abortController.abort();
-        });
+        this.app.dom.stopButton.addEventListener('click', () => this.stopChatFlow());
 
         this.app.dom.messageInput.addEventListener('keydown', (e) => {
             // If an edit-in-place textarea is active, don't do anything.
@@ -200,9 +198,7 @@ class ChatManager {
                 e.preventDefault();
                 this.handleFormSubmit();
             } else if (e.key === 'Escape') {
-                if (this.app.abortController) {
-                    this.app.abortController.abort();
-                }
+                this.stopChatFlow();
                 e.target.blur();
             }
         });
@@ -228,6 +224,15 @@ class ChatManager {
         const finalAgentId = agentId || activeChat.agent || null;
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
         responseProcessor.scheduleProcessing(this.app);
+    }
+
+    stopChatFlow() {
+        if (this.app.flowsManager && this.app.flowsManager.activeFlowRunner) {
+            this.app.flowsManager.activeFlowRunner.stop('Flow stopped by user.');
+        }
+        if (this.app.abortController) {
+            this.app.abortController.abort();
+        }
     }
 }
 
