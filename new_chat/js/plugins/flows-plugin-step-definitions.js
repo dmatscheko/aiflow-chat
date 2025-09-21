@@ -9,6 +9,90 @@
  * @typedef {import('./flows-plugin.js').FlowsManager} FlowsManager
  */
 
+const roleMapping = {
+    user: 'User',
+    assistant: 'AI',
+    system: 'System',
+    tool: 'Tool',
+};
+
+function _findLastMessageWithAlternatives(chatLog) {
+    if (!chatLog.rootAlternatives) {
+        return null;
+    }
+    const messages = [];
+    let current = chatLog.rootAlternatives.getActiveMessage();
+    while (current) {
+        messages.push(current);
+        current = current.getActiveAnswer();
+    }
+
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const msg = messages[i];
+        if (msg && msg.answerAlternatives && msg.answerAlternatives.messages.length > 1) {
+            return msg;
+        }
+    }
+    return null;
+}
+
+function _extractContentFromBranch(startMessage, onlyLast) {
+    const contents = [];
+
+    const traverse = (message, currentPath) => {
+        if (!message || !message.value) return;
+
+        const role = roleMapping[message.value.role] || message.value.role;
+        const formattedMessage = `**${role}:** ${message.value.content || ''}`;
+        const newPath = [...currentPath, formattedMessage];
+
+        const hasAnswers = message.answerAlternatives && message.answerAlternatives.messages.length > 0;
+
+        if (!hasAnswers) { // It's a leaf node
+            if (onlyLast) {
+                contents.push(message.value.content || '');
+            } else {
+                contents.push(newPath.join('\n\n'));
+            }
+            return;
+        }
+
+        for (const alt of message.answerAlternatives.messages) {
+            traverse(alt, newPath);
+        }
+    }
+
+    traverse(startMessage, []);
+    return contents.join('\n\n---\n\n'); // Join content from different leaf branches
+}
+
+/**
+ * @param {ChatLog} chatLog
+ * @returns {Message[][]}
+ */
+function _getTurns(chatLog) {
+    const messages = chatLog.getActiveMessages();
+    const turns = [];
+    let currentTurn = []; // A turn is an array of messages
+    messages.forEach(msg => {
+        const role = msg.value.role;
+        if (role !== 'assistant' && role !== 'tool') {
+            if (currentTurn.length > 0) {
+                turns.push(currentTurn);
+            }
+            turns.push([msg]);
+            currentTurn = [];
+        } else {
+            // Add assistant/tool messages to the current turn
+            currentTurn.push(msg);
+        }
+    });
+    if (currentTurn.length > 0) {
+        turns.push(currentTurn);
+    }
+    return turns;
+}
+
 /**
  * Registers all the standard flow step definitions with the FlowsManager.
  * @param {FlowsManager} flowsManager The instance of the FlowsManager.
@@ -80,14 +164,14 @@ export function registerFlowStepDefinitions(flowsManager) {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
-            const sourceMessage = flowsManager._findLastMessageWithAlternatives(chatLog);
+            const sourceMessage = _findLastMessageWithAlternatives(chatLog);
 
             if (!sourceMessage) {
                 return context.stopFlow('Consolidator could not find a preceding step with alternatives.');
             }
 
             const consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
-                const turnContent = flowsManager._extractContentFromBranch(alternativeStartMessage, step.data.onlyLastAnswer);
+                const turnContent = _extractContentFromBranch(alternativeStartMessage, step.data.onlyLastAnswer);
                 return `--- ALTERNATIVE ${i + 1} ---\n${turnContent}`;
             }).join('\n\n');
 
@@ -137,7 +221,7 @@ export function registerFlowStepDefinitions(flowsManager) {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
-            const turns = flowsManager._getTurns(chatLog);
+            const turns = _getTurns(chatLog);
             if (turns.length < 2) {
                 return context.stopFlow('Echo Answer: Not enough turns in the chat.');
             }
@@ -157,7 +241,7 @@ export function registerFlowStepDefinitions(flowsManager) {
                 contentToEcho = lastMessage.value.content || '';
             } else {
                 contentToEcho = lastTurn.map(msg => {
-                    const role = flowsManager.roleMapping[msg.value.role] || msg.value.role;
+                    const role = roleMapping[msg.value.role] || msg.value.role;
                     return `**${role}:** ${msg.value.content || ''}`;
                 }).join('\n\n');
             }
@@ -207,7 +291,7 @@ export function registerFlowStepDefinitions(flowsManager) {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
-            const turns = flowsManager._getTurns(chatLog);
+            const turns = _getTurns(chatLog);
             const totalTurns = turns.length;
             let clearFrom = step.data.clearFrom || 1;
             let clearTo = step.data.clearToBeginning ? totalTurns : (step.data.clearTo || 1);

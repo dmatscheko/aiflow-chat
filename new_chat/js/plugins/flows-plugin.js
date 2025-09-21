@@ -65,114 +65,6 @@ let flowsManager = null;
  * @class
  */
 export class FlowsManager {
-    _findLastMessageWithAlternatives(chatLog) {
-        if (!chatLog.rootAlternatives) {
-            return null;
-        }
-        const messages = [];
-        let current = chatLog.rootAlternatives.getActiveMessage();
-        while (current) {
-            messages.push(current);
-            current = current.getActiveAnswer();
-        }
-
-        for (let i = messages.length - 1; i >= 0; i--) {
-            const msg = messages[i];
-            if (msg && msg.answerAlternatives && msg.answerAlternatives.messages.length > 1) {
-                return msg;
-            }
-        }
-        return null;
-    }
-
-    _extractContentFromBranch(startMessage, onlyLast) {
-        const contents = [];
-
-        const traverse = (message, currentPath) => {
-            if (!message || !message.value) return;
-
-            const role = this.roleMapping[message.value.role] || message.value.role;
-            const formattedMessage = `**${role}:** ${message.value.content || ''}`;
-            const newPath = [...currentPath, formattedMessage];
-
-            const hasAnswers = message.answerAlternatives && message.answerAlternatives.messages.length > 0;
-
-            if (!hasAnswers) { // It's a leaf node
-                if (onlyLast) {
-                    contents.push(message.value.content || '');
-                } else {
-                    contents.push(newPath.join('\n\n'));
-                }
-                return;
-            }
-
-            for (const alt of message.answerAlternatives.messages) {
-                traverse(alt, newPath);
-            }
-        }
-
-        traverse(startMessage, []);
-        return contents.join('\n\n---\n\n'); // Join content from different leaf branches
-    }
-
-    _findLastAnswerChain(chatLog) {
-        const activeMessages = chatLog.getActiveMessages();
-        let endOfAiAnswerRange = -1;
-
-        for (let i = activeMessages.length - 1; i >= 0; i--) {
-            if (activeMessages[i].value.role === 'assistant') {
-                endOfAiAnswerRange = i;
-                break;
-            }
-        }
-
-        if (endOfAiAnswerRange === -1) {
-            return { startMessage: null, userMessage: null };
-        }
-
-        let startOfAiAnswerRange = endOfAiAnswerRange;
-        for (let i = endOfAiAnswerRange - 1; i >= 0; i--) {
-            if (activeMessages[i].value.role !== 'assistant') {
-                break;
-            }
-            startOfAiAnswerRange = i;
-        }
-
-        const userMessage = activeMessages[startOfAiAnswerRange - 1] || null;
-        return {
-            startMessage: activeMessages[startOfAiAnswerRange],
-            userMessage: userMessage,
-        };
-    }
-
-    /**
-     * @param {ChatLog} chatLog
-     * @returns {Message[][]}
-     */
-    _getTurns(chatLog) {
-        const messages = chatLog.getActiveMessages();
-        const turns = [];
-        let currentTurn = []; // A turn is an array of messages
-        messages.forEach(msg => {
-            const role = msg.value.role;
-            if (role !== 'assistant' && role !== 'tool') {
-                if (currentTurn.length > 0) {
-                    turns.push(currentTurn);
-                }
-                turns.push([msg]);
-                currentTurn = [];
-            } else {
-                // Add assistant/tool messages to the current turn
-                currentTurn.push(msg);
-            }
-        });
-        if (currentTurn.length > 0) {
-            turns.push(currentTurn);
-        }
-        return turns;
-    }
-
-
     /** @param {App} app */
     constructor(app) {
         /** @type {App} */
@@ -189,13 +81,6 @@ export class FlowsManager {
         this.panInfo = {};
         /** @type {object} */
         this.connectionInfo = {};
-
-        this.roleMapping = {
-            user: 'User',
-            assistant: 'AI',
-            system: 'System',
-            tool: 'Tool',
-        };
 
         this._defineSteps();
     }
