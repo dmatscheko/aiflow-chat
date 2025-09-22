@@ -320,7 +320,7 @@ class AgentManager {
                 label: 'Import Agents',
                 className: 'btn-gray',
                 onClick: () => {
-                    importJson('.agent', (data) => {
+                    importJson('.agents', (data) => {
                         if (Array.isArray(data)) {
                             data.forEach(agentData => this.addAgentFromData(agentData));
                             alert(`${data.length} agent(s) imported successfully.`);
@@ -337,7 +337,7 @@ class AgentManager {
                 className: 'btn-gray',
                 onClick: () => {
                     const agentsToExport = this.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
-                    if (agentsToExport.length > 0) exportJson(agentsToExport, 'agents_config', 'agent');
+                    if (agentsToExport.length > 0) exportJson(agentsToExport, 'agents_config', 'agents');
                     else alert('No custom agents to export.');
                 }
             }
