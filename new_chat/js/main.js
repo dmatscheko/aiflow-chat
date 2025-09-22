@@ -198,6 +198,21 @@ class App {
                 await this.showTab(tabId);
             }
         });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                // If an edit-in-place element is active, don't interfere.
+                // The local Escape handler in makeEditable/makeSingleLineEditable will handle it.
+                if (document.querySelector('.edit-in-place, .edit-in-place-input')) {
+                    return;
+                }
+
+                // Otherwise, stop any active chat flow.
+                if (this.chatManager) {
+                    this.chatManager.stopChatFlow();
+                }
+            }
+        });
     }
 
     /** @private */
