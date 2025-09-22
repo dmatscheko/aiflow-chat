@@ -1,0 +1,94 @@
+{
+  "name": "Test Simple Prompt-Chain",
+  "steps": [
+    {
+      "id": "step-1757507715612",
+      "type": "simple-prompt",
+      "x": 106,
+      "y": 29,
+      "data": {
+        "prompt": "Hi!",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1757507719110",
+      "type": "simple-prompt",
+      "x": 100,
+      "y": 464,
+      "data": {
+        "prompt": "How are you?",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1757766348084",
+      "type": "simple-prompt",
+      "x": 482,
+      "y": 458,
+      "data": {
+        "prompt": "Please tell me the time via tool call.",
+        "agentId": "",
+        "isMinimized": false
+      }
+    },
+    {
+      "id": "step-1757766432447",
+      "type": "simple-prompt",
+      "x": 840,
+      "y": 457,
+      "data": {
+        "prompt": "Please show me a table of the last 5 US presidents with their good and bad attributes according to history.",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1757774172015",
+      "type": "simple-prompt",
+      "x": 1230,
+      "y": 469,
+      "data": {
+        "prompt": "Please write python code to calculate Pi.",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1757774217323",
+      "type": "simple-prompt",
+      "x": 98,
+      "y": 851,
+      "data": {
+        "prompt": "Please write that in latex notation.",
+        "agentId": ""
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "step-1757507715612",
+      "to": "step-1757507719110",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1757507719110",
+      "to": "step-1757766348084",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1757766348084",
+      "to": "step-1757766432447",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1757766432447",
+      "to": "step-1757774172015",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1757774172015",
+      "to": "step-1757774217323",
+      "outputName": "default"
+    }
+  ],
+  "id": "flow-1757527259190"
+}

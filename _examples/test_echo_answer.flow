@@ -1,0 +1,39 @@
+{
+  "name": "Test Echo Answer",
+  "steps": [
+    {
+      "id": "step-1758362397885",
+      "type": "simple-prompt",
+      "x": 106,
+      "y": 90,
+      "data": {
+        "prompt": "Hi! Please write a short python program that calculates Pi. Use tool calls.",
+        "agentId": "",
+        "isMinimized": false
+      }
+    },
+    {
+      "id": "step-1758362433624",
+      "type": "echo-answer",
+      "x": 94,
+      "y": 542,
+      "data": {
+        "prePrompt": "Is this idea and code correct? Be concise.\n\n\n",
+        "postPrompt": "",
+        "agentId": "",
+        "deleteAIAnswer": true,
+        "deleteUserMessage": true,
+        "onlyLastAnswer": false,
+        "isMinimized": false
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "step-1758362397885",
+      "to": "step-1758362433624",
+      "outputName": "default"
+    }
+  ],
+  "id": "flow-1758362118209"
+}

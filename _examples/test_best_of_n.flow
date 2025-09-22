@@ -1,0 +1,148 @@
+{
+  "name": "Test Best-Of-N",
+  "steps": [
+    {
+      "id": "step-1758293977148",
+      "type": "simple-prompt",
+      "x": 126,
+      "y": 31,
+      "data": {
+        "prompt": "Describe a small game that can be implemented in python in one sentence.",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1758294001798",
+      "type": "simple-prompt",
+      "x": 468,
+      "y": 52,
+      "data": {
+        "prompt": "Write the software architecture description for it. Be concise.",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1758294018535",
+      "type": "multi-prompt",
+      "x": 889,
+      "y": 17,
+      "data": {
+        "prompt": "Write the code for the software. Do not use tools.",
+        "count": 3,
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1758294067720",
+      "type": "consolidator",
+      "x": 889,
+      "y": 455,
+      "data": {
+        "prePrompt": "Please choose the best of the following answers (or if better than any single answer the best parts of the best answers combined):",
+        "postPrompt": "Explain your choice.",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1758294249777",
+      "type": "conditional-stop",
+      "x": 133,
+      "y": 1176,
+      "data": {
+        "conditionType": "contains",
+        "condition": "The code is correct",
+        "onMatch": "stop"
+      }
+    },
+    {
+      "id": "step-1758294288052",
+      "type": "simple-prompt",
+      "x": 583,
+      "y": 1002,
+      "data": {
+        "prompt": "Improve the code. Keep textual remarks concise but concentrate on the code.",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1758294351656",
+      "type": "simple-prompt",
+      "x": 515,
+      "y": 467,
+      "data": {
+        "prompt": "Summarize the idea behind the chosen version and what the architecure is and then fully repeat the code of the chosen version.",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1758294372500",
+      "type": "simple-prompt",
+      "x": 143,
+      "y": 818,
+      "data": {
+        "prompt": "Verify if the last version of the software is correct and report if something is not correct. Be concise.\n\nIf everything is correct, write only precisely that message: \"The code is correct\".",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1758294399956",
+      "type": "clear-history",
+      "x": 164,
+      "y": 472,
+      "data": {
+        "clearFrom": 2,
+        "clearToBeginning": true,
+        "isMinimized": false,
+        "clearTo": 2
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "step-1758293977148",
+      "to": "step-1758294001798",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758294001798",
+      "to": "step-1758294018535",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758294018535",
+      "to": "step-1758294067720",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758294249777",
+      "to": "step-1758294288052",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758294372500",
+      "to": "step-1758294249777",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758294067720",
+      "to": "step-1758294351656",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758294351656",
+      "to": "step-1758294399956",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758294288052",
+      "to": "step-1758294372500",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758294399956",
+      "to": "step-1758294372500",
+      "outputName": "default"
+    }
+  ],
+  "id": "flow-1758138842445"
+}

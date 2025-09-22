@@ -1,0 +1,101 @@
+{
+  "name": "Test Clear History",
+  "steps": [
+    {
+      "id": "step-1758368246507",
+      "type": "simple-prompt",
+      "x": 131,
+      "y": 24,
+      "data": {
+        "prompt": "Hi!",
+        "agentId": "",
+        "isMinimized": false
+      }
+    },
+    {
+      "id": "step-1758368261647",
+      "type": "simple-prompt",
+      "x": 475,
+      "y": 29,
+      "data": {
+        "prompt": "How are you?",
+        "agentId": "",
+        "isMinimized": false
+      }
+    },
+    {
+      "id": "step-1758368278003",
+      "type": "simple-prompt",
+      "x": 900,
+      "y": 52,
+      "data": {
+        "prompt": "Can you tell me the time via tool call?",
+        "agentId": "",
+        "isMinimized": false
+      }
+    },
+    {
+      "id": "step-1758368316566",
+      "type": "clear-history",
+      "x": 738,
+      "y": 569,
+      "data": {
+        "clearFrom": 3,
+        "clearTo": 3,
+        "clearToBeginning": false,
+        "isMinimized": false
+      }
+    },
+    {
+      "id": "step-1758386919970",
+      "type": "multi-prompt",
+      "x": 1271,
+      "y": 62,
+      "data": {
+        "prompt": "Nice!",
+        "count": 3,
+        "agentId": "",
+        "isMinimized": false
+      }
+    },
+    {
+      "id": "step-1758386993608",
+      "type": "simple-prompt",
+      "x": 1259,
+      "y": 483,
+      "data": {
+        "prompt": "Hehe :)",
+        "agentId": "",
+        "isMinimized": false
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "step-1758368246507",
+      "to": "step-1758368261647",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758368261647",
+      "to": "step-1758368278003",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758368278003",
+      "to": "step-1758386919970",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758386919970",
+      "to": "step-1758386993608",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758386993608",
+      "to": "step-1758368316566",
+      "outputName": "default"
+    }
+  ],
+  "id": "flow-1758368242547"
+}

@@ -4,7 +4,7 @@
     "args": [
       "fastmcp",
       "run",
-      "../_mcp_servers/datetime-mcp/datetime-mcp.py"
+      "./_mcp_servers/datetime-mcp/datetime-mcp.py"
     ]
   },
   "fetch": {
@@ -12,7 +12,7 @@
     "args": [
       "fastmcp",
       "run",
-      "../_mcp_servers/fetch-mcp/fetch-mcp.py"
+      "./_mcp_servers/fetch-mcp/fetch-mcp.py"
     ]
   },
   "filesystem-read": {
@@ -20,9 +20,9 @@
     "args": [
       "fastmcp",
       "run",
-      "../_mcp_servers/filesystem_read-mcp/filesystem_read-mcp.py",
+      "./_mcp_servers/filesystem_read-mcp/filesystem_read-mcp.py",
       "--",
-      "../_mcp_filesystem/read_write"
+      "./_mcp_filesystem/read_write"
     ]
   },
   "filesystem-write": {
@@ -30,9 +30,9 @@
     "args": [
       "fastmcp",
       "run",
-      "../_mcp_servers/filesystem_write-mcp/filesystem_write-mcp.py",
+      "./_mcp_servers/filesystem_write-mcp/filesystem_write-mcp.py",
       "--",
-      "../_mcp_filesystem/read_write"
+      "./_mcp_filesystem/read_write"
     ]
   },
   "watcher": {
@@ -40,9 +40,9 @@
     "args": [
       "fastmcp",
       "run",
-      "../_mcp_servers/file_watcher-mcp/file_watcher-mcp.py",
+      "./_mcp_servers/file_watcher-mcp/file_watcher-mcp.py",
       "--",
-      "../_mcp_filesystem/watcher"
+      "./_mcp_filesystem/watcher"
     ]
   }
 }
