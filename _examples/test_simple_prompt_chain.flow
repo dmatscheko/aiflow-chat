@@ -26,10 +26,10 @@
       "type": "simple-prompt",
       "x": 482,
       "y": 458,
+      "isMinimized": false,
       "data": {
         "prompt": "Please tell me the time via tool call.",
-        "agentId": "",
-        "isMinimized": false
+        "agentId": ""
       }
     },
     {

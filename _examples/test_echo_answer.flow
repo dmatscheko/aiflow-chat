@@ -6,10 +6,10 @@
       "type": "simple-prompt",
       "x": 106,
       "y": 90,
+      "isMinimized": false,
       "data": {
         "prompt": "Hi! Please write a short python program that calculates Pi. Use tool calls.",
-        "agentId": "",
-        "isMinimized": false
+        "agentId": ""
       }
     },
     {
@@ -17,14 +17,14 @@
       "type": "echo-answer",
       "x": 94,
       "y": 542,
+      "isMinimized": false,
       "data": {
         "prePrompt": "Is this idea and code correct? Be concise.\n\n\n",
         "postPrompt": "",
         "agentId": "",
         "deleteAIAnswer": true,
         "deleteUserMessage": true,
-        "onlyLastAnswer": false,
-        "isMinimized": false
+        "onlyLastAnswer": false
       }
     }
   ],

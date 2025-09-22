@@ -6,10 +6,10 @@
       "type": "simple-prompt",
       "x": 131,
       "y": 24,
+      "isMinimized": false,
       "data": {
         "prompt": "Hi!",
-        "agentId": "",
-        "isMinimized": false
+        "agentId": ""
       }
     },
     {
@@ -17,10 +17,10 @@
       "type": "simple-prompt",
       "x": 475,
       "y": 29,
+      "isMinimized": false,
       "data": {
         "prompt": "How are you?",
-        "agentId": "",
-        "isMinimized": false
+        "agentId": ""
       }
     },
     {
@@ -28,10 +28,10 @@
       "type": "simple-prompt",
       "x": 900,
       "y": 52,
+      "isMinimized": false,
       "data": {
         "prompt": "Can you tell me the time via tool call?",
-        "agentId": "",
-        "isMinimized": false
+        "agentId": ""
       }
     },
     {
@@ -39,11 +39,11 @@
       "type": "clear-history",
       "x": 738,
       "y": 569,
+      "isMinimized": false,
       "data": {
         "clearFrom": 3,
         "clearTo": 3,
-        "clearToBeginning": false,
-        "isMinimized": false
+        "clearToBeginning": false
       }
     },
     {
@@ -51,11 +51,11 @@
       "type": "multi-prompt",
       "x": 1271,
       "y": 62,
+      "isMinimized": false,
       "data": {
         "prompt": "Nice!",
         "count": 3,
-        "agentId": "",
-        "isMinimized": false
+        "agentId": ""
       }
     },
     {
@@ -63,10 +63,10 @@
       "type": "simple-prompt",
       "x": 1259,
       "y": 483,
+      "isMinimized": false,
       "data": {
         "prompt": "Hehe :)",
-        "agentId": "",
-        "isMinimized": false
+        "agentId": ""
       }
     }
   ],

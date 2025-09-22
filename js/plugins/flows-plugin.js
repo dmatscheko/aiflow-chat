@@ -23,6 +23,7 @@ import { registerFlowStepDefinitions } from './flows-plugin-step-definitions.js'
  * @property {string} type
  * @property {number} x
  * @property {number} y
+ * @property {boolean} isMinimized
  * @property {object} data
  */
 
@@ -235,7 +236,7 @@ export class FlowsManager {
             const stepDef = this.stepTypes[step.type];
             if (!stepDef) return;
             const node = document.createElement('div');
-            const cardClass = `flow-step-card flow-step-${step.type} ${step.data.isMinimized ? 'minimized' : ''}`;
+            const cardClass = `flow-step-card flow-step-${step.type} ${step.isMinimized ? 'minimized' : ''}`;
             node.className = cardClass.trim();
             node.dataset.id = step.id;
             node.style.left = `${step.x}px`;
@@ -244,7 +245,7 @@ export class FlowsManager {
             const outputConnectors = stepDef.renderOutputConnectors
                 ? stepDef.renderOutputConnectors(step)
                 : `<div class="connector-group"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="default"></div></div>`;
-            node.innerHTML = `<button class="minimize-flow-step-btn" data-id="${step.id}">${step.data.isMinimized ? '+' : '-'}</button><div class="connector top" data-id="${step.id}" data-type="in"></div>${stepDef.render(step, selectedAgentOptions)}<div class="flow-step-footer"><button class="delete-flow-step-btn" data-id="${step.id}">Delete</button></div>${outputConnectors}`;
+            node.innerHTML = `<button class="minimize-flow-step-btn" data-id="${step.id}">${step.isMinimized ? '+' : '-'}</button><div class="connector top" data-id="${step.id}" data-type="in"></div>${stepDef.render(step, selectedAgentOptions)}<div class="flow-step-footer"><button class="delete-flow-step-btn" data-id="${step.id}">Delete</button></div>${outputConnectors}`;
             nodeContainer.appendChild(node);
         });
         // Connection rendering is now handled separately with a timeout
@@ -548,8 +549,14 @@ const flowsPlugin = {
                             const type = e.target.dataset.stepType;
                             if (type && flowsManager.stepTypes[type]) {
                                 const stepData = flowsManager.stepTypes[type].getDefaults();
-                                stepData.isMinimized = false;
-                                flow.steps.push({ id: `step-${Date.now()}`, type, x: 50, y: 50, data: stepData });
+                                flow.steps.push({
+                                    id: `step-${Date.now()}`,
+                                    type,
+                                    x: 50,
+                                    y: 50,
+                                    isMinimized: false,
+                                    data: stepData
+                                });
                                 flowsManager.updateFlow(flow);
                                 renderAndConnect();
                             }
@@ -615,7 +622,7 @@ const flowsPlugin = {
                         const stepId = target.dataset.id;
                         const step = flow.steps.find(s => s.id === stepId);
                         if (step) {
-                            step.data.isMinimized = !step.data.isMinimized;
+                            step.isMinimized = !step.isMinimized;
                             flowsManager.updateFlow(flow);
                             renderAndConnect();
                         }

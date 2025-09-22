@@ -89,10 +89,10 @@
       "type": "clear-history",
       "x": 164,
       "y": 472,
+      "isMinimized": false,
       "data": {
         "clearFrom": 2,
         "clearToBeginning": true,
-        "isMinimized": false,
         "clearTo": 2
       }
     }
