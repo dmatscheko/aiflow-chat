@@ -360,6 +360,8 @@ class FlowRunner {
         this.currentStepId = null;
         this.isRunning = false;
         this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
+        this.syncStepCounter = 0;
+        this.MAX_SYNC_STEPS = 1000;
     }
 
     start() {
@@ -367,6 +369,7 @@ class FlowRunner {
         const startNode = this.flow.steps.find(s => !this.flow.connections.some(c => c.to === s.id));
         if (!startNode) return alert('Flow has no starting node!');
         this.isRunning = true;
+        this.syncStepCounter = 0;
         this.executeStep(startNode);
     }
 
@@ -382,19 +385,24 @@ class FlowRunner {
     /** @param {FlowStep} step */
     executeStep(step) {
         if (!this.isRunning) return;
+
+        this.syncStepCounter++;
+
+        if (this.syncStepCounter > this.MAX_SYNC_STEPS) {
+            this.syncStepCounter = 0;
+            setTimeout(() => this.executeStep(step), 0);
+            return;
+        }
+
         this.currentStepId = step.id;
         const stepDef = this.manager.stepTypes[step.type];
         if (stepDef?.execute) {
-            // Using setTimeout to break the call stack and prevent recursion errors on synchronous loops
-            setTimeout(() => {
-                if (!this.isRunning) return; // Re-check as flow might have been stopped
-                stepDef.execute(step, {
-                    app: this.app,
-                    getNextStep: (id, out) => this.getNextStep(id, out),
-                    executeStep: (next) => this.executeStep(next),
-                    stopFlow: (msg) => this.stop(msg),
-                });
-            }, 0);
+            stepDef.execute(step, {
+                app: this.app,
+                getNextStep: (id, out) => this.getNextStep(id, out),
+                executeStep: (next) => this.executeStep(next),
+                stopFlow: (msg) => this.stop(msg),
+            });
         } else {
             this.stop(`Unknown step type: ${step.type}`);
         }
@@ -432,6 +440,7 @@ class FlowRunner {
                 this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
                 const nextStep = this.getNextStep(step.id);
                 if (nextStep) {
+                    this.syncStepCounter = 0;
                     this.executeStep(nextStep);
                     return true; // A new step was executed.
                 } else {
@@ -445,6 +454,7 @@ class FlowRunner {
             if (stepDef?.execute?.toString().includes('handleFormSubmit')) {
                 const nextStep = this.getNextStep(this.currentStepId);
                 if (nextStep) {
+                    this.syncStepCounter = 0;
                     this.executeStep(nextStep);
                     return true; // A new step was executed.
                 } else {
