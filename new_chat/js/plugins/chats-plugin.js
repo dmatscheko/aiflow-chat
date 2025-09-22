@@ -197,9 +197,6 @@ class ChatManager {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.handleFormSubmit();
-            } else if (e.key === 'Escape') {
-                this.stopChatFlow();
-                e.target.blur();
             }
         });
         const chatAreaControls = document.getElementById('chat-area-controls');
