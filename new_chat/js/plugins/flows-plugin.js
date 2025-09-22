@@ -542,7 +542,7 @@ const flowsPlugin = {
                 buttons = [
                     {
                         id: 'add-flow-step-btn',
-                        label: 'Add Step',
+                        label: 'Add Step ▾',
                         className: 'primary-btn',
                         dropdownContent: dropdownContent,
                         onClick: (e) => {
