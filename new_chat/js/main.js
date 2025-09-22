@@ -201,6 +201,11 @@ class App {
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                // Only act if a chat is the active view.
+                if (this.activeView.type !== 'chat' || !this.activeView.id) {
+                    return;
+                }
+
                 // If an edit-in-place element is active, don't interfere.
                 // The local Escape handler in makeEditable/makeSingleLineEditable will handle it.
                 if (document.querySelector('.edit-in-place, .edit-in-place-input')) {
