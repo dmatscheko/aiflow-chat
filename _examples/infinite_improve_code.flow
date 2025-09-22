@@ -1,0 +1,76 @@
+{
+  "steps": [
+    {
+      "id": "step-1755568003234",
+      "type": "echo-answer",
+      "x": 466,
+      "y": 26,
+      "isMinimized": false,
+      "data": {
+        "agentId": "",
+        "prePrompt": "Can you tell me, if this idea and code is correct? Be concise.\n\n",
+        "postPrompt": "",
+        "deleteAIAnswer": true,
+        "deleteUserMessage": true
+      }
+    },
+    {
+      "id": "step-1755568007929",
+      "type": "simple-prompt",
+      "x": 77,
+      "y": 114,
+      "isMinimized": false,
+      "data": {
+        "agentId": "",
+        "prompt": "Write a short python script that converts numbers in its textal representation"
+      }
+    },
+    {
+      "id": "step-1755568167427",
+      "type": "simple-prompt",
+      "x": 822,
+      "y": 145,
+      "isMinimized": false,
+      "data": {
+        "agentId": "",
+        "prompt": "Please improve it."
+      }
+    },
+    {
+      "id": "step-1758557349351",
+      "type": "clear-history",
+      "x": 822,
+      "y": 512,
+      "isMinimized": false,
+      "data": {
+        "clearFrom": 3,
+        "clearTo": 3,
+        "clearToBeginning": true
+      }
+    }
+  ],
+  "connections": [
+    {
+      "from": "step-1755568007929",
+      "to": "step-1755568003234",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1755568003234",
+      "to": "step-1755568167427",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758557349351",
+      "to": "step-1755568003234",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1755568167427",
+      "to": "step-1758557349351",
+      "outputName": "default"
+    }
+  ],
+  "id": "flow-1758553195225",
+  "name": "Infinite Improve Code"
+}
