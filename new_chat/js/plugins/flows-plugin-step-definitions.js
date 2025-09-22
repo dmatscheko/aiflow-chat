@@ -351,6 +351,7 @@ export function registerFlowStepDefinitions(flowsManager) {
         label: 'Branch',
         getDefaults: () => ({ conditionType: 'contains', condition: '' }),
         render: (step) => `<h4>Branch</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea></div>`,
+        renderOutputConnectors: (step) => `<div class="connector-group"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="pass"><span class="connector-label">Pass</span></div><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="fail"><span class="connector-label">Fail</span></div></div>`,
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
         execute: (step, context) => {
             const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
