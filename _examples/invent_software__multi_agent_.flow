@@ -1,5 +1,5 @@
 {
-  "name": "Invent And Program Software",
+  "name": "Invent Software (Multi Agent)",
   "steps": [
     {
       "id": "step-1758293977148",
@@ -7,8 +7,8 @@
       "x": 126,
       "y": 31,
       "data": {
-        "prompt": "Describe a small game that can be implemented in python in one sentence.",
-        "agentId": ""
+        "prompt": "Describe a small game that can be implemented in python in two sentences.",
+        "agentId": "agent-1758559754400"
       }
     },
     {
@@ -18,7 +18,7 @@
       "y": 52,
       "data": {
         "prompt": "Write the software architecture description for it. Be concise.",
-        "agentId": ""
+        "agentId": "agent-1758552758263"
       }
     },
     {
@@ -27,9 +27,9 @@
       "x": 889,
       "y": 17,
       "data": {
-        "prompt": "Write the code for the software. Do not use tools.",
+        "prompt": "Write the code for the software.",
         "count": 3,
-        "agentId": ""
+        "agentId": "agent-1758552758263"
       }
     },
     {
@@ -40,7 +40,7 @@
       "data": {
         "prePrompt": "Please choose the best of the following answers (or if better than any single answer the best parts of the best answers combined):",
         "postPrompt": "Explain your choice.",
-        "agentId": ""
+        "agentId": "agent-1758552758263"
       }
     },
     {
@@ -57,11 +57,11 @@
     {
       "id": "step-1758294288052",
       "type": "simple-prompt",
-      "x": 583,
-      "y": 1002,
+      "x": 580,
+      "y": 826,
       "data": {
         "prompt": "Improve the code. Keep textual remarks concise but concentrate on the code.",
-        "agentId": ""
+        "agentId": "agent-1758552758263"
       }
     },
     {
@@ -71,7 +71,7 @@
       "y": 467,
       "data": {
         "prompt": "Summarize the idea behind the chosen version and what the architecure is and then fully repeat the code of the chosen version.",
-        "agentId": ""
+        "agentId": "agent-1758552758263"
       }
     },
     {
@@ -81,7 +81,7 @@
       "y": 818,
       "data": {
         "prompt": "Verify if the last version of the software is correct and report if something is not correct. Be concise.\n\nIf everything is correct, write only precisely that message: \"The code is correct\".",
-        "agentId": ""
+        "agentId": "agent-1758552758263"
       }
     },
     {
@@ -94,6 +94,18 @@
         "clearFrom": 2,
         "clearToBeginning": true,
         "clearTo": 2
+      }
+    },
+    {
+      "id": "step-1758560105373",
+      "type": "clear-history",
+      "x": 583,
+      "y": 1173,
+      "isMinimized": false,
+      "data": {
+        "clearFrom": 2,
+        "clearTo": 3,
+        "clearToBeginning": true
       }
     }
   ],
@@ -134,15 +146,20 @@
       "outputName": "default"
     },
     {
-      "from": "step-1758294288052",
+      "from": "step-1758294399956",
       "to": "step-1758294372500",
       "outputName": "default"
     },
     {
-      "from": "step-1758294399956",
+      "from": "step-1758294288052",
+      "to": "step-1758560105373",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1758560105373",
       "to": "step-1758294372500",
       "outputName": "default"
     }
   ],
-  "id": "flow-1758138842445"
+  "id": "flow-1758559722965"
 }
