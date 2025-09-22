@@ -385,12 +385,16 @@ class FlowRunner {
         this.currentStepId = step.id;
         const stepDef = this.manager.stepTypes[step.type];
         if (stepDef?.execute) {
-            stepDef.execute(step, {
-                app: this.app,
-                getNextStep: (id, out) => this.getNextStep(id, out),
-                executeStep: (next) => this.executeStep(next),
-                stopFlow: (msg) => this.stop(msg),
-            });
+            // Using setTimeout to break the call stack and prevent recursion errors on synchronous loops
+            setTimeout(() => {
+                if (!this.isRunning) return; // Re-check as flow might have been stopped
+                stepDef.execute(step, {
+                    app: this.app,
+                    getNextStep: (id, out) => this.getNextStep(id, out),
+                    executeStep: (next) => this.executeStep(next),
+                    stopFlow: (msg) => this.stop(msg),
+                });
+            }, 0);
         } else {
             this.stop(`Unknown step type: ${step.type}`);
         }
