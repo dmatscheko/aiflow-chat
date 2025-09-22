@@ -587,22 +587,34 @@ button:hover {
     left: calc(50% - 6px);
 }
 
+.flow-step-card {
+    padding-bottom: 20px;
+}
+
+.flow-step-branching-prompt {
+    padding-bottom: 40px;
+}
+
 .connector-group {
     display: flex;
     justify-content: space-around;
-    padding-top: 10px;
+    position: absolute;
+    bottom: 10px;
+    left: 0;
+    right: 0;
 }
 
 .connector-group .connector {
-    position: relative; /* Override absolute positioning */
+    position: relative;
     top: auto;
     left: auto;
-    bottom: -16px;
+    bottom: auto;
 }
 
-.connector-label {
+.connector[data-label]::after {
+    content: attr(data-label);
     position: absolute;
-    bottom: 15px; /* Position label above connector */
+    top: -20px;
     left: 50%;
     transform: translateX(-50%);
     font-size: 0.8em;
