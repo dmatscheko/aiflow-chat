@@ -87,7 +87,8 @@ class AgentManager {
                     temperature: oldGlobalSettings.temperature ?? 1,
                 },
                 useCustomToolSettings: true,
-                toolSettings: { allowAll: true, allowed: [] }
+                toolSettings: { allowAll: true, allowed: [] },
+                agentToolSettings: { allowAll: true, allowed: [] }
             };
             if (Object.keys(oldGlobalSettings).length > 0) localStorage.removeItem('core_chat_settings');
             userAgents.unshift(newDefaultAgent);
@@ -124,6 +125,7 @@ class AgentManager {
             modelSettings: {},
             useCustomToolSettings: false,
             toolSettings: { allowAll: true, allowed: [] },
+            agentToolSettings: { allowAll: true, allowed: [] },
             ...agentData
         };
         this.agents.push(newAgent);
@@ -412,6 +414,21 @@ class AgentManager {
                 {
                     id: 'allowed', type: 'checkbox-list', label: '',
                     options: tools.map(t => ({ value: t.name, label: t.name })),
+                    dependsOn: 'allowAll', dependsOnValue: false
+                }
+            ],
+            ...(isDefaultAgent ? {} : { dependsOn: 'useCustomToolSettings', dependsOnValue: true })
+        });
+
+        settingsDefinition.push({
+            id: 'agentToolSettings', type: 'fieldset', label: 'Agent Calling Settings',
+            children: [
+                { id: 'allowAll', label: 'Allow calling all available agents', type: 'checkbox' },
+                {
+                    id: 'allowed', type: 'checkbox-list', label: '',
+                    options: this.agents
+                        .filter(a => a.id !== agent.id)
+                        .map(a => ({ value: a.id, label: a.name })),
                     dependsOn: 'allowAll', dependsOnValue: false
                 }
             ],

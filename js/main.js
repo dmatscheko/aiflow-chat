@@ -14,6 +14,7 @@ import { responseProcessor } from './response-processor.js';
 import './plugins/chats-plugin.js';
 import './plugins/example-plugin.js';
 import './plugins/agents-plugin.js';
+import './plugins/agents-call-plugin.js';
 import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
 import './plugins/formatting-plugin.js';
