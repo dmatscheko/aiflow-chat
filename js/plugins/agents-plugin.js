@@ -387,7 +387,7 @@ class AgentManager {
         if (!isDefaultAgent) settingsDefinition.push({ id: 'name', label: 'Name', type: 'text', required: true });
 
         settingsDefinition.push(
-            { id: 'description', label: 'Description', type: 'textarea', placeholder: 'A brief description of the agent\'s purpose and capabilities.' },
+            { id: 'description', label: 'Description', type: 'textarea', rows: 2, placeholder: 'A brief description of the agent\'s purpose and capabilities.' },
             { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', required: true },
             { type: 'divider' }
         );
