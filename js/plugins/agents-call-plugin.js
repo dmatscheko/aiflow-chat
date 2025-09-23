@@ -70,7 +70,7 @@ class AgentsCallPlugin {
         }
 
         const agentsSection = callableAgents.map((a, idx) => {
-            const desc = a.systemPrompt.substring(0, 100) + (a.systemPrompt.length > 100 ? '...' : '');
+            const desc = a.description || 'No description provided.';
             return `${idx + 1}. **${a.name} (ID: ${a.id})**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${a.id}\`\n - **Arguments** (parameter name): \n   - \`prompt\`: The user's request to the agent. (type: string)(required)`;
         }).join('\n');
 

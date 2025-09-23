@@ -31,6 +31,7 @@ import { createTitleBar } from './title-bar-plugin.js';
  * @typedef {object} Agent
  * @property {string} id
  * @property {string} name
+ * @property {string} description
  * @property {string} systemPrompt
  * @property {boolean} useCustomModelSettings
  * @property {AgentModelSettings} modelSettings
@@ -80,6 +81,7 @@ class AgentManager {
             const newDefaultAgent = {
                 id: DEFAULT_AGENT_ID,
                 name: 'Default Agent',
+                description: 'The default agent for general tasks. It is used when no specific agent is selected for a chat.',
                 systemPrompt: oldGlobalSettings.systemPrompt || 'You are a helpful assistant.',
                 useCustomModelSettings: true,
                 modelSettings: {
@@ -122,6 +124,7 @@ class AgentManager {
         const newAgent = {
             id: generateUniqueId('agent', existingIds),
             name: 'New Agent',
+            description: 'A new, unconfigured agent.',
             systemPrompt: 'You are a helpful assistant.',
             useCustomModelSettings: false,
             modelSettings: {},
@@ -384,6 +387,7 @@ class AgentManager {
         if (!isDefaultAgent) settingsDefinition.push({ id: 'name', label: 'Name', type: 'text', required: true });
 
         settingsDefinition.push(
+            { id: 'description', label: 'Description', type: 'textarea', placeholder: 'A brief description of the agent\'s purpose and capabilities.' },
             { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', required: true },
             { type: 'divider' }
         );
