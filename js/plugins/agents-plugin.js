@@ -384,7 +384,6 @@ class AgentManager {
         const tools = await this.app.mcp?.getTools(mcpServerUrl) || [];
 
         let settingsDefinition = [];
-        if (!isDefaultAgent) settingsDefinition.push({ id: 'name', label: 'Name', type: 'text', required: true });
 
         settingsDefinition.push(
             { id: 'description', label: 'Description', type: 'textarea', rows: 2, placeholder: 'A brief description of the agent\'s purpose and capabilities.' },
