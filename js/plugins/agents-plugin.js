@@ -36,6 +36,8 @@ import { createTitleBar } from './title-bar-plugin.js';
  * @property {AgentModelSettings} modelSettings
  * @property {boolean} useCustomToolSettings
  * @property {object} toolSettings
+ * @property {boolean} useCustomAgentCallSettings
+ * @property {object} agentCallSettings
  */
 
 const DEFAULT_AGENT_ID = 'agent-default';
@@ -87,7 +89,8 @@ class AgentManager {
                     temperature: oldGlobalSettings.temperature ?? 1,
                 },
                 useCustomToolSettings: true,
-                toolSettings: { allowAll: true, allowed: [] }
+                toolSettings: { allowAll: true, allowed: [] },
+                agentCallSettings: { allowAll: true, allowed: [] }
             };
             if (Object.keys(oldGlobalSettings).length > 0) localStorage.removeItem('core_chat_settings');
             userAgents.unshift(newDefaultAgent);
@@ -124,6 +127,8 @@ class AgentManager {
             modelSettings: {},
             useCustomToolSettings: false,
             toolSettings: { allowAll: true, allowed: [] },
+            useCustomAgentCallSettings: false,
+            agentCallSettings: { allowAll: true, allowed: [] },
             ...agentData
         };
         this.agents.push(newAgent);
@@ -416,6 +421,22 @@ class AgentManager {
                 }
             ],
             ...(isDefaultAgent ? {} : { dependsOn: 'useCustomToolSettings', dependsOnValue: true })
+        });
+
+        settingsDefinition.push({ type: 'divider' });
+
+        if (!isDefaultAgent) settingsDefinition.push({ id: 'useCustomAgentCallSettings', label: 'Use Custom Agent Call Settings', type: 'checkbox' });
+        settingsDefinition.push({
+            id: 'agentCallSettings', type: 'fieldset', label: 'Agent Call Settings',
+            children: [
+                { id: 'allowAll', label: 'Allow all available agents', type: 'checkbox' },
+                {
+                    id: 'allowed', type: 'checkbox-list', label: '',
+                    options: this.agents.filter(a => a.id !== agentId).map(a => ({ value: a.id, label: a.name })),
+                    dependsOn: 'allowAll', dependsOnValue: false
+                }
+            ],
+            ...(isDefaultAgent ? {} : { dependsOn: 'useCustomAgentCallSettings', dependsOnValue: true })
         });
 
         const onSettingChanged = (path, value) => this.updateAgentProperty(agentId, path, value);
