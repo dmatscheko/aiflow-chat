@@ -44,22 +44,13 @@ class AgentsCallPlugin {
      * @param {Agent} agent
      */
     async beforeApiCall(payload, allSettings, agent) {
-        if (!agent) {
-            return payload;
-        }
-
-        const agentManager = this.app.agentManager;
-        const defaultAgent = agentManager.getAgent('agent-default');
-        let effectiveAgentCallSettings = defaultAgent.agentCallSettings;
-
-        if (agent.useCustomAgentCallSettings) {
-            effectiveAgentCallSettings = agent.agentCallSettings;
-        }
+        const effectiveAgentCallSettings = allSettings.agentCallSettings;
 
         if (!effectiveAgentCallSettings) {
             return payload;
         }
 
+        const agentManager = this.app.agentManager;
         const allAgents = agentManager.agents;
         const callableAgents = effectiveAgentCallSettings.allowAll
             ? allAgents.filter(a => a.id !== agent.id)
@@ -98,7 +89,7 @@ class AgentsCallPlugin {
         const filterCallback = (call) => allAgentIds.has(call.name);
 
         const executeCallback = async (call) => {
-            const callingAgentId = message.agent;
+            const callingAgentId = message.value.agent;
             const callingAgent = agentManager.getAgent(callingAgentId);
             const targetAgent = agentManager.getAgent(call.name);
 
@@ -107,11 +98,8 @@ class AgentsCallPlugin {
             }
 
             // Check permissions
-            const defaultAgent = agentManager.getAgent('agent-default');
-            let effectiveAgentCallSettings = defaultAgent.agentCallSettings;
-            if (callingAgent.useCustomAgentCallSettings) {
-                effectiveAgentCallSettings = callingAgent.agentCallSettings;
-            }
+            const callingAgentConfig = agentManager.getEffectiveApiConfig(callingAgent.id);
+            const effectiveAgentCallSettings = callingAgentConfig.agentCallSettings;
             const isAllowed = effectiveAgentCallSettings.allowAll || effectiveAgentCallSettings.allowed?.includes(targetAgent.id);
 
             if (!isAllowed) {

@@ -216,6 +216,7 @@ class AgentManager {
 
         let effectiveModelSettings = { ...(defaultAgent.modelSettings || {}) };
         let effectiveToolSettings = { ...(defaultAgent.toolSettings || {}) };
+        let effectiveAgentCallSettings = { ...(defaultAgent.agentCallSettings || {}) };
         let effectiveSystemPrompt = defaultAgent.systemPrompt;
 
         if (agent && agent.id !== DEFAULT_AGENT_ID) {
@@ -236,9 +237,17 @@ class AgentManager {
                     effectiveToolSettings.mcpServer = defaultAgent.toolSettings?.mcpServer;
                 }
             }
+            if (agent.useCustomAgentCallSettings) {
+                effectiveAgentCallSettings = { ...effectiveAgentCallSettings, ...(agent.agentCallSettings || {}) };
+            }
         }
 
-        return { systemPrompt: effectiveSystemPrompt, ...effectiveModelSettings, ...effectiveToolSettings };
+        return {
+            systemPrompt: effectiveSystemPrompt,
+            ...effectiveModelSettings,
+            toolSettings: effectiveToolSettings,
+            agentCallSettings: effectiveAgentCallSettings
+        };
     }
 
     async fetchModels(agentId = null, targetSelectElement = null) {
