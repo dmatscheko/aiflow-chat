@@ -92,6 +92,7 @@ class AgentManager {
                 },
                 useCustomToolSettings: true,
                 toolSettings: { allowAll: true, allowed: [] },
+                useCustomAgentCallSettings: false,
                 agentCallSettings: { allowAll: true, allowed: [] }
             };
             if (Object.keys(oldGlobalSettings).length > 0) localStorage.removeItem('core_chat_settings');
