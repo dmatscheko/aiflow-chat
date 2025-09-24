@@ -89,7 +89,7 @@ class AgentsCallPlugin {
         const filterCallback = (call) => allAgentIds.has(call.name);
 
         const executeCallback = async (call) => {
-            const callingAgentId = message.value.agent;
+            const callingAgentId = message.value.agent || 'agent-default';
             const callingAgent = agentManager.getAgent(callingAgentId);
             const targetAgent = agentManager.getAgent(call.name);
 
@@ -119,12 +119,19 @@ class AgentsCallPlugin {
                 ];
 
                 const payload = {
-                    ...targetAgentConfig,
+                    model: targetAgentConfig.model,
                     messages,
-                    stream: false
+                    stream: false,
+                    temperature: targetAgentConfig.temperature,
+                    top_p: targetAgentConfig.top_p,
                 };
 
-                const response = await this.app.apiService.getCompletion(payload);
+                const response = await this.app.apiService.getCompletion(
+                    payload,
+                    targetAgentConfig.apiUrl,
+                    targetAgentConfig.apiKey,
+                    new AbortController().signal // A new abort controller for the sub-call
+                );
                 const content = response.choices[0]?.message?.content;
 
                 return { name: call.name, tool_call_id: call.id, content: content || '' };
