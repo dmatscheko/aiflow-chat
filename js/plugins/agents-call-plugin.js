@@ -5,7 +5,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { processToolCalls } from '../tool-processor.js';
+import { parseToolCalls } from '../tool-processor.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -86,32 +86,57 @@ class AgentsCallPlugin {
         const agentManager = this.app.agentManager;
         const allAgentIds = new Set(agentManager.agents.map(a => a.id));
 
-        const filterCallback = (call) => allAgentIds.has(call.name);
+        const { toolCalls } = parseToolCalls(message.value.content);
+        const agentCalls = toolCalls.filter(call => allAgentIds.has(call.name));
 
-        const executeCallback = async (call) => {
-            const callingAgentId = message.value.agent || 'agent-default';
-            const callingAgent = agentManager.getAgent(callingAgentId);
+        if (agentCalls.length === 0) {
+            return false;
+        }
+
+        const callingAgentId = message.value.agent || 'agent-default';
+        const callingAgent = agentManager.getAgent(callingAgentId);
+
+        for (const call of agentCalls) {
             const targetAgent = agentManager.getAgent(call.name);
 
+            let toolContent = '';
+            let toolError = null;
+
             if (!callingAgent || !targetAgent) {
-                return { name: call.name, tool_call_id: call.id, error: 'Invalid agent specified.' };
-            }
+                toolError = 'Invalid agent specified.';
+            } else {
+                const callingAgentConfig = agentManager.getEffectiveApiConfig(callingAgent.id);
+                const effectiveAgentCallSettings = callingAgentConfig.agentCallSettings;
+                const isAllowed = effectiveAgentCallSettings.allowAll || effectiveAgentCallSettings.allowed?.includes(targetAgent.id);
 
-            // Check permissions
-            const callingAgentConfig = agentManager.getEffectiveApiConfig(callingAgent.id);
-            const effectiveAgentCallSettings = callingAgentConfig.agentCallSettings;
-            const isAllowed = effectiveAgentCallSettings.allowAll || effectiveAgentCallSettings.allowed?.includes(targetAgent.id);
-
-            if (!isAllowed) {
-                return { name: call.name, tool_call_id: call.id, error: `Agent "${callingAgent.name}" is not permitted to call agent "${targetAgent.name}".` };
+                if (!isAllowed) {
+                    toolError = `Agent "${callingAgent.name}" is not permitted to call agent "${targetAgent.name}".`;
+                }
             }
 
             const prompt = call.params.prompt;
             if (!prompt) {
-                return { name: call.name, tool_call_id: call.id, error: 'The "prompt" parameter is required when calling an agent.' };
+                toolError = 'The "prompt" parameter is required when calling an agent.';
+            }
+
+            const toolResponseMessage = {
+                role: 'tool',
+                content: '',
+                tool_call_id: call.id,
+                name: call.name,
+            };
+
+            activeChat.log.addMessage(toolResponseMessage, message.id);
+
+            if (toolError) {
+                toolResponseMessage.content = `<error>${toolError}</error>`;
+                activeChat.log.notify();
+                continue;
             }
 
             try {
+                this.app.dom.stopButton.style.display = 'block';
+
                 const targetAgentConfig = agentManager.getEffectiveApiConfig(targetAgent.id);
                 const messages = [
                     { role: 'system', content: targetAgentConfig.systemPrompt },
@@ -121,35 +146,50 @@ class AgentsCallPlugin {
                 const payload = {
                     model: targetAgentConfig.model,
                     messages,
-                    stream: false,
+                    stream: true,
                     temperature: targetAgentConfig.temperature,
                     top_p: targetAgentConfig.top_p,
                 };
 
-                const response = await this.app.apiService.getCompletion(
+                const reader = await this.app.apiService.streamChat(
                     payload,
                     targetAgentConfig.apiUrl,
                     targetAgentConfig.apiKey,
-                    new AbortController().signal // A new abort controller for the sub-call
+                    this.app.abortController.signal
                 );
-                const content = response.choices[0]?.message?.content;
 
-                return { name: call.name, tool_call_id: call.id, content: content || '' };
+                const decoder = new TextDecoder();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    const deltas = lines
+                        .map(line => line.replace(/^data: /, '').trim())
+                        .filter(line => line !== '' && line !== '[DONE]')
+                        .map(line => JSON.parse(line).choices[0].delta.content)
+                        .filter(Boolean);
 
+                    if (deltas.length > 0) {
+                        toolContent += deltas.join('');
+                        toolResponseMessage.content = `<content>${toolContent}</content>`;
+                        activeChat.log.notify();
+                    }
+                }
             } catch (error) {
-                console.error(`Error calling agent ${targetAgent.name}:`, error);
-                return { name: call.name, tool_call_id: call.id, error: `An error occurred while calling the agent: ${error.message}` };
+                if (error.name !== 'AbortError') {
+                    toolResponseMessage.content = `<error>An error occurred while calling the agent: ${error.message}</error>`;
+                } else {
+                    toolResponseMessage.content += '\n\n[Aborted by user]';
+                }
+                activeChat.log.notify();
+            } finally {
+                this.app.dom.stopButton.style.display = 'none';
             }
-        };
+        }
 
-        return processToolCalls(
-            this.app,
-            activeChat,
-            message,
-            [], // No specific tool schemas needed here, as we are not doing type coercion.
-            filterCallback,
-            executeCallback
-        );
+        activeChat.log.addMessage({ role: 'assistant', content: null, agent: callingAgentId });
+        return true;
     }
 }
 
