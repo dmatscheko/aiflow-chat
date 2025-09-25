@@ -338,7 +338,7 @@ class ChatUI {
         roleEl.textContent = message.value.role;
         titleTextEl.appendChild(roleEl);
 
-        if (message.value.role === 'assistant') {
+        if (message.value.role === 'assistant' || message.value.role === 'tool') {
             const details = [];
         
             if (message.value.agent && this.agentManager) {

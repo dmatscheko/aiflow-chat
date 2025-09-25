@@ -124,6 +124,8 @@ class AgentsCallPlugin {
                 content: '',
                 tool_call_id: call.id,
                 name: call.name,
+                agent: targetAgent.id,
+                model: null, // Will be populated after config is fetched
             };
 
             activeChat.log.addMessage(toolResponseMessage, message.id);
@@ -139,6 +141,7 @@ class AgentsCallPlugin {
                 this.app.dom.stopButton.style.display = 'block';
 
                 const targetAgentConfig = agentManager.getEffectiveApiConfig(targetAgent.id);
+                toolResponseMessage.model = targetAgentConfig.model; // Populate model name
                 const messages = [
                     { role: 'system', content: targetAgentConfig.systemPrompt },
                     { role: 'user', content: prompt }
