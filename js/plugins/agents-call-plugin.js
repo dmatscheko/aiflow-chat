@@ -135,6 +135,7 @@ class AgentsCallPlugin {
             }
 
             try {
+                this.app.abortController = new AbortController();
                 this.app.dom.stopButton.style.display = 'block';
 
                 const targetAgentConfig = agentManager.getEffectiveApiConfig(targetAgent.id);
@@ -172,7 +173,7 @@ class AgentsCallPlugin {
 
                     if (deltas.length > 0) {
                         toolContent += deltas.join('');
-                        toolResponseMessage.content = `<content>${toolContent}</content>`;
+                        toolResponseMessage.content = toolContent;
                         activeChat.log.notify();
                     }
                 }
@@ -184,11 +185,13 @@ class AgentsCallPlugin {
                 }
                 activeChat.log.notify();
             } finally {
+                this.app.abortController = null;
                 this.app.dom.stopButton.style.display = 'none';
             }
         }
 
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: callingAgentId });
+        this.app.responseProcessor.scheduleProcessing(this.app);
         return true;
     }
 }

@@ -214,40 +214,41 @@ class AgentManager {
             return {};
         }
 
-        let effectiveModelSettings = { ...(defaultAgent.modelSettings || {}) };
-        let effectiveToolSettings = { ...(defaultAgent.toolSettings || {}) };
-        let effectiveAgentCallSettings = { ...(defaultAgent.agentCallSettings || {}) };
-        let effectiveSystemPrompt = defaultAgent.systemPrompt;
+        // Start with the complete default agent configuration.
+        const effectiveConfig = {
+            systemPrompt: defaultAgent.systemPrompt,
+            ...(defaultAgent.modelSettings || {}),
+            toolSettings: { ...(defaultAgent.toolSettings || {}) },
+            agentCallSettings: { ...(defaultAgent.agentCallSettings || {}) },
+        };
 
+        // If a specific agent is active (and it's not the default), layer its settings on top.
         if (agent && agent.id !== DEFAULT_AGENT_ID) {
-            effectiveSystemPrompt = agent.systemPrompt;
+            effectiveConfig.systemPrompt = agent.systemPrompt;
+
             if (agent.useCustomModelSettings) {
-                effectiveModelSettings = { ...effectiveModelSettings, ...(agent.modelSettings || {}) };
+                Object.assign(effectiveConfig, agent.modelSettings);
+                // If the custom agent doesn't specify a URL, it inherits the default's URL and key.
                 if (!agent.modelSettings?.apiUrl) {
-                    effectiveModelSettings.apiUrl = defaultAgent.modelSettings.apiUrl;
-                    effectiveModelSettings.apiKey = defaultAgent.modelSettings.apiKey;
-                } else {
-                    effectiveModelSettings.apiUrl = agent.modelSettings.apiUrl;
-                    effectiveModelSettings.apiKey = agent.modelSettings.apiKey;
+                    effectiveConfig.apiUrl = defaultAgent.modelSettings.apiUrl;
+                    effectiveConfig.apiKey = defaultAgent.modelSettings.apiKey;
                 }
             }
+
             if (agent.useCustomToolSettings) {
-                effectiveToolSettings = { ...effectiveToolSettings, ...(agent.toolSettings || {}) };
-                if (!effectiveToolSettings.mcpServer) {
-                    effectiveToolSettings.mcpServer = defaultAgent.toolSettings?.mcpServer;
+                Object.assign(effectiveConfig.toolSettings, agent.toolSettings);
+                 // If the custom agent doesn't specify an MCP server, it inherits the default's.
+                if (!agent.toolSettings?.mcpServer) {
+                    effectiveConfig.toolSettings.mcpServer = defaultAgent.toolSettings?.mcpServer;
                 }
             }
+
             if (agent.useCustomAgentCallSettings) {
-                effectiveAgentCallSettings = { ...effectiveAgentCallSettings, ...(agent.agentCallSettings || {}) };
+                Object.assign(effectiveConfig.agentCallSettings, agent.agentCallSettings);
             }
         }
 
-        return {
-            systemPrompt: effectiveSystemPrompt,
-            ...effectiveModelSettings,
-            toolSettings: effectiveToolSettings,
-            agentCallSettings: effectiveAgentCallSettings
-        };
+        return effectiveConfig;
     }
 
     async fetchModels(agentId = null, targetSelectElement = null) {
@@ -438,19 +439,28 @@ class AgentManager {
 
         settingsDefinition.push({ type: 'divider' });
 
-        if (!isDefaultAgent) settingsDefinition.push({ id: 'useCustomAgentCallSettings', label: 'Use Custom Agent Call Settings', type: 'checkbox' });
-        settingsDefinition.push({
-            id: 'agentCallSettings', type: 'fieldset', label: 'Agent Call Settings',
-            children: [
-                { id: 'allowAll', label: 'Allow all available agents', type: 'checkbox' },
-                {
-                    id: 'allowed', type: 'checkbox-list', label: '',
-                    options: this.agents.filter(a => a.id !== agentId).map(a => ({ value: a.id, label: a.name })),
-                    dependsOn: 'allowAll', dependsOnValue: false
-                }
-            ],
-            ...(isDefaultAgent ? {} : { dependsOn: 'useCustomAgentCallSettings', dependsOnValue: true })
-        });
+        const agentCallSettingsChildren = [
+            { id: 'allowAll', label: 'Allow all available agents', type: 'checkbox' },
+            {
+                id: 'allowed', type: 'checkbox-list', label: '',
+                options: this.agents.filter(a => a.id !== agentId).map(a => ({ value: a.id, label: a.name })),
+                dependsOn: 'allowAll', dependsOnValue: false
+            }
+        ];
+
+        if (isDefaultAgent) {
+            settingsDefinition.push({
+                id: 'agentCallSettings', type: 'fieldset', label: 'Agent Call Settings',
+                children: agentCallSettingsChildren
+            });
+        } else {
+            settingsDefinition.push({ id: 'useCustomAgentCallSettings', label: 'Use Custom Agent Call Settings', type: 'checkbox' });
+            settingsDefinition.push({
+                id: 'agentCallSettings', type: 'fieldset', label: 'Agent Call Settings',
+                children: agentCallSettingsChildren,
+                dependsOn: 'useCustomAgentCallSettings', dependsOnValue: true
+            });
+        }
 
         const onSettingChanged = (path, value) => this.updateAgentProperty(agentId, path, value);
         const settingsFragment = createSettingsUI(settingsDefinition, agent, onSettingChanged, `agent-${agent.id}-`, 'agent-editor');
