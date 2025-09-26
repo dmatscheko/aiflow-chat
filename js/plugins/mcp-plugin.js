@@ -237,7 +237,7 @@ class McpPlugin {
      * @private
      */
     async #executeMcpCall(call, message, mcpUrl) {
-        const agentId = message.agent;
+        const agentId = message.value.agent;
         const agent = agentId ? this.#app.agentManager.getAgent(agentId) : null;
         const defaultAgent = this.#app.agentManager.getAgent('agent-default');
         let effectiveToolSettings = defaultAgent.toolSettings;
@@ -381,25 +381,25 @@ const mcpPluginDefinition = {
         };
     },
 
-    async beforeApiCall(payload, allSettings, agent) {
-        const app = mcpPluginSingleton.getApp();
-        const effectiveConfig = app.agentManager.getEffectiveApiConfig(agent?.id);
-        const mcpUrl = effectiveConfig.mcpServer;
-        if (!mcpUrl) return payload;
+    async onSystemPromptConstruct(systemPrompt, allSettings, agent) {
+        const mcpUrl = allSettings.toolSettings?.mcpServer;
+        if (!mcpUrl) {
+            return systemPrompt;
+        }
 
         const tools = await mcpPluginSingleton.getTools(mcpUrl);
         if (tools.length === 0) {
-            return payload;
+            return systemPrompt;
         }
 
         const dynamicToolsSection = mcpPluginSingleton.generateToolsSection(agent, tools);
         if (dynamicToolsSection) {
-            const systemPrompt = payload.messages.find(m => m.role === 'system');
-            if (systemPrompt && !systemPrompt.content.includes(toolsHeader)) {
-                systemPrompt.content += '\n\n' + toolsHeader + dynamicToolsSection;
+            if (systemPrompt) {
+                systemPrompt += '\n\n';
             }
+            systemPrompt += toolsHeader + dynamicToolsSection;
         }
-        return payload;
+        return systemPrompt;
     },
 
     async onResponseComplete(message, activeChat) {
@@ -409,9 +409,9 @@ const mcpPluginDefinition = {
         }
 
         const app = mcpPluginSingleton.getApp();
-        const agentId = message.agent || null;
+        const agentId = message.value.agent || null;
         const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
-        const mcpUrl = effectiveConfig.mcpServer;
+        const mcpUrl = effectiveConfig.toolSettings.mcpServer;
         if (!mcpUrl) return false;
 
         const tools = await mcpPluginSingleton.getTools(mcpUrl);

@@ -149,10 +149,14 @@ class ResponseProcessor {
             }
 
             const agentId = assistantMsg.value.agent;
+            const agent = agentId ? app.agentManager.getAgent(agentId) : null;
             const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
 
-            if (effectiveConfig.systemPrompt) {
-                messages.unshift({ role: 'system', content: effectiveConfig.systemPrompt });
+            // Construct the system prompt by allowing plugins to contribute.
+            const finalSystemPrompt = await pluginManager.triggerAsync('onSystemPromptConstruct', effectiveConfig.systemPrompt, effectiveConfig, agent);
+
+            if (finalSystemPrompt) {
+                messages.unshift({ role: 'system', content: finalSystemPrompt });
             }
 
             let payload = {
@@ -163,8 +167,6 @@ class ResponseProcessor {
                 top_p: effectiveConfig.top_p ? parseFloat(effectiveConfig.top_p) : undefined,
             };
 
-            const agent = agentId ? app.agentManager.getAgent(agentId) : null;
-            payload = await pluginManager.triggerAsync('beforeApiCall', payload, effectiveConfig, agent);
             assistantMsg.value.model = payload.model;
 
             const reader = await app.apiService.streamChat(
