@@ -180,8 +180,6 @@ async function processToolCalls(app, chat, message, tools, filterCallback, execu
 
     if (toolContents) {
         chat.log.addMessage({ role: 'tool', content: toolContents });
-        // After adding tool results, queue up the next step for the AI.
-        chat.log.addMessage({ role: 'assistant', content: null });
         return true;
     }
     return false;

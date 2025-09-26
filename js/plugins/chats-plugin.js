@@ -20,6 +20,7 @@ import { responseProcessor } from '../response-processor.js';
  * @property {string} draftMessage - The current draft message.
  * @property {string | null} agent - The ID of the active agent.
  * @property {string | null} flow - The ID of the active flow.
+ * @property {any[]} [agentStack] - The stack for nested agent calls.
  */
 
 let appInstance = null;
@@ -61,6 +62,7 @@ class ChatManager {
                     draftMessage: chatData.draftMessage || '',
                     agent: chatData.agent || null,
                     flow: chatData.flow || null,
+                    agentStack: chatData.agentStack || [],
                 };
                 chat.log.subscribe(this.debouncedSave);
                 return chat;
@@ -80,6 +82,7 @@ class ChatManager {
             draftMessage: chat.draftMessage,
             agent: chat.agent,
             flow: chat.flow,
+            agentStack: chat.agentStack || [],
         }));
         localStorage.setItem('core_chat_logs', JSON.stringify(chatsToSave));
         localStorage.setItem('core_active_chat_id', this.activeChatId);
@@ -94,6 +97,7 @@ class ChatManager {
             draftMessage: '',
             agent: null,
             flow: null,
+            agentStack: [],
         };
         newChat.log.subscribe(this.debouncedSave);
         this.chats.push(newChat);
@@ -113,6 +117,7 @@ class ChatManager {
             draftMessage: chatData.draftMessage || '',
             agent: chatData.agent || null,
             flow: chatData.flow || null,
+            agentStack: chatData.agentStack || [],
         };
         newChat.log.subscribe(this.debouncedSave);
         this.chats.push(newChat);
@@ -218,7 +223,7 @@ class ChatManager {
             activeChat.draftMessage = '';
             this.saveChats();
         }
-        const finalAgentId = agentId || activeChat.agent || null;
+        const finalAgentId = agentId || activeChat.agent || 'agent-default';
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
         responseProcessor.scheduleProcessing(this.app);
     }

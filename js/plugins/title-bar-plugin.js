@@ -197,7 +197,7 @@ const titleBarPlugin = {
                         if (agentSelector) {
                             agentSelector.addEventListener('change', (e) => {
                                 const selectedAgentId = e.target.value;
-                                chat.agent = selectedAgentId === 'agent-default' ? null : selectedAgentId;
+                                chat.agent = selectedAgentId; // Always store the ID
                                 appInstance.chatManager.debouncedSave();
                                 appInstance.renderMainView(); // Re-render to update title
                             });
