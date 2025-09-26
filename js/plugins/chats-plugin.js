@@ -20,7 +20,6 @@ import { responseProcessor } from '../response-processor.js';
  * @property {string} draftMessage - The current draft message.
  * @property {string | null} agent - The ID of the active agent.
  * @property {string | null} flow - The ID of the active flow.
- * @property {any[]} callStack - The agent call stack.
  */
 
 let appInstance = null;
@@ -62,7 +61,6 @@ class ChatManager {
                     draftMessage: chatData.draftMessage || '',
                     agent: chatData.agent || null,
                     flow: chatData.flow || null,
-                    callStack: chatData.callStack || [],
                 };
                 chat.log.subscribe(this.debouncedSave);
                 return chat;
@@ -82,7 +80,6 @@ class ChatManager {
             draftMessage: chat.draftMessage,
             agent: chat.agent,
             flow: chat.flow,
-            callStack: chat.callStack,
         }));
         localStorage.setItem('core_chat_logs', JSON.stringify(chatsToSave));
         localStorage.setItem('core_active_chat_id', this.activeChatId);
@@ -97,7 +94,6 @@ class ChatManager {
             draftMessage: '',
             agent: null,
             flow: null,
-            callStack: [],
         };
         newChat.log.subscribe(this.debouncedSave);
         this.chats.push(newChat);
@@ -117,7 +113,6 @@ class ChatManager {
             draftMessage: chatData.draftMessage || '',
             agent: chatData.agent || null,
             flow: chatData.flow || null,
-            callStack: chatData.callStack || [],
         };
         newChat.log.subscribe(this.debouncedSave);
         this.chats.push(newChat);

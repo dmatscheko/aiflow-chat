@@ -5,13 +5,11 @@
 'use strict';
 
 import { pluginManager } from './plugin-manager.js';
-import { parseToolCalls } from './tool-processor.js';
 
 /**
  * @typedef {import('./main.js').App} App
  * @typedef {import('./main.js').Chat} Chat
  * @typedef {import('./chat-data.js').Message} Message
- * @typedef {import('./tool-processor.js').ToolCall} ToolCall
  */
 
 /**
@@ -23,14 +21,21 @@ import { parseToolCalls } from './tool-processor.js';
  */
 class ResponseProcessor {
     constructor() {
-        /** @type {boolean} */
+        /**
+         * Flag to prevent multiple concurrent processing loops.
+         * @type {boolean}
+         */
         this.isProcessing = false;
-        /** @type {App | null} */
+        /**
+         * The main application instance.
+         * @type {App | null}
+         * @private
+         */
         this.app = null;
     }
 
     /**
-     * Schedules a processing check. If not already processing, it starts the loop.
+     * Schedules a processing check. If not already processing, it starts the robust processing loop.
      * @param {App} app - The main application instance.
      */
     scheduleProcessing(app) {
@@ -42,7 +47,7 @@ class ResponseProcessor {
 
     /**
      * Finds the next pending message across all chats.
-     * @returns {{chat: Chat, message: Message} | null}
+     * @returns {{chat: Chat, message: Message} | null} The chat and message to process, or null if none.
      * @private
      */
     _findNextPendingMessage() {
@@ -57,7 +62,12 @@ class ResponseProcessor {
     }
 
     /**
-     * The main processing loop.
+     * The main processing loop. It robustly handles a cycle of AI responses and subsequent plugin actions.
+     * 1. It first prioritizes and processes any pending AI message.
+     * 2. After an assistant message is generated, it checks the message for tool calls.
+     * 3. If tool calls are found, the responsible plugins are triggered.
+     * 4. After all tool calls are processed, this loop queues a single new assistant turn.
+     * 5. The loop only terminates when a full pass results in no pending messages and no plugin actions.
      * @private
      */
     async processLoop() {
@@ -67,46 +77,43 @@ class ResponseProcessor {
         try {
             while (true) {
                 let actionTaken = false;
-                const activeChat = this.app.chatManager.getActiveChat();
-                if (!activeChat) break;
 
-                // 1. Handle pending AI message generation
+                // 1. Process any pending AI message generation
                 const workItem = this._findNextPendingMessage();
                 if (workItem) {
                     await this.processMessage(workItem.chat, workItem.message);
                     actionTaken = true;
-                    // After generating content, immediately check for tool calls in the new message
-                    // and continue the loop to process them.
+                    // The assistant message is now generated. Continue the loop to check it for tool calls.
                     continue;
                 }
 
-                // 2. Handle completed assistant message (check for tool calls, agent returns)
-                const lastMessage = activeChat.log.getLastMessage();
-                if (lastMessage?.value.role === 'assistant' && lastMessage.value.content) {
-                    const handled = await this.handleCompletedAssistantTurn(activeChat, lastMessage);
-                    if (handled) {
-                        actionTaken = true;
-                        continue; // Loop again as a new turn might have been queued
-                    }
-                }
+                // 2. Handle completed assistant message (check for tool calls)
+                const activeChat = this.app.chatManager.getActiveChat();
+                if (activeChat) {
+                    const messages = activeChat.log.getActiveMessages();
+                    const lastMessage = messages[messages.length - 1];
+                    const secondToLastMessage = messages.length > 1 ? messages[messages.length - 2] : null;
 
-                // 3. Handle returning from a sub-agent call
-                if (activeChat.callStack.length > 0) {
-                    const lastMessage = activeChat.log.getLastMessage();
-                    // Check if the last message is a tool response or a final assistant message from the sub-agent
-                    if (lastMessage && (lastMessage.value.role === 'tool' || (lastMessage.value.role === 'assistant' && lastMessage.value.content))) {
-                        const handled = await this.handleAgentReturn(activeChat);
-                        if (handled) {
+                    // Only process the last assistant message for tools if it has content
+                    // and doesn't immediately follow a tool response (to prevent re-processing).
+                    if (lastMessage && lastMessage.value.role === 'assistant' && lastMessage.value.content && secondToLastMessage?.value.role !== 'tool') {
+                        const toolHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', lastMessage, activeChat);
+
+                        if (toolHandlerTookAction) {
+                            // Tool calls were found and processed. The handlers have added 'tool' role messages.
+                            // Now, we queue the next assistant turn to process the tool results.
+                            activeChat.log.addMessage({ role: 'assistant', content: null, agent: lastMessage.value.agent });
                             actionTaken = true;
+                            // Restart the loop to process the newly created pending message.
                             continue;
                         }
                     }
                 }
 
-                // 4. Handle idle state (e.g., for flows plugin)
-                if (!actionTaken) {
-                    const idleAction = await pluginManager.triggerSequentially('onResponseComplete', null, activeChat);
-                    if (idleAction) {
+                // 3. Handle idle state (e.g., for flows plugin)
+                if (activeChat) {
+                    const idleHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', null, activeChat);
+                    if (idleHandlerTookAction) {
                         actionTaken = true;
                         continue;
                     }
@@ -125,99 +132,19 @@ class ResponseProcessor {
     }
 
     /**
-     * Handles a completed assistant turn by checking for and executing tool/agent calls.
-     * @param {Chat} chat
-     * @param {Message} assistantMsg
-     * @returns {Promise<boolean>} True if an action was taken.
-     */
-    async handleCompletedAssistantTurn(chat, assistantMsg) {
-        const { toolCalls } = parseToolCalls(assistantMsg.value.content);
-        if (toolCalls.length === 0) return false;
-
-        // Separate agent calls from regular tool calls
-        const agentManager = this.app.agentManager;
-        const allAgentIds = new Set(agentManager.agents.map(a => a.id));
-        const agentCalls = toolCalls.filter(call => allAgentIds.has(call.name));
-        const standardToolCalls = toolCalls.filter(call => !allAgentIds.has(call.name));
-
-        // Prioritize agent calls. For now, we'll handle the first one if it exists.
-        // A more advanced implementation could handle multiple agent calls.
-        if (agentCalls.length > 0) {
-            const call = agentCalls[0];
-            const callingAgentId = assistantMsg.value.agent || 'agent-default';
-            const targetAgentId = call.name;
-
-            // Push state to the call stack
-            chat.callStack.push({
-                returnToAgentId: callingAgentId,
-                originalMessageId: assistantMsg.id,
-                toolCallId: call.id,
-            });
-
-            // Add a tool message representing the sub-agent's response
-            const prompt = call.params.prompt || '';
-            chat.log.addMessage({ role: 'user', content: prompt, agent: targetAgentId });
-            chat.log.addMessage({ role: 'assistant', content: null, agent: targetAgentId });
-            this.scheduleProcessing(this.app);
-            return true;
-        }
-
-        // If no agent calls, process standard tool calls
-        if (standardToolCalls.length > 0) {
-            const results = await pluginManager.triggerSequentiallyAsync('onToolCall', standardToolCalls, assistantMsg, chat);
-            const toolResults = results.flat().filter(Boolean);
-
-            if (toolResults.length > 0) {
-                let toolContents = '';
-                toolResults.forEach((tr) => {
-                    const inner = tr.error ? `<error>\n${tr.error}\n</error>` : `<content>\n${tr.content}\n</content>`;
-                    toolContents += `<dma:tool_response name="${tr.name}" tool_call_id="${tr.tool_call_id}">\n${inner}\n</dma:tool_response>\n`;
-                });
-                chat.log.addMessage({ role: 'tool', content: toolContents });
-                chat.log.addMessage({ role: 'assistant', content: null, agent: assistantMsg.value.agent });
-                this.scheduleProcessing(this.app);
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Handles the return from a sub-agent call.
-     * @param {Chat} chat
-     * @returns {Promise<boolean>} True if an action was taken.
-     */
-    async handleAgentReturn(chat) {
-        const lastMessage = chat.log.getLastMessage();
-        const returnInfo = chat.callStack.pop();
-
-        if (!returnInfo || !lastMessage) return false;
-
-        // The content for the tool_response is the final output from the sub-agent.
-        const result_content = lastMessage.value.content;
-
-        const toolResponse = {
-            role: 'tool',
-            content: `<dma:tool_response name="${lastMessage.value.agent}" tool_call_id="${returnInfo.toolCallId}">\n<content>\n${result_content}\n</content>\n</dma:tool_response>\n`,
-        };
-        chat.log.addMessage(toolResponse);
-
-        // Queue up the next turn for the original calling agent.
-        chat.log.addMessage({ role: 'assistant', content: null, agent: returnInfo.returnToAgentId });
-        this.scheduleProcessing(this.app);
-        return true;
-    }
-
-    /**
      * Processes a single pending assistant message by making an API call.
-     * @param {Chat} chat
-     * @param {Message} assistantMsg
+     * @param {Chat} chat - The chat object the message belongs to.
+     * @param {Message} assistantMsg - The pending assistant message to fill.
      * @private
      */
     async processMessage(chat, assistantMsg) {
         const app = this.app;
-        if (!app || assistantMsg.value.role !== 'assistant' || assistantMsg.value.content !== null) return;
+        if (!app) return;
+
+        if (assistantMsg.value.role !== 'assistant' || assistantMsg.value.content !== null) {
+            console.warn('Response processor asked to process an invalid message.', assistantMsg);
+            return;
+        }
 
         app.dom.stopButton.style.display = 'block';
         app.abortController = new AbortController();
@@ -225,21 +152,24 @@ class ResponseProcessor {
         try {
             const messages = chat.log.getHistoryBeforeMessage(assistantMsg);
             if (!messages) {
+                console.error("Could not find message history for processing.", assistantMsg);
                 assistantMsg.value.content = "Error: Could not reconstruct message history.";
                 chat.log.notify();
                 return;
             }
 
-            const agentId = assistantMsg.value.agent || (chat.callStack.length > 0 ? chat.callStack[chat.callStack.length - 1].returnToAgentId : 'agent-default');
+            const agentId = assistantMsg.value.agent;
             const agent = agentId ? app.agentManager.getAgent(agentId) : null;
             const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
+
+            // Construct the system prompt by allowing plugins to contribute.
             const finalSystemPrompt = await pluginManager.triggerAsync('onSystemPromptConstruct', effectiveConfig.systemPrompt, effectiveConfig, agent);
 
             if (finalSystemPrompt) {
                 messages.unshift({ role: 'system', content: finalSystemPrompt });
             }
 
-            const payload = {
+            let payload = {
                 model: effectiveConfig.model,
                 messages: messages,
                 stream: true,
@@ -248,12 +178,18 @@ class ResponseProcessor {
             };
 
             assistantMsg.value.model = payload.model;
+
+            const reader = await app.apiService.streamChat(
+                payload,
+                effectiveConfig.apiUrl,
+                effectiveConfig.apiKey,
+                app.abortController.signal
+            );
+
             assistantMsg.value.content = ''; // Start filling content
             chat.log.notify();
 
-            const reader = await app.apiService.streamChat(payload, effectiveConfig.apiUrl, effectiveConfig.apiKey, app.abortController.signal);
             const decoder = new TextDecoder();
-
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
@@ -265,11 +201,14 @@ class ResponseProcessor {
                     .map(line => {
                         try {
                             return JSON.parse(line);
-                        } catch (e) { return null; }
+                        } catch (e) {
+                            console.error("Failed to parse stream chunk:", line, e);
+                            return null;
+                        }
                     })
                     .filter(Boolean)
                     .map(json => json.choices[0].delta.content)
-                    .filter(Boolean);
+                    .filter(content => content);
 
                 if (deltas.length > 0) {
                     assistantMsg.value.content += deltas.join('');
@@ -282,22 +221,21 @@ class ResponseProcessor {
             } else {
                 assistantMsg.value.content += '\n\n[Aborted by user]';
             }
+            chat.log.notify();
         } finally {
             app.abortController = null;
             app.dom.stopButton.style.display = 'none';
-            chat.log.notify();
-            if (chat.title === 'New Chat' && !chat.log.getLastMessage()?.value.content?.includes('Aborted')) {
+            if (chat.title === 'New Chat') {
                 const firstUserMessage = chat.log.getActiveMessageValues().find(m => m.role === 'user');
                 if (firstUserMessage) {
                     chat.title = firstUserMessage.content.substring(0, 20) + '...';
                     this.app.chatManager.saveChats();
-                    if (this.app.activeView.id === chat.id) this.app.renderMainView();
+                    if (this.app.activeView.id === chat.id) {
+                        this.app.renderMainView();
+                    }
                 }
             }
             this.app.chatManager.renderChatList();
-            // Instead of breaking the loop, we schedule another processing cycle
-            // to handle the newly generated content (e.g., for tool calls).
-            this.scheduleProcessing(this.app);
         }
     }
 }
