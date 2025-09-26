@@ -391,7 +391,7 @@ class AgentManager {
         ];
 
         const effectiveConfig = this.getEffectiveApiConfig(agent.id);
-        const mcpServerUrl = effectiveConfig.mcpServer;
+        const mcpServerUrl = effectiveConfig.toolSettings.mcpServer;
         const tools = await this.app.mcp?.getTools(mcpServerUrl) || [];
 
         let settingsDefinition = [];
@@ -506,7 +506,7 @@ const agentsPlugin = {
                     // Get the effective config for the agent being edited
                     const effectiveConfig = agentManager.getEffectiveApiConfig(agent.id);
                     // If the updated tools belong to the agent we are viewing, refresh the editor
-                    if (effectiveConfig.mcpServer === e.detail.url) {
+                    if (effectiveConfig.toolSettings.mcpServer === e.detail.url) {
                         agentManager.initializeAgentEditor();
                     }
                 }

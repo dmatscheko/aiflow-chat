@@ -85,7 +85,6 @@ class AgentsCallPlugin {
 
         const agentManager = this.app.agentManager;
         const allAgentIds = new Set(agentManager.agents.map(a => a.id));
-
         const { toolCalls } = parseToolCalls(message.value.content);
         const agentCalls = toolCalls.filter(call => allAgentIds.has(call.name));
 
@@ -93,115 +92,139 @@ class AgentsCallPlugin {
             return false;
         }
 
+        let wasAborted = false;
+        for (const call of agentCalls) {
+            const wasCallAborted = await this._handleAgentCall(call, message, activeChat);
+            if (wasCallAborted) {
+                wasAborted = true;
+            }
+        }
+
+        if (wasAborted) {
+            return true; // Stop processing, don't queue the next turn.
+        }
+
+        // After all agent calls are handled, the turn is over.
+        // We return true to signify we've handled the message,
+        // but we do NOT queue another assistant turn.
+        return true;
+    }
+
+    /**
+     * Handles a single agent-as-tool call.
+     * @param {ToolCall} call - The tool call to process.
+     * @param {Message} message - The original message containing the tool call.
+     * @param {Chat} activeChat - The active chat instance.
+     * @returns {Promise<boolean>} A promise that resolves to true if the call was aborted, false otherwise.
+     * @private
+     */
+    async _handleAgentCall(call, message, activeChat) {
+        const agentManager = this.app.agentManager;
         const callingAgentId = message.value.agent || 'agent-default';
         const callingAgent = agentManager.getAgent(callingAgentId);
-        let wasAborted = false;
+        const targetAgent = agentManager.getAgent(call.name);
 
-        for (const call of agentCalls) {
-            const targetAgent = agentManager.getAgent(call.name);
+        // 1. Validate the call and check permissions first.
+        if (!callingAgent || !targetAgent) {
+            this._addErrorToolResponse(activeChat, message.id, call, 'Invalid agent specified.');
+            return false;
+        }
 
-            let toolContent = '';
-            let toolError = null;
+        const callingAgentConfig = agentManager.getEffectiveApiConfig(callingAgent.id);
+        const isAllowed = callingAgentConfig.agentCallSettings.allowAll || callingAgentConfig.agentCallSettings.allowed?.includes(targetAgent.id);
+        if (!isAllowed) {
+            this._addErrorToolResponse(activeChat, message.id, call, `Agent "${callingAgent.name}" is not permitted to call agent "${targetAgent.name}".`);
+            return false;
+        }
 
-            if (!callingAgent || !targetAgent) {
-                toolError = 'Invalid agent specified.';
-            } else {
-                const callingAgentConfig = agentManager.getEffectiveApiConfig(callingAgent.id);
-                const effectiveAgentCallSettings = callingAgentConfig.agentCallSettings;
-                const isAllowed = effectiveAgentCallSettings.allowAll || effectiveAgentCallSettings.allowed?.includes(targetAgent.id);
+        const prompt = call.params.prompt;
+        if (!prompt) {
+            this._addErrorToolResponse(activeChat, message.id, call, 'The "prompt" parameter is required when calling an agent.');
+            return false;
+        }
 
-                if (!isAllowed) {
-                    toolError = `Agent "${callingAgent.name}" is not permitted to call agent "${targetAgent.name}".`;
-                }
-            }
+        const abortController = new AbortController();
+        this.app.abortController = abortController; // Make it accessible to the stop button
 
-            const prompt = call.params.prompt;
-            if (!prompt) {
-                toolError = 'The "prompt" parameter is required when calling an agent.';
-            }
+        try {
+            this.app.dom.stopButton.style.display = 'block';
 
+            // 2. Now that validation is done, create the message and perform the call.
+            const targetAgentConfig = agentManager.getEffectiveApiConfig(targetAgent.id);
             const toolResponseMessage = {
                 role: 'tool',
                 content: '',
                 tool_call_id: call.id,
                 name: call.name,
                 agent: targetAgent.id,
-                model: null, // Will be populated after config is fetched
+                model: targetAgentConfig.model,
             };
-
             activeChat.log.addMessage(toolResponseMessage, message.id);
 
-            if (toolError) {
-                toolResponseMessage.content = `<error>${toolError}</error>`;
-                activeChat.log.notify();
-                continue;
-            }
-
-            try {
-                this.app.abortController = new AbortController();
-                this.app.dom.stopButton.style.display = 'block';
-
-                const targetAgentConfig = agentManager.getEffectiveApiConfig(targetAgent.id);
-                toolResponseMessage.model = targetAgentConfig.model; // Populate model name
-                const messages = [
+            const payload = {
+                model: targetAgentConfig.model,
+                messages: [
                     { role: 'system', content: targetAgentConfig.systemPrompt },
                     { role: 'user', content: prompt }
-                ];
+                ],
+                stream: true,
+                temperature: targetAgentConfig.temperature,
+                top_p: targetAgentConfig.top_p,
+            };
 
-                const payload = {
-                    model: targetAgentConfig.model,
-                    messages,
-                    stream: true,
-                    temperature: targetAgentConfig.temperature,
-                    top_p: targetAgentConfig.top_p,
-                };
+            const reader = await this.app.apiService.streamChat(
+                payload, targetAgentConfig.apiUrl, targetAgentConfig.apiKey, abortController.signal
+            );
 
-                const reader = await this.app.apiService.streamChat(
-                    payload,
-                    targetAgentConfig.apiUrl,
-                    targetAgentConfig.apiKey,
-                    this.app.abortController.signal
-                );
+            const decoder = new TextDecoder();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                const deltas = lines
+                    .map(line => line.replace(/^data: /, '').trim())
+                    .filter(line => line !== '' && line !== '[DONE]')
+                    .map(line => JSON.parse(line).choices[0].delta.content)
+                    .filter(Boolean);
 
-                const decoder = new TextDecoder();
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-                    const deltas = lines
-                        .map(line => line.replace(/^data: /, '').trim())
-                        .filter(line => line !== '' && line !== '[DONE]')
-                        .map(line => JSON.parse(line).choices[0].delta.content)
-                        .filter(Boolean);
-
-                    if (deltas.length > 0) {
-                        toolContent += deltas.join('');
-                        toolResponseMessage.content = toolContent;
-                        activeChat.log.notify();
-                    }
+                if (deltas.length > 0) {
+                    toolResponseMessage.content += deltas.join('');
+                    activeChat.log.notify();
                 }
-            } catch (error) {
-                if (error.name !== 'AbortError') {
-                    toolResponseMessage.content = `<error>An error occurred while calling the agent: ${error.message}</error>`;
-                } else {
-                    wasAborted = true;
-                    toolResponseMessage.content += '\n\n[Aborted by user]';
-                }
-                activeChat.log.notify();
-            } finally {
-                this.app.abortController = null;
-                this.app.dom.stopButton.style.display = 'none';
             }
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                toolResponseMessage.content += '\n\n[Aborted by user]';
+                activeChat.log.notify();
+                return true; // Signal that it was aborted.
+            } else {
+                toolResponseMessage.content = `<error>An error occurred while calling the agent: ${error.message}</error>`;
+                activeChat.log.notify();
+            }
+        } finally {
+            this.app.abortController = null;
+            this.app.dom.stopButton.style.display = 'none';
         }
+        return false; // Signal that it was not aborted.
+    }
 
-        if (wasAborted) {
-            return true; // Stop processing, don't queue next turn
-        }
-
-        activeChat.log.addMessage({ role: 'assistant', content: null, agent: callingAgentId });
-        this.app.responseProcessor.scheduleProcessing(this.app);
-        return true;
+    /**
+     * Adds a tool response message with a pre-formatted error.
+     * @param {Chat} activeChat
+     * @param {string} originalMessageId
+     * @param {ToolCall} call
+     * @param {string} errorMessage
+     * @private
+     */
+    _addErrorToolResponse(activeChat, originalMessageId, call, errorMessage) {
+        const toolResponseMessage = {
+            role: 'tool',
+            content: `<error>${errorMessage}</error>`,
+            tool_call_id: call.id,
+            name: call.name,
+        };
+        activeChat.log.addMessage(toolResponseMessage, originalMessageId);
     }
 }
 
