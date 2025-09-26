@@ -419,8 +419,8 @@ class AgentManager {
                         id: 'agent-refresh-tools', label: 'Refresh',
                         onClick: () => {
                             const effectiveConfig = this.getEffectiveApiConfig(agent.id);
-                            if (effectiveConfig.mcpServer) {
-                                this.app.mcp.getTools(effectiveConfig.mcpServer, true); // force=true
+                            if (effectiveConfig.toolSettings.mcpServer) {
+                                this.app.mcp.getTools(effectiveConfig.toolSettings.mcpServer, true); // force=true
                             } else {
                                 alert('Please set an MCP Server URL for this agent or the Default Agent first.');
                             }
