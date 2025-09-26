@@ -402,29 +402,22 @@ const mcpPluginDefinition = {
         return systemPrompt;
     },
 
-    async onResponseComplete(message, activeChat) {
-        // This handler is for tool calls. If there's no message, it's an idle check, so do nothing.
-        if (!message) {
-            return false;
-        }
-
+    async onToolCall(toolCalls, message, chat) {
         const app = mcpPluginSingleton.getApp();
         const agentId = message.value.agent || null;
         const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
         const mcpUrl = effectiveConfig.toolSettings.mcpServer;
-        if (!mcpUrl) return false;
+        if (!mcpUrl) return [];
 
-        const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (!tools || tools.length === 0) return false;
+        const availableTools = await mcpPluginSingleton.getTools(mcpUrl);
+        const availableToolNames = new Set(availableTools.map(t => t.name));
 
-        return await genericProcessToolCalls(
-            app,
-            activeChat,
-            message,
-            tools,
-            (call) => !call.name.endsWith('_agent'), // filter
-            (call, msg) => mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl) // executor
-        );
+        const mcpCalls = toolCalls.filter(call => availableToolNames.has(call.name));
+        if (mcpCalls.length === 0) return [];
+
+        const promises = mcpCalls.map(call => mcpPluginSingleton.executeMcpCall(call, message, mcpUrl));
+        const results = await Promise.all(promises);
+        return results;
     },
 
     onFormatMessageContent(contentEl, message) {

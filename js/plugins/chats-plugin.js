@@ -20,6 +20,7 @@ import { responseProcessor } from '../response-processor.js';
  * @property {string} draftMessage - The current draft message.
  * @property {string | null} agent - The ID of the active agent.
  * @property {string | null} flow - The ID of the active flow.
+ * @property {any[]} callStack - The agent call stack.
  */
 
 let appInstance = null;
@@ -61,6 +62,7 @@ class ChatManager {
                     draftMessage: chatData.draftMessage || '',
                     agent: chatData.agent || null,
                     flow: chatData.flow || null,
+                    callStack: chatData.callStack || [],
                 };
                 chat.log.subscribe(this.debouncedSave);
                 return chat;
@@ -80,6 +82,7 @@ class ChatManager {
             draftMessage: chat.draftMessage,
             agent: chat.agent,
             flow: chat.flow,
+            callStack: chat.callStack,
         }));
         localStorage.setItem('core_chat_logs', JSON.stringify(chatsToSave));
         localStorage.setItem('core_active_chat_id', this.activeChatId);
@@ -94,6 +97,7 @@ class ChatManager {
             draftMessage: '',
             agent: null,
             flow: null,
+            callStack: [],
         };
         newChat.log.subscribe(this.debouncedSave);
         this.chats.push(newChat);
@@ -113,6 +117,7 @@ class ChatManager {
             draftMessage: chatData.draftMessage || '',
             agent: chatData.agent || null,
             flow: chatData.flow || null,
+            callStack: chatData.callStack || [],
         };
         newChat.log.subscribe(this.debouncedSave);
         this.chats.push(newChat);
@@ -210,15 +215,18 @@ class ChatManager {
         const { isContinuation = false, agentId = null } = options;
         const activeChat = this.getActiveChat();
         if (!activeChat) return;
+
+        const finalAgentId = agentId || activeChat.agent || 'agent-default';
+
         if (!isContinuation) {
             const userInput = this.app.dom.messageInput.value.trim();
             if (!userInput) return;
-            activeChat.log.addMessage({ role: 'user', content: userInput });
+            activeChat.log.addMessage({ role: 'user', content: userInput, agent: finalAgentId });
             this.app.dom.messageInput.value = '';
             activeChat.draftMessage = '';
             this.saveChats();
         }
-        const finalAgentId = agentId || activeChat.agent || null;
+
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
         responseProcessor.scheduleProcessing(this.app);
     }
@@ -338,16 +346,16 @@ class ChatUI {
         roleEl.textContent = message.value.role;
         titleTextEl.appendChild(roleEl);
 
-        if (message.value.role === 'assistant' || message.value.role === 'tool') {
+        if (message.value.agent && (message.value.role === 'user' || message.value.role === 'assistant' || message.value.role === 'tool')) {
             const details = [];
-        
-            if (message.value.agent && this.agentManager) {
+
+            if (this.agentManager) {
                 const agent = this.agentManager.getAgent(message.value.agent);
                 if (agent?.name) details.push(agent.name);
             }
-            
+
             if (message.value.model) details.push(message.value.model);
-            
+
             if (details.length > 0) {
                 const detailsEl = document.createElement('span');
                 detailsEl.className = 'message-details';
