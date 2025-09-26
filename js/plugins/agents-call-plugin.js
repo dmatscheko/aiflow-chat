@@ -95,6 +95,7 @@ class AgentsCallPlugin {
 
         const callingAgentId = message.value.agent || 'agent-default';
         const callingAgent = agentManager.getAgent(callingAgentId);
+        let wasAborted = false;
 
         for (const call of agentCalls) {
             const targetAgent = agentManager.getAgent(call.name);
@@ -184,6 +185,7 @@ class AgentsCallPlugin {
                 if (error.name !== 'AbortError') {
                     toolResponseMessage.content = `<error>An error occurred while calling the agent: ${error.message}</error>`;
                 } else {
+                    wasAborted = true;
                     toolResponseMessage.content += '\n\n[Aborted by user]';
                 }
                 activeChat.log.notify();
@@ -191,6 +193,10 @@ class AgentsCallPlugin {
                 this.app.abortController = null;
                 this.app.dom.stopButton.style.display = 'none';
             }
+        }
+
+        if (wasAborted) {
+            return true; // Stop processing, don't queue next turn
         }
 
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: callingAgentId });
