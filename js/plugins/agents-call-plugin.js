@@ -105,9 +105,10 @@ class AgentsCallPlugin {
             return true; // Stop processing, don't queue the next turn.
         }
 
-        // After all agent calls are handled, the turn is over.
-        // We return true to signify we've handled the message,
-        // but we do NOT queue another assistant turn.
+        // After all agent calls are handled, queue up the next step for the AI.
+        const callingAgentId = message.value.agent || 'agent-default';
+        activeChat.log.addMessage({ role: 'assistant', content: null, agent: callingAgentId });
+        this.app.responseProcessor.scheduleProcessing(this.app);
         return true;
     }
 
