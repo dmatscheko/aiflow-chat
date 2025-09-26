@@ -39,15 +39,16 @@ class AgentsCallPlugin {
     }
 
     /**
-     * @param {object} payload
+     * @param {string} systemPrompt
      * @param {object} allSettings
      * @param {Agent} agent
+     * @returns {Promise<string>}
      */
-    async beforeApiCall(payload, allSettings, agent) {
+    async onSystemPromptConstruct(systemPrompt, allSettings, agent) {
         const effectiveAgentCallSettings = allSettings.agentCallSettings;
 
         if (!effectiveAgentCallSettings) {
-            return payload;
+            return systemPrompt;
         }
 
         const agentManager = this.app.agentManager;
@@ -57,7 +58,7 @@ class AgentsCallPlugin {
             : allAgents.filter(a => effectiveAgentCallSettings.allowed?.includes(a.id));
 
         if (callableAgents.length === 0) {
-            return payload;
+            return systemPrompt;
         }
 
         const agentsSection = callableAgents.map((a, idx) => {
@@ -65,12 +66,12 @@ class AgentsCallPlugin {
             return `${idx + 1}. **${a.name} (ID: ${a.id})**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${a.id}\`\n - **Arguments** (parameter name): \n   - \`prompt\`: The user's request to the agent. (type: string)(required)`;
         }).join('\n');
 
-        const systemPrompt = payload.messages.find(m => m.role === 'system');
         if (systemPrompt) {
-            systemPrompt.content += '\n\n' + agentCallsHeader + agentsSection;
+            systemPrompt += '\n\n';
         }
+        systemPrompt += agentCallsHeader + agentsSection;
 
-        return payload;
+        return systemPrompt;
     }
 
     /**
@@ -233,6 +234,6 @@ const agentsCallPluginInstance = new AgentsCallPlugin();
 pluginManager.register({
     name: 'Agents Call Plugin',
     onAppInit: (app) => agentsCallPluginInstance.init(app),
-    beforeApiCall: (payload, allSettings, agent) => agentsCallPluginInstance.beforeApiCall(payload, allSettings, agent),
+    onSystemPromptConstruct: (systemPrompt, allSettings, agent) => agentsCallPluginInstance.onSystemPromptConstruct(systemPrompt, allSettings, agent),
     onResponseComplete: (message, activeChat) => agentsCallPluginInstance.onResponseComplete(message, activeChat),
 });
