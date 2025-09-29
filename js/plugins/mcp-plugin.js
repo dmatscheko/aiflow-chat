@@ -5,7 +5,6 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { processToolCalls as genericProcessToolCalls } from '../tool-processor.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -234,9 +233,8 @@ class McpPlugin {
      * @param {Message} message
      * @param {string} mcpUrl
      * @returns {Promise<import('../tool-processor.js').ToolResult>}
-     * @private
      */
-    async #executeMcpCall(call, message, mcpUrl) {
+    async executeMcpCall(call, message, mcpUrl) {
         const agentId = message.value.agent;
         const agent = agentId ? this.#app.agentManager.getAgent(agentId) : null;
         const defaultAgent = this.#app.agentManager.getAgent('agent-default');
@@ -342,24 +340,6 @@ class McpPlugin {
         }).join('\n');
     }
 
-    /**
-     * Gets the application instance.
-     * @returns {App}
-     */
-    getApp() {
-        return this.#app;
-    }
-
-    /**
-     * A wrapper for the private #executeMcpCall method to be used in the plugin hooks.
-     * @param {import('../tool-processor.js').ToolCall} call
-     * @param {Message} message
-     * @param {string} mcpUrl
-     * @returns {Promise<import('../tool-processor.js').ToolResult>}
-     */
-    executeMcpCall(call, message, mcpUrl) {
-        return this.#executeMcpCall(call, message, mcpUrl);
-    }
 }
 
 // --- Singleton Instance ---
@@ -376,9 +356,7 @@ const mcpPluginDefinition = {
 
     onAppInit(app) {
         mcpPluginSingleton.init(app);
-        app.mcp = {
-            getTools: mcpPluginSingleton.getTools.bind(mcpPluginSingleton)
-        };
+        app.mcp = mcpPluginSingleton;
     },
 
     async onSystemPromptConstruct(systemPrompt, allSettings, agent) {
@@ -400,31 +378,6 @@ const mcpPluginDefinition = {
             systemPrompt += toolsHeader + dynamicToolsSection;
         }
         return systemPrompt;
-    },
-
-    async onResponseComplete(message, activeChat) {
-        // This handler is for tool calls. If there's no message, it's an idle check, so do nothing.
-        if (!message) {
-            return false;
-        }
-
-        const app = mcpPluginSingleton.getApp();
-        const agentId = message.value.agent || null;
-        const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
-        const mcpUrl = effectiveConfig.toolSettings.mcpServer;
-        if (!mcpUrl) return false;
-
-        const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (!tools || tools.length === 0) return false;
-
-        return await genericProcessToolCalls(
-            app,
-            activeChat,
-            message,
-            tools,
-            (call) => !call.name.endsWith('_agent'), // filter
-            (call, msg) => mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl) // executor
-        );
     },
 
     onFormatMessageContent(contentEl, message) {

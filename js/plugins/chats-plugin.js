@@ -59,7 +59,7 @@ class ChatManager {
                     title: chatData.title,
                     log: ChatLog.fromJSON(chatData.log),
                     draftMessage: chatData.draftMessage || '',
-                    agent: chatData.agent || null,
+                    agent: chatData.agent || 'agent-default',
                     flow: chatData.flow || null,
                 };
                 chat.log.subscribe(this.debouncedSave);
@@ -92,7 +92,7 @@ class ChatManager {
             title: 'New Chat',
             log: new ChatLog(),
             draftMessage: '',
-            agent: null,
+            agent: 'agent-default',
             flow: null,
         };
         newChat.log.subscribe(this.debouncedSave);
@@ -111,7 +111,7 @@ class ChatManager {
             title: chatData.title || 'Imported Chat',
             log: ChatLog.fromJSON(chatData.log),
             draftMessage: chatData.draftMessage || '',
-            agent: chatData.agent || null,
+            agent: chatData.agent || 'agent-default',
             flow: chatData.flow || null,
         };
         newChat.log.subscribe(this.debouncedSave);
@@ -218,7 +218,7 @@ class ChatManager {
             activeChat.draftMessage = '';
             this.saveChats();
         }
-        const finalAgentId = agentId || activeChat.agent || null;
+        const finalAgentId = agentId || activeChat.agent || 'agent-default';
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
         responseProcessor.scheduleProcessing(this.app);
     }

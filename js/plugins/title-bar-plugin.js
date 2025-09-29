@@ -176,6 +176,9 @@ const titleBarPlugin = {
                 existingTitleBar.remove();
             }
 
+            const agent = appInstance.agentManager.getAgent(chat.agent);
+            const agentName = agent ? agent.name : 'Unknown Agent';
+
             const titleParts = [
                 {
                     text: chat.title,
@@ -185,7 +188,8 @@ const titleBarPlugin = {
                         appInstance.chatManager.renderChatList();
                         appInstance.renderMainView(); // Re-render to update title bar
                     }
-                }
+                },
+                ` (Agent: ${agentName})`
             ];
 
             const controls = [
@@ -197,7 +201,7 @@ const titleBarPlugin = {
                         if (agentSelector) {
                             agentSelector.addEventListener('change', (e) => {
                                 const selectedAgentId = e.target.value;
-                                chat.agent = selectedAgentId === 'agent-default' ? null : selectedAgentId;
+                                chat.agent = selectedAgentId;
                                 appInstance.chatManager.debouncedSave();
                                 appInstance.renderMainView(); // Re-render to update title
                             });

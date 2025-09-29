@@ -17,6 +17,7 @@ import './plugins/agents-plugin.js';
 import './plugins/agents-call-plugin.js';
 import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
+import './plugins/tool-orchestrator-plugin.js';
 import './plugins/formatting-plugin.js';
 import './plugins/title-bar-plugin.js';
 import './plugins/mobile-style-plugin.js';
