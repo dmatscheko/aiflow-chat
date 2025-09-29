@@ -5,6 +5,7 @@
 'use strict';
 
 import { pluginManager } from './plugin-manager.js';
+import { parseToolCalls } from './tool-processor.js';
 
 /**
  * @typedef {import('./main.js').App} App
@@ -85,15 +86,23 @@ class ResponseProcessor {
                     // Highest priority: process any pending AI response.
                     await this.processMessage(chat, message);
 
-                    // Immediately give plugins a chance to react to the new message.
-                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', message, chat);
-                    if (aHandlerTookAction) {
-                        // A plugin (e.g., mcp-plugin) took action, so new work might exist.
-                        // Restart the loop to handle it immediately.
+                    // After processing, check for and handle any tool calls.
+                    const toolsWereCalled = await this._handleToolCalls(message, chat);
+                    if (toolsWereCalled) {
+                        // If tools were called, queue the next assistant turn and restart.
+                        const agentId = message.value.agent;
+                        chat.log.addMessage({ role: 'assistant', content: null, agent: agentId });
                         continue;
                     }
-                    // If no handler acted on this specific message, we still continue,
-                    // as there might be other pending messages.
+
+                    // If no tools were called, allow other plugins to react to the completed message.
+                    // This is for features like flows that might trigger on a final text response.
+                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', message, chat);
+                    if (aHandlerTookAction) {
+                        continue; // A plugin took action, so restart the loop.
+                    }
+
+                    // If no handler acted, we still continue to the next pending message or idle check.
                     continue;
                 }
 
@@ -108,10 +117,7 @@ class ResponseProcessor {
                     }
                 }
 
-                // If we reach this point, it means:
-                // 1. There were no pending messages to process.
-                // 2. No plugin took any action on the idle state.
-                // Therefore, all work is truly complete.
+                // If we reach this point, all work is truly complete.
                 break;
             }
         } catch (error) {
@@ -119,6 +125,52 @@ class ResponseProcessor {
         } finally {
             this.isProcessing = false;
         }
+    }
+
+    /**
+     * Parses and executes all tool calls in a message, consolidating the results.
+     * @param {Message} message - The message containing the tool calls.
+     * @param {Chat} chat - The chat the message belongs to.
+     * @returns {Promise<boolean>} True if tool calls were processed, false otherwise.
+     * @private
+     */
+    async _handleToolCalls(message, chat) {
+        if (!message.value.content) {
+            return false;
+        }
+
+        const { toolCalls } = parseToolCalls(message.value.content);
+        if (toolCalls.length === 0) {
+            return false;
+        }
+
+        const promises = toolCalls.map(call => {
+            const executor = pluginManager.getToolExecutor(call.name);
+            if (executor) {
+                return executor(call, message, chat);
+            }
+            return Promise.resolve({
+                name: call.name,
+                tool_call_id: call.id,
+                error: `No executor found for tool "${call.name}".`,
+            });
+        });
+
+        const results = await Promise.all(promises);
+
+        let toolContents = '';
+        results.forEach((tr) => {
+            const inner = tr.error
+                ? `<error>\n${tr.error}\n</error>`
+                : `<content>\n${tr.content}\n</content>`;
+            toolContents += `<dma:tool_response name="${tr.name}" tool_call_id="${tr.tool_call_id}">\n${inner}\n</dma:tool_response>\n`;
+        });
+
+        if (toolContents) {
+            chat.log.addMessage({ role: 'tool', content: toolContents });
+            return true;
+        }
+        return false;
     }
 
     /**

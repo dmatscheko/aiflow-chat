@@ -61,6 +61,23 @@ class PluginManager {
     }
 
     /**
+     * Finds and returns the first available tool executor for a given tool name.
+     * @param {string} toolName - The name of the tool.
+     * @returns {Function | null} The executor function or null if not found.
+     */
+    getToolExecutor(toolName) {
+        for (const plugin of this.registeredPlugins) {
+            if (typeof plugin.getToolExecutor === 'function') {
+                const executor = plugin.getToolExecutor(toolName);
+                if (typeof executor === 'function') {
+                    return executor;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Registers a plugin, allowing it to add callbacks to various hooks.
      * @param {Plugin} plugin - The plugin object. The keys are hook names (e.g., 'onAppInit') and values are the callback functions.
      * @example

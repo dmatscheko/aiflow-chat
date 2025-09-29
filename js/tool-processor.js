@@ -15,6 +15,7 @@
  * @property {string} id - A unique identifier for the tool call.
  * @property {string} name - The name of the tool being called.
  * @property {object} params - The parameters for the tool call.
+ * @property {object} attributes - All attributes from the tool call tag.
  */
 
 /**
@@ -36,7 +37,23 @@
  * @property {object} [inputSchema] - The JSON schema for the tool's input.
  */
 
-// --- Tool Call Processing Functions (adapted from mcp-plugin.js) ---
+// --- Tool Call Processing Functions ---
+
+/**
+ * Parses all attributes from a string.
+ * @param {string} attrString - The string of attributes (e.g., 'name="foo" id="123"').
+ * @returns {object} An object of key-value pairs for the attributes.
+ * @private
+ */
+function _parseAttributes(attrString) {
+    const attrs = {};
+    const attrRegex = /(\w+)="([^"]*)"/g;
+    let match;
+    while ((match = attrRegex.exec(attrString)) !== null) {
+        attrs[match[1]] = match[2];
+    }
+    return attrs;
+}
 
 /**
  * Parses tool calls from an assistant's message content.
@@ -48,9 +65,8 @@ function parseToolCalls(content, tools = []) {
     const toolCalls = [];
     const positions = [];
     const isSelfClosings = [];
-    // This regex handles both self-closing tags and tags with content.
+    // This regex handles both self-closing tags (<tag .../>) and tags with content (<tag ...>...</tag>).
     const functionCallRegex = /<dma:tool_call\s+([^>]+?)\/>|<dma:tool_call\s+([^>]*?)>([\s\S]*?)<\/dma:tool_call\s*>/gi;
-    const nameRegex = /name="([^"]*)"/;
     const paramsRegex = /<parameter\s+name="([^"]*)">([\s\S]*?)<\/parameter>/g;
 
     if (!content) return { toolCalls, positions, isSelfClosings };
@@ -61,13 +77,13 @@ function parseToolCalls(content, tools = []) {
 
         const [, selfAttrs, openAttrs, innerContent] = match;
         const isSelfClosing = innerContent === undefined;
-        const attributes = isSelfClosing ? selfAttrs : openAttrs;
+        const attributesString = isSelfClosing ? selfAttrs : openAttrs;
         const contentInner = isSelfClosing ? '' : innerContent;
 
-        const nameMatch = nameRegex.exec(attributes);
-        if (!nameMatch) continue;
+        const attributes = _parseAttributes(attributesString);
+        if (!attributes.name) continue;
 
-        const [, name] = nameMatch;
+        const name = attributes.name;
         const params = {};
         const toolDef = tools.find(t => t.name === name);
 
@@ -95,7 +111,13 @@ function parseToolCalls(content, tools = []) {
                 params[paramName] = value;
             }
         }
-        const call = { id: `call_${Date.now()}_${toolCalls.length}`, name, params };
+
+        const call = {
+            id: attributes.tool_call_id || `call_${Date.now()}_${toolCalls.length}`,
+            name: name,
+            params: params,
+            attributes: attributes,
+        };
         toolCalls.push(call);
         positions.push({ start: startIndex, end: endIndex });
         isSelfClosings.push(isSelfClosing);

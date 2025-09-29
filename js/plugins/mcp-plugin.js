@@ -402,29 +402,26 @@ const mcpPluginDefinition = {
         return systemPrompt;
     },
 
-    async onResponseComplete(message, activeChat) {
-        // This handler is for tool calls. If there's no message, it's an idle check, so do nothing.
-        if (!message) {
-            return false;
+    getToolExecutor(toolName) {
+        // Check if the tool exists in the cache for any of the configured MCP servers.
+        // This is a simplification; a more robust implementation might check against
+        // the specific MCP server relevant to the current agent context.
+        for (const tools of mcpPluginSingleton.getApp().mcp.#toolCache.values()) {
+            if (tools.some(tool => tool.name === toolName)) {
+                // Return the executor function.
+                return (call, message) => {
+                    const app = mcpPluginSingleton.getApp();
+                    const agentId = message.value.agent || null;
+                    const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
+                    const mcpUrl = effectiveConfig.toolSettings.mcpServer;
+                    if (!mcpUrl) {
+                        return Promise.resolve({ name: call.name, tool_call_id: call.id, error: 'MCP server not configured for this agent.' });
+                    }
+                    return mcpPluginSingleton.executeMcpCall(call, message, mcpUrl);
+                };
+            }
         }
-
-        const app = mcpPluginSingleton.getApp();
-        const agentId = message.value.agent || null;
-        const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
-        const mcpUrl = effectiveConfig.toolSettings.mcpServer;
-        if (!mcpUrl) return false;
-
-        const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (!tools || tools.length === 0) return false;
-
-        return await genericProcessToolCalls(
-            app,
-            activeChat,
-            message,
-            tools,
-            (call) => !call.name.endsWith('_agent'), // filter
-            (call, msg) => mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl) // executor
-        );
+        return null; // Not an MCP tool.
     },
 
     onFormatMessageContent(contentEl, message) {
