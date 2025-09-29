@@ -218,7 +218,7 @@ class ChatManager {
             activeChat.draftMessage = '';
             this.saveChats();
         }
-        const finalAgentId = agentId || activeChat.agent || null;
+        const finalAgentId = agentId || activeChat.agent || 'agent-default';
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
         responseProcessor.scheduleProcessing(this.app);
     }

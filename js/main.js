@@ -9,6 +9,7 @@ import { ApiService } from './api-service.js';
 import { pluginManager } from './plugin-manager.js';
 import { SettingsManager } from './settings-manager.js';
 import { responseProcessor } from './response-processor.js';
+import { ToolCallManager } from './tool-call-manager.js';
 
 // Load plugins
 import './plugins/chats-plugin.js';
@@ -77,6 +78,8 @@ class App {
         this.settingsManager = null;
         /** @type {import('./response-processor.js').ResponseProcessor} */
         this.responseProcessor = responseProcessor;
+        /** @type {ToolCallManager} */
+        this.toolCallManager = new ToolCallManager(this);
 
         this.initDOM();
 

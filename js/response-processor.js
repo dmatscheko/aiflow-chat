@@ -85,15 +85,19 @@ class ResponseProcessor {
                     // Highest priority: process any pending AI response.
                     await this.processMessage(chat, message);
 
-                    // Immediately give plugins a chance to react to the new message.
-                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', message, chat);
-                    if (aHandlerTookAction) {
-                        // A plugin (e.g., mcp-plugin) took action, so new work might exist.
-                        // Restart the loop to handle it immediately.
+                    // Give plugins a chance to react and queue tool calls.
+                    await pluginManager.triggerSequentially('onResponseComplete', message, chat);
+
+                    // If any plugin queued up tool calls, process them now.
+                    if (this.app.toolCallManager.callQueue.length > 0) {
+                        // The manager will execute the calls and, upon completion
+                        // of the entire stack, will queue the next assistant turn.
+                        await this.app.toolCallManager.processQueue();
+                        // Loop again to pick up the newly queued assistant turn.
                         continue;
                     }
-                    // If no handler acted on this specific message, we still continue,
-                    // as there might be other pending messages.
+
+                    // Continue the loop to check for other pending messages.
                     continue;
                 }
 

@@ -5,7 +5,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { processToolCalls as genericProcessToolCalls } from '../tool-processor.js';
+import { parseToolCalls } from '../tool-processor.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -403,13 +403,16 @@ const mcpPluginDefinition = {
     },
 
     async onResponseComplete(message, activeChat) {
-        // This handler is for tool calls. If there's no message, it's an idle check, so do nothing.
-        if (!message) {
+        if (!message || !message.value.content) {
             return false;
         }
 
         const app = mcpPluginSingleton.getApp();
-        const agentId = message.value.agent || null;
+        if (app.toolCallManager.callStack.length > 0) {
+            return false;
+        }
+
+        const agentId = message.value.agent || 'agent-default';
         const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
         const mcpUrl = effectiveConfig.toolSettings.mcpServer;
         if (!mcpUrl) return false;
@@ -417,14 +420,37 @@ const mcpPluginDefinition = {
         const tools = await mcpPluginSingleton.getTools(mcpUrl);
         if (!tools || tools.length === 0) return false;
 
-        return await genericProcessToolCalls(
-            app,
-            activeChat,
-            message,
-            tools,
-            (call) => !call.name.endsWith('_agent'), // filter
-            (call, msg) => mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl) // executor
-        );
+        const { toolCalls } = parseToolCalls(message.value.content, tools);
+        const mcpToolNames = new Set(tools.map(t => t.name));
+        const applicableCalls = toolCalls.filter(call => mcpToolNames.has(call.name));
+
+        if (applicableCalls.length === 0) {
+            return false;
+        }
+
+        app.toolCallManager.startTurn(agentId, applicableCalls.length);
+
+        for (const call of applicableCalls) {
+            app.toolCallManager.addCall({
+                call,
+                message,
+                chat: activeChat,
+                executor: async (c, m, chat) => {
+                    const result = await mcpPluginSingleton.executeMcpCall(c, m, mcpUrl);
+                    const inner = result.error
+                        ? `<error>\n${result.error}\n</error>`
+                        : `<content>\n${result.content}\n</content>`;
+                    chat.log.addMessage({
+                        role: 'tool',
+                        content: `<dma:tool_response name="${result.name}" tool_call_id="${result.tool_call_id}">\n${inner}\n</dma:tool_response>\n`,
+                        tool_call_id: result.tool_call_id,
+                        name: result.name,
+                    });
+                },
+            });
+        }
+
+        return true;
     },
 
     onFormatMessageContent(contentEl, message) {
