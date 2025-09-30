@@ -351,6 +351,14 @@ class McpPlugin {
     }
 
     /**
+     * Gets all cached tool schemas.
+     * @returns {IterableIterator<ToolSchema[]>}
+     */
+    getAllCachedTools() {
+        return this.#toolCache.values();
+    }
+
+    /**
      * A wrapper for the private #executeMcpCall method to be used in the plugin hooks.
      * @param {import('../tool-processor.js').ToolCall} call
      * @param {Message} message
@@ -404,9 +412,7 @@ const mcpPluginDefinition = {
 
     getToolExecutor(toolName) {
         // Check if the tool exists in the cache for any of the configured MCP servers.
-        // This is a simplification; a more robust implementation might check against
-        // the specific MCP server relevant to the current agent context.
-        for (const tools of mcpPluginSingleton.getApp().mcp.#toolCache.values()) {
+        for (const tools of mcpPluginSingleton.getAllCachedTools()) {
             if (tools.some(tool => tool.name === toolName)) {
                 // Return the executor function.
                 return (call, message) => {
