@@ -93,7 +93,7 @@ export function parseToolCalls(content) {
         }
 
         const call = {
-            tool_call_id: `call_${generateUniqueId()}`,
+            tool_call_id: generateUniqueId('call'),
             name,
             params,
         };
@@ -147,7 +147,7 @@ class ToolCallManager {
         this.updateMessageWithToolCallIDs(sourceMessage, parsedCalls);
 
         const job = {
-            id: `job_${generateUniqueId()}`,
+            id: generateUniqueId('job'),
             calls: parsedCalls.map(p => p.call),
             sourceMessage,
             chat,
@@ -222,9 +222,9 @@ class ToolCallManager {
             const agentIds = new Set(this.app.agentManager.agents.map(a => a.id));
 
             if (agentIds.has(call.name) && agentPlugin?.executeCall) {
-                await agentPlugin.executeCall(call, job);
+                await agentPlugin.executeCall(call, job, this.app);
             } else if (mcpPlugin?.executeCall) {
-                await mcpPlugin.executeCall(call, job);
+                await mcpPlugin.executeCall(call, job, this.app);
             } else {
                 throw new Error(`No handler found for tool "${call.name}".`);
             }

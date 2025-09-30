@@ -52,14 +52,15 @@ class AgentsCallPlugin {
      * completion of the initial agent call.
      * @param {ToolCall} call - The agent tool call to execute.
      * @param {ToolCallJob} job - The job this call belongs to.
+     * @param {App} app - The main application instance.
      */
-    async executeCall(call, job) {
+    async executeCall(call, job, app) {
         const { sourceMessage, chat } = job;
-        const agentManager = this.app.agentManager;
+        const agentManager = app.agentManager;
         const callingAgentId = sourceMessage.value.agent || 'agent-default';
         const targetAgent = agentManager.getAgent(call.name);
 
-        const validationError = this._validateAgentCall(callingAgentId, targetAgent, call);
+        const validationError = this._validateAgentCall(callingAgentId, targetAgent, call, app);
         if (validationError) {
             toolCallManager.notifyCallComplete(job.id, {
                 name: call.name,
@@ -70,7 +71,7 @@ class AgentsCallPlugin {
             return;
         }
 
-        const { finalContent, error } = await this._streamAgentResponse(call, targetAgent, chat);
+        const { finalContent, error } = await this._streamAgentResponse(call, targetAgent, chat, app);
 
         // Notify the manager that this call is complete. This will create the <tool> message.
         toolCallManager.notifyCallComplete(job.id, {
@@ -99,11 +100,12 @@ class AgentsCallPlugin {
      * @param {string} callingAgentId - The ID of the agent making the call.
      * @param {Agent} targetAgent - The agent being called.
      * @param {ToolCall} call - The tool call object.
+     * @param {App} app - The main application instance.
      * @returns {string|null} An error message if validation fails, otherwise null.
      * @private
      */
-    _validateAgentCall(callingAgentId, targetAgent, call) {
-        const agentManager = this.app.agentManager;
+    _validateAgentCall(callingAgentId, targetAgent, call, app) {
+        const agentManager = app.agentManager;
         const callingAgent = agentManager.getAgent(callingAgentId);
 
         if (!callingAgent || !targetAgent) {
@@ -128,14 +130,15 @@ class AgentsCallPlugin {
      * @param {ToolCall} call - The tool call to execute.
      * @param {Agent} targetAgent - The agent to call.
      * @param {import('../main.js').Chat} chat - The active chat.
+     * @param {App} app - The main application instance.
      * @returns {Promise<{finalContent: string, error: string|null}>} The streamed content and any error.
      * @private
      */
-    async _streamAgentResponse(call, targetAgent, chat) {
-        const agentManager = this.app.agentManager;
+    async _streamAgentResponse(call, targetAgent, chat, app) {
+        const agentManager = app.agentManager;
         const abortController = new AbortController();
-        this.app.abortController = abortController;
-        this.app.dom.stopButton.style.display = 'block';
+        app.abortController = abortController;
+        app.dom.stopButton.style.display = 'block';
 
         let finalContent = '';
         let error = null;
@@ -153,7 +156,7 @@ class AgentsCallPlugin {
                 top_p: targetAgentConfig.top_p,
             };
 
-            const reader = await this.app.apiService.streamChat(
+            const reader = await app.apiService.streamChat(
                 payload, targetAgentConfig.apiUrl, targetAgentConfig.apiKey, abortController.signal
             );
 
@@ -187,8 +190,8 @@ class AgentsCallPlugin {
                 error = err.message;
             }
         } finally {
-            this.app.abortController = null;
-            this.app.dom.stopButton.style.display = 'none';
+            app.abortController = null;
+            app.dom.stopButton.style.display = 'none';
         }
 
         return { finalContent, error };
@@ -210,7 +213,7 @@ class AgentsCallPlugin {
         const agentManager = this.app.agentManager;
         const allAgents = agentManager.agents;
         const callableAgents = effectiveAgentCallSettings.allowAll
-            ? allAgents.filter(a => a.id !== agent?.id)
+            ? allAgents
             : allAgents.filter(a => effectiveAgentCallSettings.allowed?.includes(a.id));
 
         if (callableAgents.length === 0) {

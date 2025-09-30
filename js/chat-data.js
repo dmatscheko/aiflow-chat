@@ -49,7 +49,7 @@ class Message {
      */
     constructor(value, id = null) {
         /** @type {string} */
-        this.id = id || `msg_${generateUniqueId()}`;
+        this.id = id || generateUniqueId('msg');
         /** @type {MessageValue} */
         this.value = value;
         /**

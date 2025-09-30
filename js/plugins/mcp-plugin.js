@@ -68,11 +68,12 @@ class McpPlugin {
      * makes the call to the MCP server, and reports the result back to the manager.
      * @param {ToolCall} call - The tool call to execute.
      * @param {ToolCallJob} job - The job this call belongs to.
+     * @param {App} app - The main application instance.
      */
-    async executeCall(call, job) {
+    async executeCall(call, job, app) {
         const { sourceMessage } = job;
         const agentId = sourceMessage.value.agent || null;
-        const effectiveConfig = this.app.agentManager.getEffectiveApiConfig(agentId);
+        const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
         const mcpUrl = effectiveConfig.toolSettings?.mcpServer;
 
         let result;
@@ -84,7 +85,7 @@ class McpPlugin {
                 error: 'MCP server URL is not configured for the active agent.',
             };
         } else {
-            result = await this.performMcpCall(call, sourceMessage, mcpUrl);
+            result = await this.performMcpCall(call, sourceMessage, mcpUrl, app);
         }
 
         toolCallManager.notifyCallComplete(job.id, result);
@@ -95,13 +96,14 @@ class McpPlugin {
      * @param {ToolCall} call - The tool call to execute.
      * @param {Message} message - The message containing the tool call.
      * @param {string} mcpUrl - The URL of the MCP server.
+     * @param {App} app - The main application instance.
      * @returns {Promise<ToolResult>} The result of the tool execution.
      * @private
      */
-    async performMcpCall(call, message, mcpUrl) {
+    async performMcpCall(call, message, mcpUrl, app) {
         const agentId = message.value.agent;
-        const agent = agentId ? this.app.agentManager.getAgent(agentId) : null;
-        const defaultAgent = this.app.agentManager.getAgent('agent-default');
+        const agent = agentId ? app.agentManager.getAgent(agentId) : null;
+        const defaultAgent = app.agentManager.getAgent('agent-default');
         let effectiveToolSettings = defaultAgent.toolSettings;
         if (agent?.useCustomToolSettings) {
             effectiveToolSettings = agent.toolSettings;
