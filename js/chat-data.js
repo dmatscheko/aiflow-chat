@@ -45,11 +45,11 @@ import { generateUniqueId } from './utils.js';
 class Message {
     /**
      * @param {MessageValue} value - The message value, e.g., `{ role: 'user', content: 'Hello' }`.
-     * @param {string} [id=null] - An existing ID to use. If null, a new one is generated.
+     * @param {string} id - The unique ID for the message.
      */
-    constructor(value, id = null) {
+    constructor(value, id) {
         /** @type {string} */
-        this.id = id || generateUniqueId('msg');
+        this.id = id;
         /** @type {MessageValue} */
         this.value = value;
         /**
@@ -100,11 +100,10 @@ class Alternatives {
 
     /**
      * Adds a new message to the list of alternatives and sets it as the active one.
-     * @param {MessageValue} value - The value for the new message.
-     * @returns {Message} The newly created message instance.
+     * @param {Message} newMessage - The pre-constructed message instance to add.
+     * @returns {Message} The message instance that was added.
      */
-    addMessage(value) {
-        const newMessage = new Message(value);
+    addMessage(newMessage) {
         this.activeMessageIndex = this.messages.push(newMessage) - 1;
         return newMessage;
     }
@@ -145,9 +144,23 @@ export class ChatLog {
     }
 
     /**
-     * Adds a message to the chat log.
-     * If a parentMessageId is provided, it adds the message as a reply to that specific parent.
-     * Otherwise, it adds it to the last message in the currently active conversation path.
+     * Recursively gathers all message IDs into a set.
+     * @param {Alternatives} alternatives - The alternatives object to scan.
+     * @param {Set<string>} ids - The set to add the IDs to.
+     * @private
+     */
+    #getAllMessageIds(alternatives, ids) {
+        if (!alternatives || !Array.isArray(alternatives.messages)) return;
+        for (const message of alternatives.messages) {
+            ids.add(message.id);
+            if (message.answerAlternatives) {
+                this.#getAllMessageIds(message.answerAlternatives, ids);
+            }
+        }
+    }
+
+    /**
+     * Adds a message to the chat log, ensuring it has a unique ID.
      * @param {MessageValue} value - The value of the message to add.
      * @param {string | null} [parentMessageId=null] - The ID of the message to reply to.
      * @returns {Message | null} The newly added message instance, or null if the parent wasn't found.
@@ -164,17 +177,21 @@ export class ChatLog {
             parentMessage = this.getLastMessage();
         }
 
-        let newMessage;
+        const existingIds = new Set();
+        if (this.rootAlternatives) {
+            this.#getAllMessageIds(this.rootAlternatives, existingIds);
+        }
+        const newId = generateUniqueId('msg', existingIds);
+        const newMessage = new Message(value, newId);
+
         if (!parentMessage) {
-            // This is the first message in the chat.
             this.rootAlternatives = new Alternatives();
-            newMessage = this.rootAlternatives.addMessage(value);
+            this.rootAlternatives.addMessage(newMessage);
         } else {
-            // Add the new message as an answer to the determined parent.
             if (!parentMessage.answerAlternatives) {
                 parentMessage.answerAlternatives = new Alternatives();
             }
-            newMessage = parentMessage.answerAlternatives.addMessage(value);
+            parentMessage.answerAlternatives.addMessage(newMessage);
         }
         this.notify();
         return newMessage;
@@ -191,6 +208,40 @@ export class ChatLog {
             current = current.getActiveAnswer();
         }
         return current;
+    }
+
+    /**
+     * Returns an array of all message values in the active path.
+     * @returns {MessageValue[]}
+     */
+    getActiveMessageValues() {
+        const result = [];
+        if (!this.rootAlternatives) {
+            return result;
+        }
+        let current = this.rootAlternatives.getActiveMessage();
+        while (current) {
+            result.push(current.value);
+            current = current.getActiveAnswer();
+        }
+        return result;
+    }
+
+    /**
+     * Returns an array of all message instances in the active path.
+     * @returns {Message[]}
+     */
+    getActiveMessages() {
+        const result = [];
+        if (!this.rootAlternatives) {
+            return result;
+        }
+        let current = this.rootAlternatives.getActiveMessage();
+        while (current) {
+            result.push(current);
+            current = current.getActiveAnswer();
+        }
+        return result;
     }
 
     /**
@@ -310,7 +361,14 @@ export class ChatLog {
     addAlternative(existingMessage, newContent) {
         const alternatives = this.findAlternatives(existingMessage);
         if (alternatives) {
-            const newMessage = alternatives.addMessage(newContent);
+            const existingIds = new Set();
+            if (this.rootAlternatives) {
+                this.#getAllMessageIds(this.rootAlternatives, existingIds);
+            }
+            const newId = generateUniqueId('msg', existingIds);
+            const newMessage = new Message(newContent, newId);
+
+            alternatives.addMessage(newMessage);
             this.notify();
             return newMessage;
         }
@@ -380,6 +438,8 @@ export class ChatLog {
 
     /**
      * Creates a ChatLog instance from a serialized JSON object.
+     * This method is backward-compatible and will generate unique IDs for messages
+     * from older data formats that may not have them.
      * @param {SerializedAlternatives | null} jsonData - The serialized data to load from.
      * @returns {ChatLog} A new ChatLog instance populated with the provided data.
      */
@@ -387,12 +447,38 @@ export class ChatLog {
         const chatLog = new ChatLog();
         if (!jsonData) return chatLog;
 
+        const existingIds = new Set();
+
+        // First, perform a pre-scan to gather all existing IDs from the file.
+        // This ensures that newly generated IDs for old messages don't conflict.
+        const collectExistingIds = (altData) => {
+            if (!altData || !Array.isArray(altData.messages)) return;
+            for (const msgData of altData.messages) {
+                if (msgData.id) {
+                    existingIds.add(msgData.id);
+                }
+                if (msgData.answerAlternatives) {
+                    collectExistingIds(msgData.answerAlternatives);
+                }
+            }
+        };
+        collectExistingIds(jsonData);
+
+        // Recursively build the message tree from the raw data.
         const buildAlternatives = (altData) => {
             const alternatives = new Alternatives();
             alternatives.activeMessageIndex = altData.activeMessageIndex;
             alternatives.messages = altData.messages.map(msgData => {
-                // Pass the existing ID to the constructor to maintain it
-                const message = new Message(msgData.value, msgData.id);
+                let messageId = msgData.id;
+                // If a message has no ID (from an old format), generate a new unique one.
+                if (!messageId) {
+                    messageId = generateUniqueId('msg', existingIds);
+                    existingIds.add(messageId); // Add the new ID to the set to avoid local collisions.
+                }
+
+                // Pass the guaranteed-to-exist ID to the constructor.
+                const message = new Message(msgData.value, messageId);
+
                 if (msgData.answerAlternatives) {
                     message.answerAlternatives = buildAlternatives(msgData.answerAlternatives);
                 }

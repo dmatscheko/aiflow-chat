@@ -73,8 +73,8 @@ class AgentsCallPlugin {
 
         const { finalContent, error } = await this._streamAgentResponse(call, targetAgent, chat, app);
 
-        // Notify the manager that this call is complete. This will create the <tool> message.
-        toolCallManager.notifyCallComplete(job.id, {
+        // Notify the manager that this call is complete and get the new tool message.
+        const toolResponseMessage = toolCallManager.notifyCallComplete(job.id, {
             name: call.name,
             tool_call_id: call.tool_call_id,
             content: finalContent,
@@ -84,13 +84,11 @@ class AgentsCallPlugin {
         // Check for nested calls in the agent's response and create a new job if needed.
         const nestedParsedCalls = parseToolCalls(finalContent);
         if (nestedParsedCalls.length > 0) {
-            // Find the 'tool' message that was just added by notifyCallComplete.
-            // It's an answer to the original message, identified by the tool_call_id.
-            const toolResponseMessage = chat.log.findMessageByToolCallId(call.tool_call_id, sourceMessage);
             if (toolResponseMessage) {
+                // The new tool message becomes the source for any nested calls.
                 toolCallManager.addJob(nestedParsedCalls, toolResponseMessage, chat);
             } else {
-                console.error(`[AgentsCallPlugin] Could not find the tool response message for ${call.tool_call_id} to attach nested calls.`);
+                console.error(`[AgentsCallPlugin] Could not find the tool response message for ${call.tool_call_id} to attach nested calls, because notifyCallComplete returned null.`);
             }
         }
     }
@@ -170,8 +168,12 @@ class AgentsCallPlugin {
                     .map(line => line.replace(/^data: /, '').trim())
                     .filter(line => line !== '' && line !== '[DONE]')
                     .map(line => {
-                        try { return JSON.parse(line).choices[0].delta.content; }
-                        catch { return null; }
+                        try {
+                            return JSON.parse(line).choices[0].delta.content;
+                        } catch (e) {
+                            console.error('Error parsing stream chunk:', line, e);
+                            return null;
+                        }
                     })
                     .filter(Boolean);
 

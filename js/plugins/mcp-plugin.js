@@ -77,6 +77,7 @@ class McpPlugin {
         const mcpUrl = effectiveConfig.toolSettings?.mcpServer;
 
         let result;
+
         if (!mcpUrl) {
             result = {
                 name: call.name,
@@ -84,24 +85,10 @@ class McpPlugin {
                 content: null,
                 error: 'MCP server URL is not configured for the active agent.',
             };
-        } else {
-            result = await this.performMcpCall(call, sourceMessage, mcpUrl, app);
+            toolCallManager.notifyCallComplete(job.id, result);
+            return;
         }
 
-        toolCallManager.notifyCallComplete(job.id, result);
-    }
-
-    /**
-     * Performs the actual tool call to the MCP server, including permission checks.
-     * @param {ToolCall} call - The tool call to execute.
-     * @param {Message} message - The message containing the tool call.
-     * @param {string} mcpUrl - The URL of the MCP server.
-     * @param {App} app - The main application instance.
-     * @returns {Promise<ToolResult>} The result of the tool execution.
-     * @private
-     */
-    async performMcpCall(call, message, mcpUrl, app) {
-        const agentId = message.value.agent;
         const agent = agentId ? app.agentManager.getAgent(agentId) : null;
         const defaultAgent = app.agentManager.getAgent('agent-default');
         let effectiveToolSettings = defaultAgent.toolSettings;
@@ -111,25 +98,30 @@ class McpPlugin {
 
         const isAllowed = effectiveToolSettings.allowAll || effectiveToolSettings.allowed?.includes(call.name);
         if (!isAllowed) {
-            return { name: call.name, tool_call_id: call.tool_call_id, content: null, error: `Tool "${call.name}" is not enabled for the current agent.` };
+            result = { name: call.name, tool_call_id: call.tool_call_id, content: null, error: `Tool "${call.name}" is not enabled for the current agent.` };
+            toolCallManager.notifyCallComplete(job.id, result);
+            return;
         }
 
         try {
-            const result = await this.mcpJsonRpc(mcpUrl, 'tools/call', { name: call.name, arguments: call.params });
-            const content = result.content !== undefined ? JSON.stringify(result.content, null, 2) : null;
+            const mcpResult = await this.mcpJsonRpc(mcpUrl, 'tools/call', { name: call.name, arguments: call.params });
+            const content = mcpResult.content !== undefined ? JSON.stringify(mcpResult.content, null, 2) : null;
 
-            if (result.isError) {
-                return { name: call.name, tool_call_id: call.tool_call_id, content: null, error: content };
+            if (mcpResult.isError) {
+                result = { name: call.name, tool_call_id: call.tool_call_id, content: null, error: content };
+            } else {
+                if (call.name === 'web_search' || call.name === 'browse_page' || call.name.startsWith('x_')) {
+                    if (!sourceMessage.metadata) sourceMessage.metadata = {};
+                    sourceMessage.metadata.sources = mcpResult.sources || [];
+                }
+                result = { name: call.name, tool_call_id: call.tool_call_id, content: content, error: null };
             }
-            if (call.name === 'web_search' || call.name === 'browse_page' || call.name.startsWith('x_')) {
-                if (!message.metadata) message.metadata = {};
-                message.metadata.sources = result.sources || [];
-            }
-            return { name: call.name, tool_call_id: call.tool_call_id, content: content, error: null };
         } catch (err) {
             console.error('MCP: Tool execution error', err);
-            return { name: call.name, tool_call_id: call.tool_call_id, content: null, error: err.message || 'Unknown error during tool execution.' };
+            result = { name: call.name, tool_call_id: call.tool_call_id, content: null, error: err.message || 'Unknown error during tool execution.' };
         }
+
+        toolCallManager.notifyCallComplete(job.id, result);
     }
 
     /**
@@ -245,7 +237,7 @@ class McpPlugin {
         const body = { jsonrpc: '2.0', method, params };
         if (!isNotification) body.id = `mcp_${Date.now()}`;
 
-        const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+        const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
         const sessionId = this.sessionCache.get(url);
         if (sessionId) headers['mcp-session-id'] = sessionId;
 

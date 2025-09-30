@@ -217,22 +217,27 @@ class ToolCallManager {
      */
     async dispatchCall(call, job) {
         try {
-            const agentPlugin = pluginManager.plugins.find(p => p.name === 'Agents Call Plugin')?.instance;
-            const mcpPlugin = pluginManager.plugins.find(p => p.name === 'MCP Plugin')?.instance;
             const agentIds = new Set(this.app.agentManager.agents.map(a => a.id));
+            let plugin;
 
-            if (agentIds.has(call.name) && agentPlugin?.executeCall) {
-                await agentPlugin.executeCall(call, job, this.app);
-            } else if (mcpPlugin?.executeCall) {
-                await mcpPlugin.executeCall(call, job, this.app);
+            if (agentIds.has(call.name)) {
+                // This is an agent-as-tool call
+                plugin = pluginManager.plugins.find(p => p.name === 'Agents Call Plugin');
             } else {
-                throw new Error(`No handler found for tool "${call.name}".`);
+                // This is a standard tool call (MCP)
+                plugin = pluginManager.plugins.find(p => p.name === 'MCP Plugin');
+            }
+
+            if (plugin && plugin.instance && typeof plugin.instance.executeCall === 'function') {
+                await plugin.instance.executeCall(call, job, this.app);
+            } else {
+                throw new Error(`No handler plugin found for tool "${call.name}".`);
             }
         } catch (error) {
             console.error(`[ToolCallManager] Error dispatching call ${call.tool_call_id}:`, error);
             const result = {
                 name: call.name,
-                tool_call_id: call.id,
+                tool_call_id: call.tool_call_id,
                 content: null,
                 error: error.message,
             };
@@ -246,14 +251,15 @@ class ToolCallManager {
      * checks if the entire job is finished.
      * @param {string} jobId - The ID of the job the call belonged to.
      * @param {ToolResult} result - The result of the tool execution.
+     * @returns {Message | null} The newly created tool message, or null if the job was not found.
      */
     notifyCallComplete(jobId, result) {
         const job = this.jobStack.find(j => j.id === jobId);
         if (!job) {
-            return;
+            return null;
         }
 
-        job.chat.log.addMessage({
+        const toolResponseMessage = job.chat.log.addMessage({
             role: 'tool',
             content: result.error ? `<error>${result.error}</error>` : result.content,
             name: result.name,
@@ -265,6 +271,7 @@ class ToolCallManager {
         if (job.completedCalls.size === job.calls.length) {
             this.finishJob(job);
         }
+        return toolResponseMessage;
     }
 
     /**
