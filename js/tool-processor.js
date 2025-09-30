@@ -6,8 +6,6 @@
 
 /**
  * @typedef {import('./chat-data.js').Message} Message
- * @typedef {import('./main.js').App} App
- * @typedef {import('./main.js').Chat} Chat
  */
 
 /**
@@ -15,6 +13,14 @@
  * @property {string} id - A unique identifier for the tool call.
  * @property {string} name - The name of the tool being called.
  * @property {object} params - The parameters for the tool call.
+ */
+
+/**
+ * @typedef {object} ToolResult
+ * @property {string} name - The name of the tool that was called.
+ * @property {string} tool_call_id - The ID of the tool call this is a result for.
+ * @property {string | null} content - The stringified result of the tool execution.
+ * @property {string | null} error - A string describing an error, if one occurred.
  */
 
 /**
@@ -36,8 +42,6 @@
  * @property {object} [inputSchema] - The JSON schema for the tool's input.
  */
 
-// --- Tool Call Processing Functions (adapted from mcp-plugin.js) ---
-
 /**
  * Parses tool calls from an assistant's message content.
  * @param {string | null} content - The message content to parse.
@@ -48,8 +52,8 @@ function parseToolCalls(content, tools = []) {
     const toolCalls = [];
     const positions = [];
     const isSelfClosings = [];
-    // This regex handles both self-closing tags and tags with content.
-    const functionCallRegex = /<dma:tool_call\s+([^>]+?)\/>|<dma:tool_call\s+([^>]*?)>([\s\S]*?)<\/dma:tool_call\s*>/gi;
+    // This regex handles both self-closing tags (e.g., <.../>) and tags with content.
+    const functionCallRegex = /<dma:tool_call\s+(.*?)\s*\/>|<dma:tool_call\s+([^>]*?)>([\s\S]*?)<\/dma:tool_call\s*>/gi;
     const nameRegex = /name="([^"]*)"/;
     const paramsRegex = /<parameter\s+name="([^"]*)">([\s\S]*?)<\/parameter>/g;
 
@@ -104,87 +108,4 @@ function parseToolCalls(content, tools = []) {
     return { toolCalls, positions, isSelfClosings };
 }
 
-
-/**
- * @callback ToolFilterCallback
- * @param {ToolCall} call - The tool call to check.
- * @returns {boolean} Whether the tool call should be processed.
- */
-
-/**
- * @typedef {object} ToolResult
- * @property {string} name - The name of the tool that was called.
- * @property {string} tool_call_id - The ID of the tool call this is a result for.
- * @property {string | null} content - The stringified result of the tool execution.
- * @property {string | null} error - A string describing an error, if one occurred.
- */
-
-/**
- * @callback ToolExecuteCallback
- * @param {ToolCall} call - The tool call to execute.
- * @param {Message} message - The message containing the tool call.
- * @returns {Promise<ToolResult>} A promise that resolves to the result of the tool execution.
- */
-
-/**
- * A generic function to process tool calls found in a message.
- * It parses, filters, executes, and then formats the results into a new
- * 'tool' role message. If tool calls were processed, it queues up the next
- * assistant turn by creating a new pending message.
- * @param {App} app - The main application instance.
- * @param {Chat} chat - The chat object this message belongs to.
- * @param {Message} message - The message containing tool calls.
- * @param {ToolSchema[]} tools - A list of available tools with their schemas.
- * @param {ToolFilterCallback} filterCallback - A function to filter which tool calls to process.
- * @param {ToolExecuteCallback} executeCallback - An async function to execute a tool call and return the result.
- * @returns {Promise<boolean>} A promise that resolves to `true` if tool calls were processed and a new turn was queued, `false` otherwise.
- */
-async function processToolCalls(app, chat, message, tools, filterCallback, executeCallback) {
-    const { toolCalls, positions, isSelfClosings } = parseToolCalls(message.value.content, tools);
-    if (toolCalls.length === 0) return false;
-
-    const applicableCalls = toolCalls.filter(filterCallback);
-    if (applicableCalls.length === 0) return false;
-
-    const promises = applicableCalls.map(call => executeCallback(call, message));
-    const results = await Promise.all(promises);
-
-    // Inject tool_call_id into the original message content
-    let content = message.value.content;
-    for (let i = positions.length - 1; i >= 0; i--) {
-        const call = toolCalls[i];
-        if (!applicableCalls.find(ac => ac.id === call.id)) continue;
-
-        const pos = positions[i];
-        const gtIndex = content.indexOf('>', pos.start);
-        let startTag = content.slice(pos.start, gtIndex + 1);
-
-        startTag = startTag.replace(/\s+tool_call_id\s*=\s*["'][^"']*["']/g, '');
-        const insert = ` tool_call_id="${call.id}"`;
-        const endSlice = isSelfClosings[i] ? -2 : -1;
-        const endTag = isSelfClosings[i] ? '/>' : '>';
-        startTag = startTag.slice(0, endSlice) + insert + endTag;
-        content = content.slice(0, pos.start) + startTag + content.slice(gtIndex + 1);
-    }
-    message.value.content = content;
-    message.cache = null; // Invalidate cache to force re-render
-    chat.log.notify(); // Notify UI to re-render the message
-
-    let toolContents = '';
-    results.forEach((tr) => {
-        const inner = tr.error
-            ? `<error>\n${tr.error}\n</error>`
-            : `<content>\n${tr.content}\n</content>`;
-        toolContents += `<dma:tool_response name="${tr.name}" tool_call_id="${tr.tool_call_id}">\n${inner}\n</dma:tool_response>\n`;
-    });
-
-    if (toolContents) {
-        chat.log.addMessage({ role: 'tool', content: toolContents });
-        // After adding tool results, queue up the next step for the AI.
-        chat.log.addMessage({ role: 'assistant', content: null });
-        return true;
-    }
-    return false;
-}
-
-export { parseToolCalls, processToolCalls };
+export { parseToolCalls };
