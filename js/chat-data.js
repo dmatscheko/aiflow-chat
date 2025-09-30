@@ -274,6 +274,88 @@ export class ChatLog {
     }
 
     /**
+     * Finds the Alternatives object that contains the given message.
+     * @param {Message} targetMessage The message to find.
+     * @returns {Alternatives | null}
+     */
+    findAlternatives(targetMessage) {
+        if (!this.rootAlternatives) {
+            return null;
+        }
+
+        const find = (alternatives) => {
+            if (alternatives.messages.includes(targetMessage)) {
+                return alternatives;
+            }
+            for (const message of alternatives.messages) {
+                if (message.answerAlternatives) {
+                    const found = find(message.answerAlternatives);
+                    if (found) {
+                        return found;
+                    }
+                }
+            }
+            return null;
+        };
+
+        return find(this.rootAlternatives);
+    }
+
+    /**
+     * Adds a new message as an alternative to an existing message.
+     * @param {Message} existingMessage - The message to add an alternative to.
+     * @param {MessageValue} newContent - The content for the new alternative message.
+     * @returns {Message} The newly created message.
+     */
+    addAlternative(existingMessage, newContent) {
+        const alternatives = this.findAlternatives(existingMessage);
+        if (alternatives) {
+            const newMessage = alternatives.addMessage(newContent);
+            this.notify();
+            return newMessage;
+        }
+        return null;
+    }
+
+    /**
+     * Deletes a message or a message alternative and all its children.
+     * @param {Message} messageToDelete - The message to delete.
+     */
+    deleteMessage(messageToDelete) {
+        const alternatives = this.findAlternatives(messageToDelete);
+        if (!alternatives) return;
+
+        const index = alternatives.messages.indexOf(messageToDelete);
+        if (index > -1) {
+            alternatives.messages.splice(index, 1);
+            if (alternatives.messages.length === 0) {
+                // If this was the last alternative, we need to remove the whole `Alternatives` node.
+                // This is complex and currently left for the UI to handle by not displaying empty nodes.
+            } else if (alternatives.activeMessageIndex >= index) {
+                alternatives.activeMessageIndex = Math.max(0, alternatives.activeMessageIndex - 1);
+            }
+            this.notify();
+        }
+    }
+
+    /**
+     * Cycles through the alternatives for a given message.
+     * @param {Message} message - The message to cycle alternatives for.
+     * @param {'next' | 'prev'} direction - The direction to cycle.
+     */
+    cycleAlternatives(message, direction) {
+        const alternatives = this.findAlternatives(message);
+        if (alternatives && alternatives.messages.length > 1) {
+            if (direction === 'next') {
+                alternatives.activeMessageIndex = (alternatives.activeMessageIndex + 1) % alternatives.messages.length;
+            } else {
+                alternatives.activeMessageIndex = (alternatives.activeMessageIndex - 1 + alternatives.messages.length) % alternatives.messages.length;
+            }
+            this.notify();
+        }
+    }
+
+    /**
      * Subscribes a callback function to be called on any change.
      * @param {() => void} callback
      */
