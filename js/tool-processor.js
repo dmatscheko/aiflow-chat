@@ -340,7 +340,7 @@ class ToolCallManager {
             newTag = newTag.slice(0, endSlice) + insert + newTag.slice(endSlice);
 
             newContentParts.push(newTag);
-ax = startIndex + fullMatch.length;
+            lastIndex = startIndex + fullMatch.length;
         }
 
         // Add the remaining part of the string
