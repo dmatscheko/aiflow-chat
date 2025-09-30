@@ -147,10 +147,19 @@ class AgentsCallPlugin {
             this.app.dom.stopButton.style.display = 'block';
 
             const targetAgentConfig = agentManager.getEffectiveApiConfig(targetAgent.id);
+
+            // Construct the full, dynamic system prompt for the target agent, allowing it to use its own tools.
+            const finalSystemPrompt = await pluginManager.triggerAsync(
+                'onSystemPromptConstruct',
+                targetAgentConfig.systemPrompt,
+                targetAgentConfig,
+                targetAgent
+            );
+
             const payload = {
                 model: targetAgentConfig.model,
                 messages: [
-                    { role: 'system', content: targetAgentConfig.systemPrompt },
+                    { role: 'system', content: finalSystemPrompt },
                     { role: 'user', content: prompt }
                 ],
                 stream: true,
