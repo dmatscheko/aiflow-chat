@@ -5,6 +5,7 @@
 'use strict';
 
 import { pluginManager } from './plugin-manager.js';
+import { parseToolCalls, toolCallManager } from './tool-processor.js';
 
 /**
  * @typedef {import('./main.js').App} App
@@ -14,9 +15,9 @@ import { pluginManager } from './plugin-manager.js';
 
 /**
  * Manages the queue and execution of AI response generation.
- * It scans for pending messages, processes them, and then allows plugins
- * to handle the completed response, potentially creating more work. This cycle
- * continues until no more work is pending and no plugin takes further action.
+ * It scans for pending messages, generates AI responses, and then hands off
+ * to the ToolCallManager if tool calls are present. This cycle continues
+ * until no more work is pending.
  * @class
  */
 class ResponseProcessor {
@@ -63,13 +64,13 @@ class ResponseProcessor {
 
     /**
      * The main processing loop. It robustly handles a cycle of AI responses and
-     * subsequent plugin actions.
-     * 1. It first prioritizes and processes any pending AI message.
-     * 2. After processing, it immediately triggers `onResponseComplete` for that message.
-     * 3. If a handler acts, the loop restarts to handle any new work.
-     * 4. If no messages are pending, it triggers `onResponseComplete` with a null context
-     *    to allow plugins to act on the idle state.
-     * 5. The loop only terminates when a full pass results in no pending messages and no
+     * subsequent actions.
+     * 1. It finds and processes a pending AI message.
+     * 2. After the response is generated, it checks for tool calls.
+     * 3. If tool calls exist, it delegates them to the `toolCallManager`. The manager
+     *    is then responsible for the rest of the flow, including queuing the next AI turn.
+     * 4. If no tool calls exist, it triggers `onResponseComplete` for other plugins (e.g., flows).
+     * 5. The loop terminates when a full pass results in no pending messages and no
      *    plugin actions.
      * @private
      */
@@ -82,36 +83,38 @@ class ResponseProcessor {
                 const workItem = this._findNextPendingMessage();
                 if (workItem) {
                     const { chat, message } = workItem;
-                    // Highest priority: process any pending AI response.
+                    // 1. Generate the AI response for the pending message.
                     await this.processMessage(chat, message);
 
-                    // Immediately give plugins a chance to react to the new message.
-                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', message, chat);
-                    if (aHandlerTookAction) {
-                        // A plugin (e.g., mcp-plugin) took action, so new work might exist.
-                        // Restart the loop to handle it immediately.
+                    // 2. After generation, check for tool calls in the response.
+                    const parsedCalls = parseToolCalls(message.value.content);
+                    if (parsedCalls.length > 0) {
+                        // 3. If tools are found, delegate to the ToolCallManager.
+                        // The manager will handle execution and queue the next AI turn.
+                        toolCallManager.addJob(parsedCalls, message, chat);
+                        // The manager works async. Continue the loop for other potential work.
                         continue;
                     }
-                    // If no handler acted on this specific message, we still continue,
-                    // as there might be other pending messages.
-                    continue;
+
+                    // 4. If no tool calls, trigger general onResponseComplete for other plugins.
+                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', message, chat);
+                    if (aHandlerTookAction) {
+                        continue; // A plugin took action, so restart the loop.
+                    }
+                    continue; // Continue to check for more pending messages.
                 }
 
-                // If we're here, the AI is idle. Check if any plugin wants to take a follow-up action.
+                // If AI is idle, check if any plugin wants to take a follow-up action (e.g., flows).
                 const activeChat = this.app.chatManager.getActiveChat();
                 if (activeChat) {
                     // Trigger with a null message to signify an idle-state check.
                     const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', null, activeChat);
                     if (aHandlerTookAction) {
-                        // A plugin (e.g., flows-plugin) took action. Loop again.
-                        continue;
+                        continue; // A plugin took action. Loop again.
                     }
                 }
 
-                // If we reach this point, it means:
-                // 1. There were no pending messages to process.
-                // 2. No plugin took any action on the idle state.
-                // Therefore, all work is truly complete.
+                // All work is complete.
                 break;
             }
         } catch (error) {

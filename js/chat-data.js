@@ -1,9 +1,12 @@
 /**
  * @fileoverview Defines the data structures for the chat history.
- * This file is self-contained and has no external dependencies.
+ * This file includes the core classes for managing messages and their
+ * relationships in a tree structure, supporting branching conversations.
  */
 
 'use strict';
+
+import { generateUniqueId } from './utils.js';
 
 /**
  * @typedef {'user' | 'assistant' | 'system' | 'tool'} MessageRole
@@ -15,11 +18,14 @@
  * @property {string | null} content - The content of the message.
  * @property {string} [agent] - The ID of the agent used for this message.
  * @property {string} [model] - The model used for the message.
+ * @property {string} [name] - For 'tool' role, the name of the tool that was called.
+ * @property {string} [tool_call_id] - For 'tool' role, the ID of the tool call this message is a response to.
  * @property {object} [metadata] - Optional metadata, e.g., for sources.
  */
 
 /**
  * @typedef {object} SerializedMessage
+ * @property {string} id - The unique ID of the message.
  * @property {MessageValue} value - The value of the message.
  * @property {SerializedAlternatives | null} answerAlternatives - The serialized answer alternatives.
  */
@@ -32,15 +38,18 @@
 
 /**
  * Represents a single message in the chat log tree.
- * Each message is a node that contains its value and can have a child set of
- * alternative answers, forming a tree structure.
+ * Each message is a node that contains its value, a unique ID, and can have a
+ * child set of alternative answers, forming a tree structure.
  * @class
  */
 class Message {
     /**
      * @param {MessageValue} value - The message value, e.g., `{ role: 'user', content: 'Hello' }`.
+     * @param {string} [id=null] - An existing ID to use. If null, a new one is generated.
      */
-    constructor(value) {
+    constructor(value, id = null) {
+        /** @type {string} */
+        this.id = id || `msg_${generateUniqueId()}`;
         /** @type {MessageValue} */
         this.value = value;
         /**
@@ -48,6 +57,11 @@ class Message {
          * @type {Alternatives | null}
          */
         this.answerAlternatives = null;
+        /**
+         * A lightweight cache for rendered content to avoid re-processing.
+         * @type {any}
+         */
+        this.cache = null;
     }
 
     /**
@@ -64,6 +78,7 @@ class Message {
      */
     toJSON() {
         return {
+            id: this.id,
             value: this.value,
             answerAlternatives: this.answerAlternatives ? this.answerAlternatives.toJSON() : null,
         };
@@ -123,38 +138,43 @@ class Alternatives {
  */
 export class ChatLog {
     constructor() {
-        /**
-         * The root of the message tree.
-         * @type {Alternatives | null}
-         */
+        /** @type {Alternatives | null} */
         this.rootAlternatives = null;
-        /**
-         * A list of callback functions to be called on any change.
-         * @type {Array<() => void>}
-         */
+        /** @type {Array<() => void>} */
         this.subscribers = [];
     }
 
     /**
-     * Adds a message to the active conversational path.
-     * If it's the first message, it creates the root. Otherwise, it adds it as an
-     * answer to the last message in the active path.
+     * Adds a message to the chat log.
+     * If a parentMessageId is provided, it adds the message as a reply to that specific parent.
+     * Otherwise, it adds it to the last message in the currently active conversation path.
      * @param {MessageValue} value - The value of the message to add.
-     * @returns {Message} The newly added message instance.
+     * @param {string | null} [parentMessageId=null] - The ID of the message to reply to.
+     * @returns {Message | null} The newly added message instance, or null if the parent wasn't found.
      */
-    addMessage(value) {
-        const lastMessage = this.getLastMessage();
+    addMessage(value, parentMessageId = null) {
+        let parentMessage;
+        if (parentMessageId) {
+            parentMessage = this.findMessageById(parentMessageId);
+            if (!parentMessage) {
+                console.error(`Failed to add message: Parent with ID ${parentMessageId} not found.`);
+                return null;
+            }
+        } else {
+            parentMessage = this.getLastMessage();
+        }
+
         let newMessage;
-        if (!lastMessage) {
+        if (!parentMessage) {
             // This is the first message in the chat.
             this.rootAlternatives = new Alternatives();
             newMessage = this.rootAlternatives.addMessage(value);
         } else {
-            // Add the new message as an answer to the last message.
-            if (!lastMessage.answerAlternatives) {
-                lastMessage.answerAlternatives = new Alternatives();
+            // Add the new message as an answer to the determined parent.
+            if (!parentMessage.answerAlternatives) {
+                parentMessage.answerAlternatives = new Alternatives();
             }
-            newMessage = lastMessage.answerAlternatives.addMessage(value);
+            newMessage = parentMessage.answerAlternatives.addMessage(value);
         }
         this.notify();
         return newMessage;
@@ -165,9 +185,7 @@ export class ChatLog {
      * @returns {Message | null}
      */
     getLastMessage() {
-        if (!this.rootAlternatives) {
-            return null;
-        }
+        if (!this.rootAlternatives) return null;
         let current = this.rootAlternatives.getActiveMessage();
         while (current && current.getActiveAnswer()) {
             current = current.getActiveAnswer();
@@ -176,37 +194,40 @@ export class ChatLog {
     }
 
     /**
-     * Returns an array of all message values in the active path.
-     * @returns {MessageValue[]}
+     * Finds a message anywhere in the log by its unique ID.
+     * @param {string} messageId - The ID of the message to find.
+     * @returns {Message | null} The message instance, or null if not found.
      */
-    getActiveMessageValues() {
-        const result = [];
-        if (!this.rootAlternatives) {
-            return result;
-        }
-        let current = this.rootAlternatives.getActiveMessage();
-        while (current) {
-            result.push(current.value);
-            current = current.getActiveAnswer();
-        }
-        return result;
+    findMessageById(messageId) {
+        if (!this.rootAlternatives) return null;
+
+        const find = (alternatives) => {
+            for (const message of alternatives.messages) {
+                if (message.id === messageId) return message;
+                if (message.answerAlternatives) {
+                    const found = find(message.answerAlternatives);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+        return find(this.rootAlternatives);
     }
 
     /**
-     * Returns an array of all message instances in the active path.
-     * @returns {Message[]}
+     * Finds a 'tool' response message that is a direct child of a source message
+     * and matches a specific tool_call_id.
+     * @param {string} toolCallId - The tool call ID to match.
+     * @param {Message} sourceMessage - The message whose answers should be searched.
+     * @returns {Message | null} The matching tool message, or null if not found.
      */
-    getActiveMessages() {
-        const result = [];
-        if (!this.rootAlternatives) {
-            return result;
+    findMessageByToolCallId(toolCallId, sourceMessage) {
+        if (!sourceMessage || !sourceMessage.answerAlternatives) {
+            return null;
         }
-        let current = this.rootAlternatives.getActiveMessage();
-        while (current) {
-            result.push(current);
-            current = current.getActiveAnswer();
-        }
-        return result;
+        return sourceMessage.answerAlternatives.messages.find(msg =>
+            msg.value.role === 'tool' && msg.value.tool_call_id === toolCallId
+        ) || null;
     }
 
     /**
@@ -215,28 +236,19 @@ export class ChatLog {
      * @returns {Message | null}
      */
     findNextPendingMessage() {
-        if (!this.rootAlternatives) {
-            return null;
-        }
-
-        // Helper function to perform a depth-first search.
+        if (!this.rootAlternatives) return null;
         const findInAlternatives = (alternatives) => {
             for (const message of alternatives.messages) {
-                // Check the current message
                 if (message.value.role === 'assistant' && message.value.content === null) {
                     return message;
                 }
-                // Recurse into the answers of the current message
                 if (message.answerAlternatives) {
                     const found = findInAlternatives(message.answerAlternatives);
-                    if (found) {
-                        return found;
-                    }
+                    if (found) return found;
                 }
             }
             return null;
         };
-
         return findInAlternatives(this.rootAlternatives);
     }
 
@@ -246,148 +258,19 @@ export class ChatLog {
      * @returns {MessageValue[] | null} An array of message values, or null if the message isn't found.
      */
     getHistoryBeforeMessage(targetMessage) {
-        if (!this.rootAlternatives) {
-            return null;
-        }
-
+        if (!this.rootAlternatives) return null;
         const findPath = (alternatives, path) => {
             for (const message of alternatives.messages) {
                 const currentPath = [...path, message.value];
-                if (message === targetMessage) {
-                    // Exclude the target message itself from the history.
-                    return currentPath.slice(0, -1);
-                }
+                if (message === targetMessage) return currentPath.slice(0, -1);
                 if (message.answerAlternatives) {
                     const result = findPath(message.answerAlternatives, currentPath);
-                    if (result) {
-                        return result;
-                    }
+                    if (result) return result;
                 }
             }
             return null;
         };
-
         return findPath(this.rootAlternatives, []);
-    }
-
-    /**
-     * Finds the Alternatives object that contains the given message.
-     * @param {Message} targetMessage The message to find.
-     * @returns {Alternatives | null}
-     */
-    findAlternatives(targetMessage) {
-        if (!this.rootAlternatives) {
-            return null;
-        }
-
-        const find = (alternatives) => {
-            if (alternatives.messages.includes(targetMessage)) {
-                return alternatives;
-            }
-            for (const message of alternatives.messages) {
-                if (message.answerAlternatives) {
-                    const found = find(message.answerAlternatives);
-                    if (found) {
-                        return found;
-                    }
-                }
-            }
-            return null;
-        };
-
-        return find(this.rootAlternatives);
-    }
-
-    /**
-     * Adds a new message as an alternative to an existing message.
-     * @param {Message} existingMessage - The message to add an alternative to.
-     * @param {MessageValue} newContent - The content for the new alternative message.
-     * @returns {Message} The newly created message.
-     */
-    addAlternative(existingMessage, newContent) {
-        const alternatives = this.findAlternatives(existingMessage);
-        if (alternatives) {
-            const newMessage = alternatives.addMessage(newContent);
-            this.notify();
-            return newMessage;
-        }
-        return null;
-    }
-
-    /**
-     * Deletes a message or a message alternative and all its children.
-     * @param {Message} messageToDelete - The message to delete.
-     */
-    deleteMessage(messageToDelete) {
-        const alternatives = this.findAlternatives(messageToDelete);
-        if (!alternatives) return;
-
-        const index = alternatives.messages.indexOf(messageToDelete);
-        if (index > -1) {
-            alternatives.messages.splice(index, 1);
-            if (alternatives.messages.length === 0) {
-                // If this was the last alternative, we need to remove the whole `Alternatives` node.
-                // This is complex and currently left for the UI to handle by not displaying empty nodes.
-            } else if (alternatives.activeMessageIndex >= index) {
-                alternatives.activeMessageIndex = Math.max(0, alternatives.activeMessageIndex - 1);
-            }
-            this.notify();
-        }
-    }
-
-    /**
-     * Deletes a message but preserves its children by re-parenting them to the deleted message's parent.
-     * This is achieved by replacing the message in its parent's `Alternatives.messages` array
-     * with its own children messages. This preserves sibling messages.
-     * @param {Message} messageToDelete - The message to delete.
-     */
-    deleteMessageAndPreserveChildren(messageToDelete) {
-        const alternatives = this.findAlternatives(messageToDelete);
-        if (!alternatives) return;
-
-        const index = alternatives.messages.indexOf(messageToDelete);
-        if (index === -1) return;
-
-        const children = messageToDelete.answerAlternatives ? messageToDelete.answerAlternatives.messages : [];
-
-        // Replace the message with its children in the parent's message list.
-        alternatives.messages.splice(index, 1, ...children);
-
-        // Adjust the active index to maintain a coherent conversational flow.
-        if (alternatives.activeMessageIndex === index) {
-            // If the deleted message was active, we try to keep the conversation flowing.
-            if (messageToDelete.answerAlternatives && children.length > 0) {
-                // If the deleted message had an active child, make that child the new active message.
-                // This preserves the active path through the conversation tree.
-                alternatives.activeMessageIndex = index + messageToDelete.answerAlternatives.activeMessageIndex;
-            } else {
-                // If there are no children, the active message becomes the one before the deleted one.
-                alternatives.activeMessageIndex = Math.max(0, index - 1);
-            }
-        } else if (alternatives.activeMessageIndex > index) {
-            // The active message was after the deleted one, so its index needs to be adjusted
-            // by the number of children inserted minus the one message removed.
-            alternatives.activeMessageIndex += children.length - 1;
-        }
-
-        this.notify();
-    }
-
-    /**
-     * Cycles through the alternatives for a given message.
-     * @param {Message} message - The message to cycle alternatives for.
-     * @param {'next' | 'prev'} direction - The direction to cycle.
-     */
-    cycleAlternatives(message, direction) {
-        const alternatives = this.findAlternatives(message);
-        if (alternatives && alternatives.messages.length > 1) {
-            if (direction === 'next') {
-                alternatives.activeMessageIndex = (alternatives.activeMessageIndex + 1) % alternatives.messages.length;
-            } else {
-                alternatives.activeMessageIndex = (alternatives.activeMessageIndex - 1 + alternatives.messages.length) % alternatives.messages.length;
-            }
-            this.notify();
-        }
     }
 
     /**
@@ -399,14 +282,6 @@ export class ChatLog {
     }
 
     /**
-     * Unsubscribes a callback function.
-     * @param {() => void} callback
-     */
-    unsubscribe(callback) {
-        this.subscribers = this.subscribers.filter(cb => cb !== callback);
-    }
-
-    /**
      * Notifies all subscribers that the chat log has changed.
      */
     notify() {
@@ -415,7 +290,7 @@ export class ChatLog {
 
     /**
      * Serializes the entire chat log to a JSON-compatible object.
-     * @returns {SerializedAlternatives | null} A serializable representation of the root alternatives, or null if the log is empty.
+     * @returns {SerializedAlternatives | null}
      */
     toJSON() {
         return this.rootAlternatives ? this.rootAlternatives.toJSON() : null;
@@ -428,15 +303,14 @@ export class ChatLog {
      */
     static fromJSON(jsonData) {
         const chatLog = new ChatLog();
-        if (!jsonData) {
-            return chatLog;
-        }
+        if (!jsonData) return chatLog;
 
         const buildAlternatives = (altData) => {
             const alternatives = new Alternatives();
             alternatives.activeMessageIndex = altData.activeMessageIndex;
             alternatives.messages = altData.messages.map(msgData => {
-                const message = new Message(msgData.value);
+                // Pass the existing ID to the constructor to maintain it
+                const message = new Message(msgData.value, msgData.id);
                 if (msgData.answerAlternatives) {
                     message.answerAlternatives = buildAlternatives(msgData.answerAlternatives);
                 }

@@ -9,6 +9,7 @@ import { ApiService } from './api-service.js';
 import { pluginManager } from './plugin-manager.js';
 import { SettingsManager } from './settings-manager.js';
 import { responseProcessor } from './response-processor.js';
+import { toolCallManager } from './tool-processor.js';
 
 // Load plugins
 import './plugins/chats-plugin.js';
@@ -77,6 +78,8 @@ class App {
         this.settingsManager = null;
         /** @type {import('./response-processor.js').ResponseProcessor} */
         this.responseProcessor = responseProcessor;
+        /** @type {import('./tool-processor.js').ToolCallManager} */
+        this.toolCallManager = toolCallManager;
 
         this.initDOM();
 
@@ -94,6 +97,7 @@ class App {
 
         // Initial async setup
         (async () => {
+            this.toolCallManager.init(this); // Initialize the tool call manager
             await pluginManager.triggerAsync('onAppInit', this);
             this.defineTabs();
             this.renderTabs();
