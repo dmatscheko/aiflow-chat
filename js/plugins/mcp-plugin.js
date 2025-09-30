@@ -311,7 +311,6 @@ const mcpPluginDefinition = {
 
     onFormatMessageContent(contentEl, message) {
         // This is a rendering concern, unrelated to tool execution logic.
-        // It's safe to keep as is.
         if (!contentEl.innerHTML.includes('&lt;dma:render')) return;
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = contentEl.innerHTML;

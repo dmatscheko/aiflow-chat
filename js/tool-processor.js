@@ -37,13 +37,14 @@ import {
 
 /**
  * Represents a job to be executed by the ToolCallManager. A job consists of
- * all tool calls found within a single message.
+ * all tool calls found within a single message, which are executed sequentially.
  * @typedef {object} ToolCallJob
- * @property {string} id - A unique identifier for the job, starting with 'job_'.
+ * @property {string} id - A unique identifier for the job.
  * @property {ToolCall[]} calls - The array of tool calls to be executed in this job.
  * @property {Message} sourceMessage - The message that initiated these tool calls.
  * @property {Chat} chat - The chat context for this job.
- * @property {Map<string, boolean>} completedCalls - A map to track the completion of calls by their `tool_call_id`.
+ * @property {number} nextCallIndex - The index of the next tool call in the `calls` array to be executed.
+ * @property {string} lastMessageId - The ID of the last message created in the execution chain for this job.
  */
 
 
@@ -64,7 +65,6 @@ export function parseToolCalls(content) {
         return parsedCalls;
     }
 
-    // Regex to find <dma:tool_call> tags, supporting both container and self-closing forms.
     const functionCallRegex = /<dma:tool_call\s+([^>]+?)\/>|<dma:tool_call\s+([^>]*?)>([\s\S]*?)<\/dma:tool_call\s*>/gi;
     const nameRegex = /name="([^"]*)"/;
     const paramsRegex = /<parameter\s+name="([^"]*)">([\s\S]*?)<\/parameter>/g;
@@ -85,7 +85,6 @@ export function parseToolCalls(content) {
             let paramMatch;
             while ((paramMatch = paramsRegex.exec(innerContent)) !== null) {
                 const [, paramName, paramValue] = paramMatch;
-                // Basic trim and unescaping for now. Type coercion can be added here if needed.
                 params[paramName] = paramValue.trim();
             }
         }
@@ -113,9 +112,6 @@ export function parseToolCalls(content) {
 
 /**
  * Manages the execution of tool calls in a stack-based (LIFO) manner.
- * This class ensures that nested tool calls (e.g., an agent calling a tool)
- * are processed correctly. It orchestrates the entire lifecycle of a tool call,
- * from job creation to completion and response generation.
  * @class
  */
 class ToolCallManager {
@@ -128,33 +124,27 @@ class ToolCallManager {
     executors = new Map();
 
     /**
-     * Initializes the manager with the main application instance.
-     * @param {App} app - The main application instance.
+     * @param {App} app
      */
     init(app) {
         this.app = app;
     }
 
     /**
-     * Allows plugins to register themselves as tool call handlers.
-     * @param {string} type - The type of executor ('agent' or 'mcp').
-     * @param {object} executor - The plugin instance that will handle the execution.
+     * @param {string} type
+     * @param {object} executor
      */
     registerExecutor(type, executor) {
         if (typeof executor.executeCall !== 'function') {
             throw new Error(`Executor for type "${type}" must have an executeCall method.`);
         }
         this.executors.set(type, executor);
-        console.log(`[ToolCallManager] Registered executor for type: ${type}`);
     }
 
-
     /**
-     * Creates a new job from a set of parsed tool calls and adds it to the execution stack.
-     * It also updates the source message to include the unique `tool_call_id` for each call.
-     * @param {ParsedToolCall[]} parsedCalls - The tool calls to be executed.
-     * @param {Message} sourceMessage - The message containing the calls.
-     * @param {Chat} chat - The active chat instance.
+     * @param {ParsedToolCall[]} parsedCalls
+     * @param {Message} sourceMessage
+     * @param {Chat} chat
      */
     addJob(parsedCalls, sourceMessage, chat) {
         if (!parsedCalls || parsedCalls.length === 0) {
@@ -168,80 +158,70 @@ class ToolCallManager {
             calls: parsedCalls.map(p => p.call),
             sourceMessage,
             chat,
-            completedCalls: new Map(),
+            nextCallIndex: 0,
+            lastMessageId: sourceMessage.id, // Start the chain from the source message
         };
 
         this.jobStack.push(job);
-        this.processNextJob();
+        this.processLoop();
     }
 
     /**
-     * Injects or overwrites the `tool_call_id` attribute in the raw XML of a message.
-     * This ensures that the displayed message content accurately reflects the executed call.
-     * @param {Message} message - The message to update.
-     * @param {ParsedToolCall[]} parsedCalls - The calls found in the message.
+     * @param {Message} message
+     * @param {ParsedToolCall[]} parsedCalls
      * @private
      */
     updateMessageWithToolCallIDs(message, parsedCalls) {
         let content = message.value.content;
-        // Iterate backwards to avoid messing up indices during replacement.
         for (let i = parsedCalls.length - 1; i >= 0; i--) {
             const pCall = parsedCalls[i];
             const originalTag = content.substring(pCall.start, pCall.end);
-
             const endOfStartTagMarker = pCall.isSelfClosing ? '/>' : '>';
             const endOfStartTagIndex = originalTag.indexOf(endOfStartTagMarker);
             if (endOfStartTagIndex === -1) continue;
 
-            // Extract the part of the tag to modify, removing any pre-existing tool_call_id.
             let startTagContent = originalTag.substring(0, endOfStartTagIndex);
             startTagContent = startTagContent.replace(/\s+tool_call_id\s*=\s*["'][^"']*["']/g, '');
 
-            // Reconstruct the tag with the new ID.
             const newTag = `${startTagContent} tool_call_id="${pCall.call.tool_call_id}"${originalTag.substring(endOfStartTagIndex)}`;
             content = content.substring(0, pCall.start) + newTag + content.substring(pCall.end);
         }
         message.value.content = content;
-        message.cache = null; // Invalidate cache to force re-render.
+        message.cache = null;
         this.app.chatManager.getActiveChat()?.log.notify();
     }
 
-    /**
-     * Processes the next job on the stack (LIFO).
-     * It dispatches all tool calls within the current job to the appropriate plugins for execution.
-     */
-    async processNextJob() {
-        if (this.isProcessing || this.jobStack.length === 0) {
-            return;
-        }
-
+    async processLoop() {
+        if (this.isProcessing) return;
         this.isProcessing = true;
-        const job = this.jobStack[this.jobStack.length - 1]; // Peek at the top job.
 
-        for (const call of job.calls) {
-            // Fire-and-forget dispatch. The executing plugin is responsible for reporting completion.
-            this.dispatchCall(call, job);
+        while (this.jobStack.length > 0) {
+            const job = this.jobStack[this.jobStack.length - 1];
+
+            if (job.nextCallIndex >= job.calls.length) {
+                this.finishJob(job);
+                continue; // Continue the loop to process the next job on the stack
+            }
+
+            const call = job.calls[job.nextCallIndex];
+            // Await the dispatch and notification, ensuring sequential execution
+            await this.dispatchCall(call, job);
         }
+
+        this.isProcessing = false;
     }
 
     /**
-     * Dispatches a single tool call to the appropriate plugin for execution.
-     * The method determines whether a call is for an agent or a standard tool (MCP)
-     * and forwards it to the corresponding plugin instance from the registry.
-     * @param {ToolCall} call - The tool call to dispatch.
-     * @param {ToolCallJob} job - The job this call belongs to.
+     * @param {ToolCall} call
+     * @param {ToolCallJob} job
      * @private
      */
     async dispatchCall(call, job) {
         try {
             const agentIds = new Set(this.app.agentManager.agents.map(a => a.id));
-            let executor;
-
-            if (agentIds.has(call.name)) {
-                executor = this.executors.get('agent');
-            } else {
-                executor = this.executors.get('mcp');
-            }
+            const executor = agentIds.has(call.name)
+                ? this.executors.get('agent')
+                : this.executors.get('mcp');
 
             if (executor) {
                 await executor.executeCall(call, job, this.app);
@@ -250,57 +230,45 @@ class ToolCallManager {
             }
         } catch (error) {
             console.error(`[ToolCallManager] Error dispatching call ${call.tool_call_id}:`, error);
-            const result = {
+            this.notifyCallComplete(job.id, {
                 name: call.name,
                 tool_call_id: call.tool_call_id,
                 content: null,
                 error: error.message,
-            };
-            this.notifyCallComplete(job.id, result);
+            });
         }
     }
 
     /**
-     * Callback for plugins to report the completion of a tool call.
-     * This method records the result, adds a 'tool' message to the chat, and
-     * checks if the entire job is finished.
-     * @param {string} jobId - The ID of the job the call belonged to.
-     * @param {ToolResult} result - The result of the tool execution.
-     * @returns {Message | null} The newly created tool message, or null if the job was not found.
+     * @param {string} jobId
+     * @param {ToolResult} result
+     * @returns {Message | null}
      */
     notifyCallComplete(jobId, result) {
         const job = this.jobStack.find(j => j.id === jobId);
-        if (!job) {
-            return null;
-        }
+        if (!job) return null;
 
+        const parentId = job.lastMessageId;
         const toolResponseMessage = job.chat.log.addMessage({
             role: 'tool',
-            content: result.error ? `<error>${result.error}</error>` : result.content,
+            content: result.error ? `<error>${result.error}</error>` : `<dma:tool_response name="${result.name}" tool_call_id="${result.tool_call_id}"><content>${result.content}</content></dma:tool_response>`,
             name: result.name,
             tool_call_id: result.tool_call_id,
-        }, job.sourceMessage.id);
+        }, parentId);
 
-        job.completedCalls.set(result.tool_call_id, true);
+        job.lastMessageId = toolResponseMessage.id;
+        job.nextCallIndex++;
 
-        if (job.completedCalls.size === job.calls.length) {
-            this.finishJob(job);
-        }
         return toolResponseMessage;
     }
 
     /**
-     * Finalizes a completed job.
-     * This involves removing the job from the stack, queuing the next AI turn
-     * if appropriate, and triggering the processing of the next job on the stack.
-     * @param {ToolCallJob} job - The job that has just been completed.
+     * @param {ToolCallJob} job
      * @private
      */
     finishJob(job) {
-        this.jobStack.pop(); // Remove the completed job.
+        this.jobStack.pop();
 
-        // If the message that created the tools was from an assistant or another tool,
-        // add a new message to allow it to respond to its tool calls.
         const sourceRole = job.sourceMessage.value.role;
         if (sourceRole === 'assistant' || sourceRole === 'tool') {
             const agentId = job.sourceMessage.value.agent || null;
@@ -308,12 +276,9 @@ class ToolCallManager {
                 role: 'assistant',
                 content: null,
                 agent: agentId
-            });
+            }, job.lastMessageId);
             this.app.responseProcessor.scheduleProcessing(this.app);
         }
-
-        this.isProcessing = false;
-        this.processNextJob(); // Look for the next job on the stack.
     }
 }
 
