@@ -234,6 +234,17 @@ class McpPlugin {
      * @returns {Promise<import('../tool-processor.js').ToolResult>}
      * @private
      */
+    /**
+     * Public wrapper to execute a single MCP tool call.
+     * This method is intended to be used as a callback for the ToolExecutionManager.
+     * @param {import('../tool-processor.js').ToolCall} call
+     * @param {Message} message
+     * @returns {Promise<import('../tool-processor.js').ToolResult>}
+     */
+    executeMcpCall(call, message) {
+        return this.#executeMcpCall(call, message);
+    }
+
     async #executeMcpCall(call, message) {
         const agentId = message.value.agent;
         const agent = agentId ? this.#app.agentManager.getAgent(agentId) : null;
@@ -367,7 +378,7 @@ const mcpPluginDefinition = {
         };
         // Register the default executor for standard tool calls.
         app.toolExecutionManager.registerDefaultExecutor(
-            (call, message) => mcpPluginSingleton.#executeMcpCall(call, message)
+            (call, message) => mcpPluginSingleton.executeMcpCall(call, message)
         );
     },
 
