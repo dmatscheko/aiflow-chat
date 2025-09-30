@@ -1,6 +1,6 @@
 /**
  * @fileoverview Defines the data structures for the chat history.
- * This file is self-contained and has no external dependencies.
+ * @version 2.0.0
  */
 
 'use strict';
@@ -13,13 +13,16 @@
  * @typedef {object} MessageValue
  * @property {MessageRole} role - The role of the message author.
  * @property {string | null} content - The content of the message.
- * @property {string} [agent] - The ID of the agent used for this message.
- * @property {string} [model] - The model used for the message.
+ * @property {string} [agent] - The ID of the agent used for an 'assistant' message.
+ * @property {string} [model] - The model used for an 'assistant' message.
+ * @property {string} [name] - The name of the tool for a 'tool' message.
+ * @property {string} [tool_call_id] - The ID linking a 'tool' message to its call.
  * @property {object} [metadata] - Optional metadata, e.g., for sources.
  */
 
 /**
  * @typedef {object} SerializedMessage
+ * @property {string} id - The unique ID of the message.
  * @property {MessageValue} value - The value of the message.
  * @property {SerializedAlternatives | null} answerAlternatives - The serialized answer alternatives.
  */
@@ -39,8 +42,11 @@
 class Message {
     /**
      * @param {MessageValue} value - The message value, e.g., `{ role: 'user', content: 'Hello' }`.
+     * @param {string} [id] - An optional ID. If not provided, a new one will be generated.
      */
-    constructor(value) {
+    constructor(value, id = null) {
+        /** @type {string} */
+        this.id = id || `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         /** @type {MessageValue} */
         this.value = value;
         /**
@@ -64,6 +70,7 @@ class Message {
      */
     toJSON() {
         return {
+            id: this.id,
             value: this.value,
             answerAlternatives: this.answerAlternatives ? this.answerAlternatives.toJSON() : null,
         };
@@ -136,25 +143,34 @@ export class ChatLog {
     }
 
     /**
-     * Adds a message to the active conversational path.
-     * If it's the first message, it creates the root. Otherwise, it adds it as an
-     * answer to the last message in the active path.
+     * Adds a message to the chat log.
+     * If parentId is provided, it adds the message as a child of that parent.
+     * Otherwise, it adds it as a child of the last message in the active path.
      * @param {MessageValue} value - The value of the message to add.
+     * @param {string | null} [parentId=null] - The ID of the message to add this new message as a child to.
      * @returns {Message} The newly added message instance.
      */
-    addMessage(value) {
-        const lastMessage = this.getLastMessage();
+    addMessage(value, parentId = null) {
+        let parentMessage;
+        if (parentId) {
+            parentMessage = this.findMessageById(parentId);
+        } else {
+            parentMessage = this.getLastMessage();
+        }
+
         let newMessage;
-        if (!lastMessage) {
+        if (!parentMessage) {
             // This is the first message in the chat.
-            this.rootAlternatives = new Alternatives();
+            if (!this.rootAlternatives) {
+                this.rootAlternatives = new Alternatives();
+            }
             newMessage = this.rootAlternatives.addMessage(value);
         } else {
-            // Add the new message as an answer to the last message.
-            if (!lastMessage.answerAlternatives) {
-                lastMessage.answerAlternatives = new Alternatives();
+            // Add the new message as an answer to the specified or last message.
+            if (!parentMessage.answerAlternatives) {
+                parentMessage.answerAlternatives = new Alternatives();
             }
-            newMessage = lastMessage.answerAlternatives.addMessage(value);
+            newMessage = parentMessage.answerAlternatives.addMessage(value);
         }
         this.notify();
         return newMessage;
@@ -422,6 +438,30 @@ export class ChatLog {
     }
 
     /**
+     * Finds a message by its ID anywhere in the chat log tree.
+     * @param {string} messageId The ID of the message to find.
+     * @returns {Message | null} The found message, or null.
+     */
+    findMessageById(messageId) {
+        if (!this.rootAlternatives) {
+            return null;
+        }
+        const find = (alternatives) => {
+            for (const message of alternatives.messages) {
+                if (message.id === messageId) {
+                    return message;
+                }
+                if (message.answerAlternatives) {
+                    const found = find(message.answerAlternatives);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+        return find(this.rootAlternatives);
+    }
+
+    /**
      * Creates a ChatLog instance from a serialized JSON object.
      * @param {SerializedAlternatives | null} jsonData - The serialized data to load from.
      * @returns {ChatLog} A new ChatLog instance populated with the provided data.
@@ -436,7 +476,8 @@ export class ChatLog {
             const alternatives = new Alternatives();
             alternatives.activeMessageIndex = altData.activeMessageIndex;
             alternatives.messages = altData.messages.map(msgData => {
-                const message = new Message(msgData.value);
+                // Pass the ID from the serialized data to the constructor
+                const message = new Message(msgData.value, msgData.id);
                 if (msgData.answerAlternatives) {
                     message.answerAlternatives = buildAlternatives(msgData.answerAlternatives);
                 }

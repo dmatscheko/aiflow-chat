@@ -1,6 +1,7 @@
 /**
  * @fileoverview Main application logic for the Core Chat.
  * This script ties together the data, API, and UI components.
+ * @version 2.0.0
  */
 
 'use strict';
@@ -9,6 +10,7 @@ import { ApiService } from './api-service.js';
 import { pluginManager } from './plugin-manager.js';
 import { SettingsManager } from './settings-manager.js';
 import { responseProcessor } from './response-processor.js';
+import { ToolCallProcessor } from './tool-call-processor.js';
 
 // Load plugins
 import './plugins/chats-plugin.js';
@@ -26,6 +28,7 @@ import './plugins/ui-controls-plugin.js';
 /**
  * @typedef {import('./chat-data.js').Message} Message
  * @typedef {import('./plugins/chats-plugin.js').Chat} Chat
+ * @typedef {import('./tool-call-processor.js').ToolCallProcessor} ToolCallProcessor
  */
 
 /**
@@ -58,33 +61,37 @@ import './plugins/ui-controls-plugin.js';
  * The main application class.
  * Orchestrates all components of the chat application.
  * @class
+ * @property {ApiService} apiService
+ * @property {View} activeView
+ * @property {AbortController | null} abortController
+ * @property {Object.<string, string>} lastActiveIds
+ * @property {Object.<string, HTMLElement>} dom
+ * @property {Tab[]} tabs
+ * @property {SettingsManager} settingsManager
+ * @property {import('./response-processor.js').ResponseProcessor} responseProcessor
+ * @property {ToolCallProcessor} toolCallProcessor
+ * @property {import('./plugins/chats-plugin.js').ChatManager | null} chatManager
+ * @property {import('./plugins/agents-plugin.js').AgentManager | null} agentManager
+ * @property {import('./plugins/flows-plugin.js').FlowsManager | null} flowsManager
  */
 class App {
     constructor() {
-        /** @type {ApiService} */
         this.apiService = new ApiService();
-        /** @type {View} */
         this.activeView = { type: 'chat', id: null };
-        /** @type {AbortController | null} */
         this.abortController = null;
-        /** @type {Object.<string, string>} */
         this.lastActiveIds = {};
-        /** @type {Object.<string, HTMLElement>} */
         this.dom = {};
-        /** @type {Tab[]} */
         this.tabs = [];
-        /** @type {SettingsManager} */
         this.settingsManager = null;
-        /** @type {import('./response-processor.js').ResponseProcessor} */
         this.responseProcessor = responseProcessor;
+        this.toolCallProcessor = null; // Instantiated in async setup
 
         this.initDOM();
 
         // --- Managers will be attached by plugins ---
-        /** @type {import('./plugins/chats-plugin.js').ChatManager | null} */
         this.chatManager = null;
-        /** @type {import('./plugins/agents-plugin.js').AgentManager | null} */
         this.agentManager = null;
+        this.flowsManager = null;
         // --- End of Managers ---
 
 
@@ -94,6 +101,9 @@ class App {
 
         // Initial async setup
         (async () => {
+            this.toolCallProcessor = new ToolCallProcessor(this);
+            this.responseProcessor.init(this);
+
             await pluginManager.triggerAsync('onAppInit', this);
             this.defineTabs();
             this.renderTabs();

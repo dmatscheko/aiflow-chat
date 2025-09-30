@@ -340,14 +340,23 @@ class ChatUI {
 
         if (message.value.role === 'assistant' || message.value.role === 'tool') {
             const details = [];
-        
-            if (message.value.agent && this.agentManager) {
-                const agent = this.agentManager.getAgent(message.value.agent);
-                if (agent?.name) details.push(agent.name);
+            if (message.value.role === 'tool') {
+                if (message.value.name) {
+                    details.push(message.value.name);
+                }
+                if (message.value.tool_call_id) {
+                    details.push(message.value.tool_call_id);
+                }
+            } else { // 'assistant'
+                if (message.value.agent && this.agentManager) {
+                    const agent = this.agentManager.getAgent(message.value.agent);
+                    if (agent?.name) details.push(agent.name);
+                }
+                if (message.value.model) {
+                    details.push(message.value.model);
+                }
             }
-            
-            if (message.value.model) details.push(message.value.model);
-            
+
             if (details.length > 0) {
                 const detailsEl = document.createElement('span');
                 detailsEl.className = 'message-details';

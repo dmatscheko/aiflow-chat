@@ -1,5 +1,6 @@
 /**
- * @fileoverview Manages the queue and execution of AI response generation.
+ * @fileoverview Manages the queue and execution of AI response generation and tool calls.
+ * @version 2.0.0
  */
 
 'use strict';
@@ -10,13 +11,16 @@ import { pluginManager } from './plugin-manager.js';
  * @typedef {import('./main.js').App} App
  * @typedef {import('./main.js').Chat} Chat
  * @typedef {import('./chat-data.js').Message} Message
+ * @typedef {import('./tool-processor.js').ToolCall} ToolCall
  */
 
 /**
- * Manages the queue and execution of AI response generation.
- * It scans for pending messages, processes them, and then allows plugins
- * to handle the completed response, potentially creating more work. This cycle
- * continues until no more work is pending and no plugin takes further action.
+ * Manages the queue and execution of AI response generation and tool calls.
+ * It operates a robust loop that prioritizes work in the following order:
+ * 1. Execute pending tool calls from the ToolCallProcessor stack.
+ * 2. Generate responses for pending assistant messages.
+ * 3. Allow plugins to take action on an idle AI state (e.g., for flows).
+ * This cycle continues until no more work is pending.
  * @class
  */
 class ResponseProcessor {
@@ -35,23 +39,30 @@ class ResponseProcessor {
     }
 
     /**
-     * Schedules a processing check. If not already processing, it starts the robust processing loop.
-     * @param {App} app - The main application instance.
+     * Initializes the ResponseProcessor with the main app instance.
+     * @param {App} app The main application instance.
      */
-    scheduleProcessing(app) {
+    init(app) {
         this.app = app;
+    }
+
+    /**
+     * Schedules a processing check. If not already processing, it starts the main processing loop.
+     */
+    scheduleProcessing() {
         if (!this.isProcessing) {
             this.processLoop();
         }
     }
 
     /**
-     * Finds the next pending message across all chats.
+     * Finds the next pending assistant message across all chats.
+     * A pending message is one with `role: 'assistant'` and `content: null`.
      * @returns {{chat: Chat, message: Message} | null} The chat and message to process, or null if none.
      * @private
      */
     _findNextPendingMessage() {
-        if (!this.app) return null;
+        if (!this.app || !this.app.chatManager) return null;
         for (const chat of this.app.chatManager.chats) {
             const pendingMessage = chat.log.findNextPendingMessage();
             if (pendingMessage) {
@@ -62,15 +73,7 @@ class ResponseProcessor {
     }
 
     /**
-     * The main processing loop. It robustly handles a cycle of AI responses and
-     * subsequent plugin actions.
-     * 1. It first prioritizes and processes any pending AI message.
-     * 2. After processing, it immediately triggers `onResponseComplete` for that message.
-     * 3. If a handler acts, the loop restarts to handle any new work.
-     * 4. If no messages are pending, it triggers `onResponseComplete` with a null context
-     *    to allow plugins to act on the idle state.
-     * 5. The loop only terminates when a full pass results in no pending messages and no
-     *    plugin actions.
+     * The main processing loop. It robustly handles a cycle of AI responses and tool calls.
      * @private
      */
     async processLoop() {
@@ -79,25 +82,35 @@ class ResponseProcessor {
 
         try {
             while (true) {
+                // 1. Highest priority: Process any pending tool calls.
+                if (this.app.toolCallProcessor.hasPendingCalls()) {
+                    await this.app.toolCallProcessor.processNext();
+                    continue; // Loop again to ensure stack is cleared.
+                }
+
+                // 2. If no tool calls, check for pending assistant messages to generate.
                 const workItem = this._findNextPendingMessage();
                 if (workItem) {
                     const { chat, message } = workItem;
-                    // Highest priority: process any pending AI response.
-                    await this.processMessage(chat, message);
+                    await this.processMessage(chat, message); // Generate the AI response.
 
-                    // Immediately give plugins a chance to react to the new message.
-                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', message, chat);
-                    if (aHandlerTookAction) {
-                        // A plugin (e.g., mcp-plugin) took action, so new work might exist.
-                        // Restart the loop to handle it immediately.
-                        continue;
+                    // After generating, collect any tool call requests from the response.
+                    /** @type {ToolCall[]} */
+                    const toolCalls = [];
+                    // This is a data-passing hook that allows plugins to contribute tool calls.
+                    pluginManager.trigger('onToolCallParse', toolCalls, message, chat);
+
+                    if (toolCalls.length > 0) {
+                        // If there are tool calls, add them to the processor's stack.
+                        this.app.toolCallProcessor.addBatch(message, toolCalls);
                     }
-                    // If no handler acted on this specific message, we still continue,
-                    // as there might be other pending messages.
-                    continue;
+                    // After a message is generated, we just loop again.
+                    // If it had tool calls, they'll be processed on the next iteration.
+                    // If not, we'll eventually hit the idle-state check for flows.
+                    continue; // Loop again to process newly added tool calls or other work.
                 }
 
-                // If we're here, the AI is idle. Check if any plugin wants to take a follow-up action.
+                // 3. If AI is idle, check if any plugin wants to take a follow-up action.
                 const activeChat = this.app.chatManager.getActiveChat();
                 if (activeChat) {
                     // Trigger with a null message to signify an idle-state check.
@@ -108,14 +121,12 @@ class ResponseProcessor {
                     }
                 }
 
-                // If we reach this point, it means:
-                // 1. There were no pending messages to process.
-                // 2. No plugin took any action on the idle state.
-                // Therefore, all work is truly complete.
+                // If we reach this point, all work is complete.
                 break;
             }
         } catch (error) {
             console.error('Error in processing loop:', error);
+            // Optionally, update the UI to show a global error state.
         } finally {
             this.isProcessing = false;
         }
@@ -142,24 +153,20 @@ class ResponseProcessor {
         try {
             const messages = chat.log.getHistoryBeforeMessage(assistantMsg);
             if (!messages) {
-                console.error("Could not find message history for processing.", assistantMsg);
-                assistantMsg.value.content = "Error: Could not reconstruct message history.";
-                chat.log.notify();
-                return;
+                throw new Error("Could not find message history for processing.");
             }
 
             const agentId = assistantMsg.value.agent;
             const agent = agentId ? app.agentManager.getAgent(agentId) : null;
             const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
 
-            // Construct the system prompt by allowing plugins to contribute.
             const finalSystemPrompt = await pluginManager.triggerAsync('onSystemPromptConstruct', effectiveConfig.systemPrompt, effectiveConfig, agent);
 
             if (finalSystemPrompt) {
                 messages.unshift({ role: 'system', content: finalSystemPrompt });
             }
 
-            let payload = {
+            const payload = {
                 model: effectiveConfig.model,
                 messages: messages,
                 stream: true,
@@ -168,16 +175,12 @@ class ResponseProcessor {
             };
 
             assistantMsg.value.model = payload.model;
+            assistantMsg.value.content = ''; // Initialize content
+            chat.log.notify(); // Show the empty message bubble
 
             const reader = await app.apiService.streamChat(
-                payload,
-                effectiveConfig.apiUrl,
-                effectiveConfig.apiKey,
-                app.abortController.signal
+                payload, effectiveConfig.apiUrl, effectiveConfig.apiKey, app.abortController.signal
             );
-
-            assistantMsg.value.content = ''; // Start filling content
-            chat.log.notify();
 
             const decoder = new TextDecoder();
             while (true) {
@@ -190,15 +193,13 @@ class ResponseProcessor {
                     .filter(line => line !== '' && line !== '[DONE]')
                     .map(line => {
                         try {
-                            return JSON.parse(line);
+                            return JSON.parse(line).choices[0].delta.content;
                         } catch (e) {
                             console.error("Failed to parse stream chunk:", line, e);
                             return null;
                         }
                     })
-                    .filter(Boolean)
-                    .map(json => json.choices[0].delta.content)
-                    .filter(content => content);
+                    .filter(Boolean);
 
                 if (deltas.length > 0) {
                     assistantMsg.value.content += deltas.join('');
@@ -207,25 +208,32 @@ class ResponseProcessor {
             }
         } catch (error) {
             if (error.name !== 'AbortError') {
-                assistantMsg.value.content = `Error: ${error.message}`;
+                assistantMsg.value.content = assistantMsg.value.content ? `${assistantMsg.value.content}\n\n<error>Error: ${error.message}</error>` : `<error>Error: ${error.message}</error>`;
             } else {
                 assistantMsg.value.content += '\n\n[Aborted by user]';
             }
-            chat.log.notify();
         } finally {
             app.abortController = null;
             app.dom.stopButton.style.display = 'none';
+            chat.log.notify(); // Final notification for any error messages
+
+            // Auto-generate chat title from the first user message.
             if (chat.title === 'New Chat') {
                 const firstUserMessage = chat.log.getActiveMessageValues().find(m => m.role === 'user');
-                if (firstUserMessage) {
-                    chat.title = firstUserMessage.content.substring(0, 20) + '...';
-                    this.app.chatManager.saveChats();
-                    if (this.app.activeView.id === chat.id) {
-                        this.app.renderMainView();
+                if (firstUserMessage?.content) {
+                    const userContent = firstUserMessage.content;
+                    const titleLimit = 25;
+                    chat.title = userContent.length > titleLimit
+                        ? userContent.substring(0, titleLimit).trim() + '...'
+                        : userContent;
+
+                    app.chatManager.saveChats();
+                    app.chatManager.renderChatList();
+                    if (app.activeView.id === chat.id) {
+                        app.renderMainView(); // Re-render to update title bar if visible
                     }
                 }
             }
-            this.app.chatManager.renderChatList();
         }
     }
 }

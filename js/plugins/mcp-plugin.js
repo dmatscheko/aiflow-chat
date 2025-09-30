@@ -1,17 +1,20 @@
 /**
  * @fileoverview Plugin for MCP (Model Context Protocol) integration, encapsulated in a singleton class.
+ * @version 2.0.0
  */
 
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { processToolCalls as genericProcessToolCalls } from '../tool-processor.js';
+import { parseToolCalls } from '../tool-processor.js';
 
 /**
  * @typedef {import('../main.js').App} App
  * @typedef {import('../chat-data.js').Message} Message
  * @typedef {import('../main.js').Chat} Chat
  * @typedef {import('../tool-processor.js').ToolSchema} ToolSchema
+ * @typedef {import('../tool-processor.js').ToolCall} ToolCall
+ * @typedef {import('../tool-processor.js').ToolResult} ToolResult
  * @typedef {import('./agents-plugin.js').Agent} Agent
  */
 
@@ -26,13 +29,13 @@ example_arg_value1
 example_arg_value2
 </parameter>
 </dma:tool_call>
-Do not escape any of the tool call arguments. The arguments will be parsed as normal text. There is one exception: If you need to write </dma:tool_call> or </parameter> as value inside a <parameter>, write it like <\/dma:tool_call> or <\/parameter>.
+Do not escape any of the tool call arguments. The arguments will be parsed as normal text. There is one exception: If you need to write </dma:tool_call> or </parameter> as value inside a <parameter>, write it like <\\/dma:tool_call> or <\\/parameter>.
 
 You can use multiple tools in one message, but either use tools or write an answer in a message. Use tools only if you need them.
 
 IMPORTANT: Write files only if explicitely instructed to do so.
 
-#### Available Tools:\n\n`;
+#### Available Tools:\\n\\n`;
 
 /**
  * Singleton class to manage all MCP (Model Context Protocol) communication.
@@ -43,38 +46,15 @@ class McpPlugin {
     /** @type {McpPlugin | null} */
     static #instance = null;
 
-    /**
-     * A cache to store tool schemas, keyed by the MCP server URL.
-     * @type {Map<string, ToolSchema[]>}
-     * @private
-     */
+    /** @type {Map<string, ToolSchema[]>} */
     #toolCache = new Map();
-
-    /**
-     * A cache for MCP session IDs, keyed by the MCP server URL.
-     * @type {Map<string, string>}
-     * @private
-     */
+    /** @type {Map<string, string>} */
     #sessionCache = new Map();
-
-    /**
-     * Tracks ongoing initialization promises, keyed by MCP server URL.
-     * @type {Map<string, Promise<any>>}
-     * @private
-     */
+    /** @type {Map<string, Promise<any>>} */
     #initPromises = new Map();
-
-    /**
-     * The application instance.
-     * @type {App | null}
-     * @private
-     */
+    /** @type {App | null} */
     #app = null;
 
-    /**
-     * Enforces the singleton pattern.
-     * @returns {McpPlugin}
-     */
     constructor() {
         if (McpPlugin.#instance) {
             return McpPlugin.#instance;
@@ -82,24 +62,16 @@ class McpPlugin {
         McpPlugin.#instance = this;
     }
 
-    /**
-     * Initializes the plugin and stores the app instance.
-     * @param {App} app - The main application instance.
-     */
+    /** @param {App} app */
     init(app) {
         this.#app = app;
     }
 
-    /**
-     * Sends a raw JSON-RPC request to the MCP server.
-     * @param {string} url - The MCP server URL.
-     * @param {string} method - The JSON-RPC method name.
-     * @param {object} params - The JSON-RPC parameters.
-     * @param {boolean} [isNotification=false] - Whether this is a notification (no 'id').
-     * @param {boolean} [returnHeaders=false] - Whether to return the response headers instead of the body.
-     * @returns {Promise<any>}
-     * @private
-     */
+    /** @returns {App} */
+    getApp() {
+        return this.#app;
+    }
+
     async #sendMcpRequest(url, method, params, isNotification = false, returnHeaders = false) {
         if (!url) throw new Error('No MCP server URL set');
         const body = { jsonrpc: '2.0', method, params };
@@ -127,15 +99,10 @@ class McpPlugin {
                 throw new Error(`MCP error: ${resp.statusText} - ${errorText}`);
             }
 
-            if (returnHeaders) {
-                return resp.headers;
-            }
-
+            if (returnHeaders) return resp.headers;
             if (isNotification) return null;
 
             const rawText = await resp.text();
-            console.log(`DEBUG: Raw response from ${url} for method ${method}:`, rawText);
-
             try {
                 const data = JSON.parse(rawText);
                 if (data.error) throw new Error(data.error.message || 'MCP call failed');
@@ -166,19 +133,10 @@ class McpPlugin {
         }
     }
 
-    /**
-     * Performs the full MCP session initialization handshake for a given URL.
-     * @param {string} url - The MCP server URL.
-     * @returns {Promise<void>}
-     * @private
-     */
     async #initMcpSession(url) {
         if (this.#initPromises.has(url)) return this.#initPromises.get(url);
-
         const promise = (async () => {
             if (this.#sessionCache.has(url)) return;
-
-            console.log(`MCP: Initializing session for ${url}`);
             const initParams = {
                 protocolVersion: '2025-03-26',
                 capabilities: { roots: { listChanged: false }, sampling: {} },
@@ -186,15 +144,10 @@ class McpPlugin {
             };
             const respHeaders = await this.#sendMcpRequest(url, 'initialize', initParams, false, true);
             const sessionId = respHeaders.get('mcp-session-id');
-
-            if (!sessionId) {
-                throw new Error('No session ID returned in initialize response header');
-            }
+            if (!sessionId) throw new Error('No session ID returned');
             this.#sessionCache.set(url, sessionId);
             await this.#sendMcpRequest(url, 'notifications/initialized', {}, true);
-            console.log(`MCP: Session initialized for ${url}`, sessionId);
         })();
-
         this.#initPromises.set(url, promise);
         try {
             await promise;
@@ -203,25 +156,14 @@ class McpPlugin {
         }
     }
 
-    /**
-     * Performs a JSON-RPC call to the MCP server, handling session initialization and retries.
-     * @param {string} url - The MCP server URL.
-     * @param {string} method - The JSON-RPC method name.
-     * @param {object} [params={}] - The JSON-RPC parameters.
-     * @param {boolean} [retry=false] - Internal flag to prevent infinite retry loops.
-     * @returns {Promise<any>}
-     * @private
-     */
     async #mcpJsonRpc(url, method, params = {}, retry = false) {
         try {
             await this.#initMcpSession(url);
             return await this.#sendMcpRequest(url, method, params);
         } catch (error) {
-            console.error('MCP: JSON-RPC failure', error);
             if (error.message.includes('session') && !retry) {
                 this.#sessionCache.delete(url);
                 this.#initPromises.delete(url);
-                console.log('MCP: Retrying MCP call after session re-init');
                 return this.#mcpJsonRpc(url, method, params, true);
             }
             throw new AggregateError([error], `Failed to perform MCP JSON-RPC call to ${url}.`);
@@ -230,24 +172,23 @@ class McpPlugin {
 
     /**
      * Executes a single MCP tool call after checking agent permissions.
-     * @param {import('../tool-processor.js').ToolCall} call
+     * @param {ToolCall} call
      * @param {Message} message
-     * @param {string} mcpUrl
-     * @returns {Promise<import('../tool-processor.js').ToolResult>}
-     * @private
+     * @returns {Promise<ToolResult>}
      */
-    async #executeMcpCall(call, message, mcpUrl) {
+    async executeMcpCall(call, message) {
         const agentId = message.value.agent;
-        const agent = agentId ? this.#app.agentManager.getAgent(agentId) : null;
-        const defaultAgent = this.#app.agentManager.getAgent('agent-default');
-        let effectiveToolSettings = defaultAgent.toolSettings;
-        if (agent?.useCustomToolSettings) {
-            effectiveToolSettings = agent.toolSettings;
+        const effectiveConfig = this.#app.agentManager.getEffectiveApiConfig(agentId);
+        const mcpUrl = effectiveConfig.toolSettings?.mcpServer;
+
+        if (!mcpUrl) {
+            return { name: call.name, tool_call_id: call.id, error: 'No MCP server URL is configured for the active agent.' };
         }
 
-        const isAllowed = effectiveToolSettings.allowAll || effectiveToolSettings.allowed?.includes(call.name);
+        const agent = agentId ? this.#app.agentManager.getAgent(agentId) : null;
+        const isAllowed = effectiveConfig.toolSettings.allowAll || effectiveConfig.toolSettings.allowed?.includes(call.name);
         if (!isAllowed) {
-            return { name: call.name, tool_call_id: call.id, error: `Tool "${call.name}" is not enabled.` };
+            return { name: call.name, tool_call_id: call.id, error: `Tool "${call.name}" is not enabled for the current agent.` };
         }
 
         try {
@@ -262,169 +203,106 @@ class McpPlugin {
             return { name: call.name, tool_call_id: call.id, content: JSON.stringify(result.content, null, 2) };
         } catch (err) {
             console.error('MCP: Tool execution error', err);
-            return { name: call.name, tool_call_id: call.id, error: err.message || 'Unknown error' };
+            return { name: call.name, tool_call_id: call.id, error: err.message || 'Unknown error during MCP call' };
         }
     }
 
-    /**
-     * Gets tools for a given MCP server URL, using cache if available, or fetching otherwise.
-     * @param {string} url - The MCP server URL.
-     * @returns {Promise<ToolSchema[]>}
-     */
+    /** @param {string} url, @param {boolean} [force=false] */
     async getTools(url, force = false) {
         if (force) {
             this.#toolCache.delete(url);
-            this.#initPromises.delete(url); // Also clear any pending/failed init promises
+            this.#initPromises.delete(url);
         }
-        if (this.#toolCache.has(url)) {
-            return this.#toolCache.get(url);
-        }
-        if (!url) {
-            this.#toolCache.set(url, []);
-            return [];
-        }
-        console.log('MCP: Fetching tools from', url);
+        if (this.#toolCache.has(url)) return this.#toolCache.get(url);
+        if (!url) return [];
         try {
             const response = await this.#mcpJsonRpc(url, 'tools/list');
             const tools = Array.isArray(response?.tools) ? response.tools : [];
             this.#toolCache.set(url, tools);
-            console.log(`DEBUG: Successfully fetched and cached ${tools.length} tools for ${url}.`);
             document.body.dispatchEvent(new CustomEvent('mcp-tools-updated', { detail: { url } }));
             return tools;
         } catch (error) {
-            console.error(`MCP: Failed to fetch tools for ${url}`, error);
-            alert(`Failed to connect to MCP server at ${url}. Please check the URL and server status.\n\n${error.message}`);
-            this.#toolCache.set(url, []);
+            alert(`Failed to connect to MCP server at ${url}.\n\n${error.message}`);
             return [];
         }
     }
 
-    /**
-     * Generates the tools Markdown section for the system prompt based on agent settings.
-     * @param {Agent | null} agent
-     * @param {ToolSchema[]} availableTools
-     * @returns {string}
-     */
+    /** @param {Agent | null} agent, @param {ToolSchema[]} availableTools */
     generateToolsSection(agent, availableTools) {
-        const agentManager = this.#app?.agentManager;
-        if (!agentManager) return '';
-
-        const defaultAgent = agentManager.getAgent('agent-default');
-        let effectiveToolSettings = defaultAgent.toolSettings;
-        if (agent?.useCustomToolSettings) {
-            effectiveToolSettings = agent.toolSettings;
-        }
-
+        const effectiveToolSettings = this.#app.agentManager.getEffectiveApiConfig(agent?.id).toolSettings;
         if (!effectiveToolSettings) return '';
-
         const allowedTools = effectiveToolSettings.allowAll
             ? availableTools
             : availableTools.filter(tool => effectiveToolSettings.allowed?.includes(tool.name));
-
-        if (!allowedTools || allowedTools.length === 0) {
-            return '';
-        }
-
+        if (allowedTools.length === 0) return '';
         return allowedTools.map((tool, idx) => {
-            const desc = tool.description || 'No description provided.';
-            const action = tool.name;
-            const displayName = action.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
             const properties = tool.inputSchema?.properties || {};
             const requiredSet = new Set(tool.inputSchema?.required || []);
-            const argsStr = Object.entries(properties).map(([name, arg]) => {
-                const argDesc = arg.description || arg.title || 'No description.';
-                const argType = arg.type || 'unknown';
-                const required = requiredSet.has(name) ? '(required)' : '(optional)';
-                const defaultStr = arg.default !== undefined ? ` (default: ${JSON.stringify(arg.default)})` : '';
-                return `   - \`${name}\`: ${argDesc} (type: ${argType})${required}${defaultStr}`;
-            }).join('\n');
-            return `${idx + 1}. **${displayName}**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${action}\`\n - **Arguments** (parameter name): \n${argsStr}`;
+            const argsStr = Object.entries(properties).map(([name, arg]) => `   - \`${name}\`: ${arg.description || 'No description.'} (type: ${arg.type || 'unknown'})${requiredSet.has(name) ? '(required)' : ''}`).join('\n');
+            return `${idx + 1}. **${tool.name}**\n - **Description**: ${tool.description || 'No description.'}\n - **Action**: \`${tool.name}\`\n - **Arguments**:\n${argsStr}`;
         }).join('\n');
-    }
-
-    /**
-     * Gets the application instance.
-     * @returns {App}
-     */
-    getApp() {
-        return this.#app;
-    }
-
-    /**
-     * A wrapper for the private #executeMcpCall method to be used in the plugin hooks.
-     * @param {import('../tool-processor.js').ToolCall} call
-     * @param {Message} message
-     * @param {string} mcpUrl
-     * @returns {Promise<import('../tool-processor.js').ToolResult>}
-     */
-    executeMcpCall(call, message, mcpUrl) {
-        return this.#executeMcpCall(call, message, mcpUrl);
     }
 }
 
-// --- Singleton Instance ---
 const mcpPluginSingleton = new McpPlugin();
 
-// --- Plugin Definition ---
-
-/**
- * Plugin for integrating with an MCP (Model Context Protocol) server.
- * @type {import('../plugin-manager.js').Plugin}
- */
 const mcpPluginDefinition = {
     name: 'MCP',
 
     onAppInit(app) {
         mcpPluginSingleton.init(app);
-        app.mcp = {
-            getTools: mcpPluginSingleton.getTools.bind(mcpPluginSingleton)
-        };
+        app.mcp = { getTools: mcpPluginSingleton.getTools.bind(mcpPluginSingleton) };
     },
 
     async onSystemPromptConstruct(systemPrompt, allSettings, agent) {
         const mcpUrl = allSettings.toolSettings?.mcpServer;
-        if (!mcpUrl) {
-            return systemPrompt;
-        }
-
+        if (!mcpUrl) return systemPrompt;
         const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (tools.length === 0) {
-            return systemPrompt;
-        }
-
+        if (tools.length === 0) return systemPrompt;
         const dynamicToolsSection = mcpPluginSingleton.generateToolsSection(agent, tools);
-        if (dynamicToolsSection) {
-            if (systemPrompt) {
-                systemPrompt += '\n\n';
-            }
-            systemPrompt += toolsHeader + dynamicToolsSection;
-        }
-        return systemPrompt;
+        return dynamicToolsSection ? `${systemPrompt}\n\n${toolsHeader}${dynamicToolsSection}` : systemPrompt;
     },
 
-    async onResponseComplete(message, activeChat) {
-        // This handler is for tool calls. If there's no message, it's an idle check, so do nothing.
-        if (!message) {
-            return false;
-        }
-
+    /**
+     * @param {ToolCall[]} toolCalls
+     * @param {Message} message
+     * @param {Chat} activeChat
+     */
+    async onToolCallParse(toolCalls, message, activeChat) {
+        if (!message?.value.content) return toolCalls;
         const app = mcpPluginSingleton.getApp();
-        const agentId = message.value.agent || null;
-        const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
-        const mcpUrl = effectiveConfig.toolSettings.mcpServer;
-        if (!mcpUrl) return false;
+        const effectiveConfig = app.agentManager.getEffectiveApiConfig(message.value.agent);
+        const mcpUrl = effectiveConfig.toolSettings?.mcpServer;
+        if (!mcpUrl) return toolCalls;
 
-        const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (!tools || tools.length === 0) return false;
+        const mcpTools = await mcpPluginSingleton.getTools(mcpUrl);
+        if (!mcpTools || mcpTools.length === 0) return toolCalls;
 
-        return await genericProcessToolCalls(
-            app,
-            activeChat,
-            message,
-            tools,
-            (call) => !call.name.endsWith('_agent'), // filter
-            (call, msg) => mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl) // executor
-        );
+        const parsedResult = parseToolCalls(message.value.content, mcpTools);
+        if (!parsedResult) return toolCalls;
+
+        const allAgentIds = new Set(app.agentManager.agents.map(a => a.id));
+        const mcpCalls = parsedResult.toolCalls.filter(call => !allAgentIds.has(call.name));
+
+        if (mcpCalls.length > 0) {
+            toolCalls.push(...mcpCalls);
+            message.value.content = parsedResult.modifiedContent;
+            message.cache = null;
+            activeChat.log.notify();
+        }
+        return toolCalls;
+    },
+
+    /**
+     * @param {ToolCall} call
+     * @param {Message} message
+     * @returns {Promise<ToolResult|null>}
+     */
+    async onToolCallExecute(call, message) {
+        const app = mcpPluginSingleton.getApp();
+        const allAgentIds = new Set(app.agentManager.agents.map(a => a.id));
+        if (allAgentIds.has(call.name)) return null;
+        return await mcpPluginSingleton.executeMcpCall(call, message);
     },
 
     onFormatMessageContent(contentEl, message) {
