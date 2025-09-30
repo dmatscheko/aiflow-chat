@@ -10,9 +10,6 @@
 import {
     generateUniqueId
 } from './utils.js';
-import {
-    pluginManager
-} from './plugin-manager.js';
 
 /**
  * @typedef {import('./main.js').App} App
@@ -123,6 +120,8 @@ class ToolCallManager {
     /** @type {ToolCallJob[]} */
     jobStack = [];
     isProcessing = false;
+    /** @type {Map<string, object>} */
+    executors = new Map();
 
     /**
      * Initializes the manager with the main application instance.
@@ -131,6 +130,20 @@ class ToolCallManager {
     init(app) {
         this.app = app;
     }
+
+    /**
+     * Allows plugins to register themselves as tool call handlers.
+     * @param {string} type - The type of executor ('agent' or 'mcp').
+     * @param {object} executor - The plugin instance that will handle the execution.
+     */
+    registerExecutor(type, executor) {
+        if (typeof executor.executeCall !== 'function') {
+            throw new Error(`Executor for type "${type}" must have an executeCall method.`);
+        }
+        this.executors.set(type, executor);
+        console.log(`[ToolCallManager] Registered executor for type: ${type}`);
+    }
+
 
     /**
      * Creates a new job from a set of parsed tool calls and adds it to the execution stack.
@@ -210,7 +223,7 @@ class ToolCallManager {
     /**
      * Dispatches a single tool call to the appropriate plugin for execution.
      * The method determines whether a call is for an agent or a standard tool (MCP)
-     * and forwards it to the corresponding plugin instance.
+     * and forwards it to the corresponding plugin instance from the registry.
      * @param {ToolCall} call - The tool call to dispatch.
      * @param {ToolCallJob} job - The job this call belongs to.
      * @private
@@ -218,20 +231,18 @@ class ToolCallManager {
     async dispatchCall(call, job) {
         try {
             const agentIds = new Set(this.app.agentManager.agents.map(a => a.id));
-            let plugin;
+            let executor;
 
             if (agentIds.has(call.name)) {
-                // This is an agent-as-tool call
-                plugin = pluginManager.plugins.find(p => p.name === 'Agents Call Plugin');
+                executor = this.executors.get('agent');
             } else {
-                // This is a standard tool call (MCP)
-                plugin = pluginManager.plugins.find(p => p.name === 'MCP Plugin');
+                executor = this.executors.get('mcp');
             }
 
-            if (plugin && plugin.instance && typeof plugin.instance.executeCall === 'function') {
-                await plugin.instance.executeCall(call, job, this.app);
+            if (executor) {
+                await executor.executeCall(call, job, this.app);
             } else {
-                throw new Error(`No handler plugin found for tool "${call.name}".`);
+                throw new Error(`No handler registered for tool "${call.name}".`);
             }
         } catch (error) {
             console.error(`[ToolCallManager] Error dispatching call ${call.tool_call_id}:`, error);

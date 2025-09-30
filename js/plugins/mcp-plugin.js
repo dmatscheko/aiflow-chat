@@ -246,9 +246,37 @@ class McpPlugin {
         if (returnHeaders) return resp.headers;
         if (isNotification) return null;
 
-        const data = await resp.json();
-        if (data.error) throw new Error(data.error.message || 'MCP call failed');
-        return data.result;
+        const rawText = await resp.text();
+        try {
+            // First, try to parse as a simple JSON object
+            const data = JSON.parse(rawText);
+            if (data.error) throw new Error(data.error.message || 'MCP call failed');
+            return data.result;
+        } catch (error) {
+            // If parsing fails, check if it's an event-stream
+            if (error instanceof SyntaxError && rawText.includes('data:')) {
+                const lines = rawText.split('\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        try {
+                            const eventData = JSON.parse(line.substring(6));
+                            if (eventData.error) {
+                                throw new Error(eventData.error.message || 'MCP call failed');
+                            }
+                            // The final result in a stream is the one with a 'result' key
+                            if (eventData.result) {
+                                return eventData.result;
+                            }
+                        } catch (e) {
+                            console.warn('MCP: Could not parse event-stream data chunk as JSON.', line.substring(6));
+                        }
+                    }
+                }
+            }
+            // If we're here, either it wasn't a SyntaxError, it wasn't an event stream,
+            // or we failed to extract a result from the event stream. Re-throw the original error.
+            throw error;
+        }
     }
 }
 
@@ -260,6 +288,7 @@ const mcpPluginDefinition = {
 
     onAppInit(app) {
         mcpPluginSingleton.init(app);
+        toolCallManager.registerExecutor('mcp', mcpPluginSingleton);
         app.mcp = {
             getTools: mcpPluginSingleton.getTools.bind(mcpPluginSingleton),
         };

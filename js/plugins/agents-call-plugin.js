@@ -241,6 +241,9 @@ const agentsCallPluginInstance = new AgentsCallPlugin();
 pluginManager.register({
     name: 'Agents Call Plugin',
     instance: agentsCallPluginInstance, // Expose instance for the ToolCallManager
-    onAppInit: (app) => agentsCallPluginInstance.init(app),
+    onAppInit: (app) => {
+        agentsCallPluginInstance.init(app);
+        toolCallManager.registerExecutor('agent', agentsCallPluginInstance);
+    },
     onSystemPromptConstruct: (systemPrompt, allSettings, agent) => agentsCallPluginInstance.onSystemPromptConstruct(systemPrompt, allSettings, agent),
 });
