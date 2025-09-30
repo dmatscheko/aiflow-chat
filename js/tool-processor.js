@@ -292,58 +292,69 @@ class ToolCallManager {
     }
 
     /**
-     * Parses tool calls from content, assigns new unique IDs, and rebuilds the content.
+     * Parses tool calls from content, assigns new unique IDs, extracts parameters, and rebuilds the content.
      * @param {string | null} content - The message content to parse.
      * @returns {{toolCalls: ToolCall[], updatedContent: string}}
      * @private
      */
     _parseAndPrepareCalls(content) {
         const toolCalls = [];
-        if (!content) return { toolCalls, updatedContent: '' };
+        if (!content) return { toolCalls, updatedContent: content };
 
-        const functionCallRegex = /(<dma:tool_call\s+[^>]+?\/?>)/gi;
+        // This regex handles both self-closing tags (<.../>) and container tags (<...>...</...>)
+        const functionCallRegex = /<dma:tool_call\s+([^>]+?)\/>|<dma:tool_call\s+([^>]*?)>([\s\S]*?)<\/dma:tool_call\s*>/gi;
+        const nameRegex = /name="([^"]*)"/;
+        const paramsRegex = /<parameter\s+name="([^"]*)">([\s\S]*?)<\/parameter>/g;
+
         let lastIndex = 0;
         const newContentParts = [];
 
         for (const match of content.matchAll(functionCallRegex)) {
-            const fullMatch = match[0];
             const startIndex = match.index;
+            const fullMatchText = match[0];
 
-            // Add the text before this match
+            // Add the content since the last match
             newContentParts.push(content.slice(lastIndex, startIndex));
 
-            let attributes = fullMatch.slice(15, -1).trim();
-            if (attributes.endsWith('/')) {
-                attributes = attributes.slice(0, -1).trim();
-            }
+            const [, selfClosingAttrs, openTagAttrs, innerContent] = match;
+            const isSelfClosing = innerContent === undefined;
+            const attributes = isSelfClosing ? selfClosingAttrs : openTagAttrs;
+            const nameMatch = nameRegex.exec(attributes);
 
-            const nameMatch = /name="([^"]*)"/.exec(attributes);
             if (!nameMatch) {
-                newContentParts.push(fullMatch); // Not a valid call, push as is
-                lastIndex = startIndex + fullMatch.length;
+                newContentParts.push(fullMatchText);
+                lastIndex = startIndex + fullMatchText.length;
                 continue;
             }
+
             const name = nameMatch[1];
+            const params = {};
+
+            if (!isSelfClosing) {
+                let paramMatch;
+                while ((paramMatch = paramsRegex.exec(innerContent)) !== null) {
+                    const [, paramName, paramValue] = paramMatch;
+                    let value = paramValue.trim().replace(/<\\\/dma:tool_call>/g, '</dma:tool_call>').replace(/<\\\/parameter>/g, '</parameter>');
+                    params[paramName] = value;
+                }
+            }
+
             const newId = `call_${Date.now()}_${this.uniqueCounter++}`;
-
-            // Create the tool call object
-            const call = { tool_call_id: newId, name, params: {} };
-
-            // This is a simplified parser. The full param parsing will happen in the executor
-            // if needed, but for now, we just need to inject the ID.
+            const call = { tool_call_id: newId, name, params };
             toolCalls.push(call);
 
-            // Rebuild the tag with the new ID, removing any old one
-            let newTag = fullMatch.replace(/\s+tool_call_id\s*=\s*["'][^"']*["']/g, '');
+            const openTagMatch = /<dma:tool_call[^>]*>/.exec(fullMatchText);
+            let openTag = openTagMatch[0];
+            openTag = openTag.replace(/\s+tool_call_id\s*=\s*["'][^"']*["']/g, '');
             const insert = ` tool_call_id="${newId}"`;
-            const endSlice = newTag.endsWith('/>') ? -2 : -1;
-            newTag = newTag.slice(0, endSlice) + insert + newTag.slice(endSlice);
+            const endSlice = openTag.endsWith('/>') ? -2 : -1;
+            const newOpenTag = openTag.slice(0, endSlice) + insert + openTag.slice(endSlice);
+            const updatedFullMatchText = newOpenTag + fullMatchText.substring(openTag.length);
 
-            newContentParts.push(newTag);
-            lastIndex = startIndex + fullMatch.length;
+            newContentParts.push(updatedFullMatchText);
+            lastIndex = startIndex + fullMatchText.length;
         }
 
-        // Add the remaining part of the string
         newContentParts.push(content.slice(lastIndex));
 
         return {
@@ -353,11 +364,10 @@ class ToolCallManager {
     }
 }
 
-// --- Tool Call Parsing (Legacy, for reference or simple parsing needs) ---
-
 /**
  * Parses tool calls from an assistant's message content without creating a job.
  * Useful for checks where you only need to know if calls exist.
+ * This version also correctly parses parameters.
  * @param {string | null} content - The message content to parse.
  * @returns {ToolCall[]} The parsed tool calls.
  */
