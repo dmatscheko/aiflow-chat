@@ -69,6 +69,7 @@ export function parseToolCalls(content) {
     const nameRegex = /name="([^"]*)"/;
     const paramsRegex = /<parameter\s+name="([^"]*)">([\s\S]*?)<\/parameter>/g;
 
+    const generatedIds = new Set();
     for (const match of content.matchAll(functionCallRegex)) {
         const [fullMatch, selfClosingAttrs, openTagAttrs, innerContent] = match;
         const isSelfClosing = innerContent === undefined;
@@ -89,8 +90,11 @@ export function parseToolCalls(content) {
             }
         }
 
+        const newId = generateUniqueId('call', generatedIds);
+        generatedIds.add(newId);
+
         const call = {
-            tool_call_id: generateUniqueId('call'),
+            tool_call_id: newId,
             name,
             params,
         };

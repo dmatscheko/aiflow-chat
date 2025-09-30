@@ -83,15 +83,21 @@ export function importJson(extension, onParsedData) {
 
 /**
  * Generates a unique ID with a given prefix.
- * If the initial ID conflicts with an existing one, it appends a random suffix.
+ * If the initial timestamp-based ID conflicts with an existing one, it appends
+ * a counter until a unique ID is found. This handles high-frequency calls
+ * within the same millisecond.
  * @param {string} [prefix='id'] - The prefix for the ID (e.g., 'agent', 'chat').
  * @param {Set<string>} [existingIds=new Set()] - A set of already existing IDs to check against for uniqueness.
  * @returns {string} A new, unique ID.
  */
 export function generateUniqueId(prefix = 'id', existingIds = new Set()) {
-    let id = `${prefix}-${Date.now()}`;
+    const baseId = `${prefix}-${Date.now()}`;
+    let id = baseId;
+    let counter = 0;
+    // If the base ID already exists, start appending a counter.
     while (existingIds.has(id)) {
-        id = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        id = `${baseId}_${counter}`;
+        counter++;
     }
     return id;
 }
