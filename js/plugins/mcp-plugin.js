@@ -5,7 +5,6 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { processToolCalls as genericProcessToolCalls } from '../tool-processor.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -402,29 +401,34 @@ const mcpPluginDefinition = {
         return systemPrompt;
     },
 
-    async onResponseComplete(message, activeChat) {
-        // This handler is for tool calls. If there's no message, it's an idle check, so do nothing.
-        if (!message) {
-            return false;
+    async onExecuteToolCall(call, message) {
+        const app = mcpPluginSingleton.getApp();
+        const agentManager = app.agentManager;
+        if (!agentManager) {
+            return { name: call.name, tool_call_id: call.id, error: 'Agent manager not available.' };
         }
 
-        const app = mcpPluginSingleton.getApp();
+        // Defer to agents-call-plugin if the call name is a registered agent ID.
+        const allAgentIds = new Set(agentManager.agents.map(a => a.id));
+        if (allAgentIds.has(call.name)) {
+            return false; // Signal that this plugin does not handle this call.
+        }
+
+        // This plugin handles all other (i.e., non-agent) tool calls.
         const agentId = message.value.agent || null;
-        const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
-        const mcpUrl = effectiveConfig.toolSettings.mcpServer;
-        if (!mcpUrl) return false;
+        const effectiveConfig = agentManager.getEffectiveApiConfig(agentId);
+        const mcpUrl = effectiveConfig.toolSettings?.mcpServer;
 
-        const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (!tools || tools.length === 0) return false;
+        if (!mcpUrl) {
+            return {
+                name: call.name,
+                tool_call_id: call.id,
+                error: `Cannot execute tool: No MCP Server URL is configured for agent "${agentId || 'default'}".`,
+            };
+        }
 
-        return await genericProcessToolCalls(
-            app,
-            activeChat,
-            message,
-            tools,
-            (call) => !call.name.endsWith('_agent'), // filter
-            (call, msg) => mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl) // executor
-        );
+        // The private #executeMcpCall method handles the actual execution and returns a ToolResult.
+        return mcpPluginSingleton.executeMcpCall(call, message, mcpUrl);
     },
 
     onFormatMessageContent(contentEl, message) {

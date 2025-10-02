@@ -20,6 +20,7 @@
 
 /**
  * @typedef {object} SerializedMessage
+ * @property {string} id - The unique ID of the message.
  * @property {MessageValue} value - The value of the message.
  * @property {SerializedAlternatives | null} answerAlternatives - The serialized answer alternatives.
  */
@@ -41,6 +42,8 @@ class Message {
      * @param {MessageValue} value - The message value, e.g., `{ role: 'user', content: 'Hello' }`.
      */
     constructor(value) {
+        /** @type {string} */
+        this.id = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
         /** @type {MessageValue} */
         this.value = value;
         /**
@@ -64,6 +67,7 @@ class Message {
      */
     toJSON() {
         return {
+            id: this.id,
             value: this.value,
             answerAlternatives: this.answerAlternatives ? this.answerAlternatives.toJSON() : null,
         };
@@ -136,25 +140,36 @@ export class ChatLog {
     }
 
     /**
-     * Adds a message to the active conversational path.
-     * If it's the first message, it creates the root. Otherwise, it adds it as an
-     * answer to the last message in the active path.
+     * Adds a message to the chat log.
+     * If a `parentMessageId` is provided, it adds the new message as a child of that specific message.
+     * Otherwise, it adds the message to the end of the current active conversation path.
      * @param {MessageValue} value - The value of the message to add.
-     * @returns {Message} The newly added message instance.
+     * @param {string | null} [parentMessageId=null] - The ID of the parent message.
+     * @returns {Message | null} The newly added message instance, or null if the parent wasn't found.
      */
-    addMessage(value) {
-        const lastMessage = this.getLastMessage();
+    addMessage(value, parentMessageId = null) {
+        let parentMessage;
+        if (parentMessageId) {
+            parentMessage = this.findMessageById(parentMessageId);
+            if (!parentMessage) {
+                console.error(`Could not add message: Parent message with ID "${parentMessageId}" not found.`);
+                return null;
+            }
+        } else {
+            parentMessage = this.getLastMessage();
+        }
+
         let newMessage;
-        if (!lastMessage) {
+        if (!parentMessage) {
             // This is the first message in the chat.
             this.rootAlternatives = new Alternatives();
             newMessage = this.rootAlternatives.addMessage(value);
         } else {
-            // Add the new message as an answer to the last message.
-            if (!lastMessage.answerAlternatives) {
-                lastMessage.answerAlternatives = new Alternatives();
+            // Add the new message as an answer to the determined parent.
+            if (!parentMessage.answerAlternatives) {
+                parentMessage.answerAlternatives = new Alternatives();
             }
-            newMessage = lastMessage.answerAlternatives.addMessage(value);
+            newMessage = parentMessage.answerAlternatives.addMessage(value);
         }
         this.notify();
         return newMessage;
@@ -173,6 +188,35 @@ export class ChatLog {
             current = current.getActiveAnswer();
         }
         return current;
+    }
+
+    /**
+     * Finds a message anywhere in the chat tree by its unique ID.
+     * @param {string} messageId - The ID of the message to find.
+     * @returns {Message | null} The found message, or null if it doesn't exist.
+     */
+    findMessageById(messageId) {
+        if (!this.rootAlternatives) {
+            return null;
+        }
+
+        // Helper function to perform a depth-first search.
+        const findInAlternatives = (alternatives) => {
+            for (const message of alternatives.messages) {
+                if (message.id === messageId) {
+                    return message;
+                }
+                if (message.answerAlternatives) {
+                    const found = findInAlternatives(message.answerAlternatives);
+                    if (found) {
+                        return found;
+                    }
+                }
+            }
+            return null;
+        };
+
+        return findInAlternatives(this.rootAlternatives);
     }
 
     /**
@@ -437,6 +481,10 @@ export class ChatLog {
             alternatives.activeMessageIndex = altData.activeMessageIndex;
             alternatives.messages = altData.messages.map(msgData => {
                 const message = new Message(msgData.value);
+                // Restore the ID from serialized data
+                if (msgData.id) {
+                    message.id = msgData.id;
+                }
                 if (msgData.answerAlternatives) {
                     message.answerAlternatives = buildAlternatives(msgData.answerAlternatives);
                 }

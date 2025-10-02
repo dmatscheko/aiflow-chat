@@ -5,6 +5,7 @@
 'use strict';
 
 import { pluginManager } from './plugin-manager.js';
+import { parseToolCalls } from './tool-processor.js';
 
 /**
  * @typedef {import('./main.js').App} App
@@ -62,15 +63,11 @@ class ResponseProcessor {
     }
 
     /**
-     * The main processing loop. It robustly handles a cycle of AI responses and
-     * subsequent plugin actions.
-     * 1. It first prioritizes and processes any pending AI message.
-     * 2. After processing, it immediately triggers `onResponseComplete` for that message.
-     * 3. If a handler acts, the loop restarts to handle any new work.
-     * 4. If no messages are pending, it triggers `onResponseComplete` with a null context
-     *    to allow plugins to act on the idle state.
-     * 5. The loop only terminates when a full pass results in no pending messages and no
-     *    plugin actions.
+     * The main processing loop. It finds and processes a single pending message.
+     * If the response contains tool calls, it hands them off to the ToolCallManager.
+     * If no pending messages exist, it checks for idle-state plugin actions (like flows).
+     * The loop is not continuous; it processes one item and exits, relying on other
+     * components (like ToolCallManager) to re-schedule it when new work is ready.
      * @private
      */
     async processLoop() {
@@ -78,46 +75,51 @@ class ResponseProcessor {
         this.isProcessing = true;
 
         try {
-            while (true) {
-                const workItem = this._findNextPendingMessage();
-                if (workItem) {
-                    const { chat, message } = workItem;
-                    // Highest priority: process any pending AI response.
-                    await this.processMessage(chat, message);
+            const workItem = this._findNextPendingMessage();
+            if (workItem) {
+                const { chat, message } = workItem;
 
-                    // Immediately give plugins a chance to react to the new message.
-                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', message, chat);
-                    if (aHandlerTookAction) {
-                        // A plugin (e.g., mcp-plugin) took action, so new work might exist.
-                        // Restart the loop to handle it immediately.
-                        continue;
+                // 1. Generate the assistant's response.
+                await this.processMessage(chat, message);
+
+                // 2. If the response is valid, parse for tool calls.
+                if (message.value.content && !message.value.content.startsWith('Error:')) {
+                    const toolCalls = parseToolCalls(message.value.content);
+
+                    if (toolCalls.length > 0) {
+                        // 3. If tools are found, hand off to the ToolCallManager.
+                        // The manager will handle the entire sequence of tool execution
+                        // and will schedule the next processing loop when it's the AI's turn again.
+                        this.app.toolCallManager.addJob(toolCalls, message, chat.log);
+                        // The ToolCallManager is now in charge, so this loop's work is done.
+                        return; // Exit the loop
                     }
-                    // If no handler acted on this specific message, we still continue,
-                    // as there might be other pending messages.
-                    continue;
                 }
+                // If there are no tool calls, the turn is over. The loop will naturally end.
 
-                // If we're here, the AI is idle. Check if any plugin wants to take a follow-up action.
+            } else {
+                // No pending messages found. Check for idle-state actions (e.g., flows).
                 const activeChat = this.app.chatManager.getActiveChat();
                 if (activeChat) {
-                    // Trigger with a null message to signify an idle-state check.
+                    // This hook is now ONLY for idle state checks.
                     const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', null, activeChat);
                     if (aHandlerTookAction) {
-                        // A plugin (e.g., flows-plugin) took action. Loop again.
-                        continue;
+                        // A flow started, which likely added a pending message.
+                        // We can recursively call processLoop to handle it immediately.
+                        // We must unlock first to allow the recursive call.
+                        this.isProcessing = false;
+                        this.processLoop();
+                        return; // Return to prevent the finally block from running on this instance.
                     }
                 }
-
-                // If we reach this point, it means:
-                // 1. There were no pending messages to process.
-                // 2. No plugin took any action on the idle state.
-                // Therefore, all work is truly complete.
-                break;
             }
         } catch (error) {
             console.error('Error in processing loop:', error);
         } finally {
-            this.isProcessing = false;
+            // Only set to false if we are not in a recursive call that has already been handled.
+            if (this.isProcessing) {
+                this.isProcessing = false;
+            }
         }
     }
 
