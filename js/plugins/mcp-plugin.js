@@ -1,16 +1,18 @@
 /**
- * @fileoverview Plugin for MCP (Model Context Protocol) integration, encapsulated in a singleton class.
+ * @fileoverview Plugin for MCP (Model Context Protocol) integration.
+ * This plugin acts as a tool executor for standard MCP tools.
  */
 
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { processToolCalls as genericProcessToolCalls } from '../tool-processor.js';
+import { toolCallManager } from '../tool-processor.js';
 
 /**
  * @typedef {import('../main.js').App} App
  * @typedef {import('../chat-data.js').Message} Message
- * @typedef {import('../main.js').Chat} Chat
+ * @typedef {import('../tool-processor.js').ToolCall} ToolCall
+ * @typedef {import('../tool-processor.js').ToolCallJob} ToolCallJob
  * @typedef {import('../tool-processor.js').ToolSchema} ToolSchema
  * @typedef {import('./agents-plugin.js').Agent} Agent
  */
@@ -36,45 +38,19 @@ IMPORTANT: Write files only if explicitely instructed to do so.
 
 /**
  * Singleton class to manage all MCP (Model Context Protocol) communication.
- * This includes caching session data, fetching and caching tool definitions,
- * and executing tool calls.
  */
 class McpPlugin {
-    /** @type {McpPlugin | null} */
     static #instance = null;
 
-    /**
-     * A cache to store tool schemas, keyed by the MCP server URL.
-     * @type {Map<string, ToolSchema[]>}
-     * @private
-     */
+    /** @type {Map<string, ToolSchema[]>} */
     #toolCache = new Map();
-
-    /**
-     * A cache for MCP session IDs, keyed by the MCP server URL.
-     * @type {Map<string, string>}
-     * @private
-     */
+    /** @type {Map<string, string>} */
     #sessionCache = new Map();
-
-    /**
-     * Tracks ongoing initialization promises, keyed by MCP server URL.
-     * @type {Map<string, Promise<any>>}
-     * @private
-     */
+    /** @type {Map<string, Promise<any>>} */
     #initPromises = new Map();
-
-    /**
-     * The application instance.
-     * @type {App | null}
-     * @private
-     */
+    /** @type {App | null} */
     #app = null;
 
-    /**
-     * Enforces the singleton pattern.
-     * @returns {McpPlugin}
-     */
     constructor() {
         if (McpPlugin.#instance) {
             return McpPlugin.#instance;
@@ -83,23 +59,83 @@ class McpPlugin {
     }
 
     /**
-     * Initializes the plugin and stores the app instance.
-     * @param {App} app - The main application instance.
+     * @param {App} app
      */
     init(app) {
         this.#app = app;
+        toolCallManager.registerExecutor('mcp-executor', {
+            canExecute: (call) => this.canExecute(call),
+            execute: (call, job) => this.execute(call, job),
+        });
     }
 
     /**
-     * Sends a raw JSON-RPC request to the MCP server.
-     * @param {string} url - The MCP server URL.
-     * @param {string} method - The JSON-RPC method name.
-     * @param {object} params - The JSON-RPC parameters.
-     * @param {boolean} [isNotification=false] - Whether this is a notification (no 'id').
-     * @param {boolean} [returnHeaders=false] - Whether to return the response headers instead of the body.
-     * @returns {Promise<any>}
-     * @private
+     * Checks if this executor can handle the given tool call.
+     * It handles any call that is not an agent-to-agent call.
+     * @param {ToolCall} call
+     * @returns {boolean}
      */
+    canExecute(call) {
+        if (!this.#app || !this.#app.agentManager) return false;
+        const agentIds = new Set(this.#app.agentManager.agents.map(a => a.id));
+        return !agentIds.has(call.name);
+    }
+
+    /**
+     * Executes an MCP tool call.
+     * @param {ToolCall} call
+     * @param {ToolCallJob} job
+     */
+    async execute(call, job) {
+        const agentId = job.callingAgentId;
+        const effectiveConfig = this.#app.agentManager.getEffectiveApiConfig(agentId);
+        const mcpUrl = effectiveConfig.toolSettings?.mcpServer;
+
+        if (!mcpUrl) {
+            return toolCallManager.notifyCallComplete(job.id, {
+                tool_call_id: call.tool_call_id, name: call.name, error: 'No MCP server URL is configured.', content: null
+            });
+        }
+
+        const agent = agentId ? this.#app.agentManager.getAgent(agentId) : null;
+        const defaultAgent = this.#app.agentManager.getAgent('agent-default');
+        let effectiveToolSettings = defaultAgent.toolSettings;
+        if (agent?.useCustomToolSettings) {
+            effectiveToolSettings = agent.toolSettings;
+        }
+
+        const isAllowed = effectiveToolSettings.allowAll || effectiveToolSettings.allowed?.includes(call.name);
+        if (!isAllowed) {
+            return toolCallManager.notifyCallComplete(job.id, {
+                tool_call_id: call.tool_call_id, name: call.name, error: `Tool "${call.name}" is not enabled for the agent.`, content: null
+            });
+        }
+
+        try {
+            const result = await this.#mcpJsonRpc(mcpUrl, 'tools/call', { name: call.name, arguments: call.params });
+            if (result.isError) {
+                return toolCallManager.notifyCallComplete(job.id, {
+                    tool_call_id: call.tool_call_id, name: call.name, error: JSON.stringify(result.content), content: null
+                });
+            }
+
+            if (call.name === 'web_search' || call.name === 'browse_page' || call.name.startsWith('x_')) {
+                if (!job.originalMessage.metadata) job.originalMessage.metadata = {};
+                job.originalMessage.metadata.sources = result.sources || [];
+            }
+
+            toolCallManager.notifyCallComplete(job.id, {
+                tool_call_id: call.tool_call_id, name: call.name, content: JSON.stringify(result.content, null, 2), error: null
+            });
+
+        } catch (err) {
+            console.error('MCP: Tool execution error', err);
+            toolCallManager.notifyCallComplete(job.id, {
+                tool_call_id: call.tool_call_id, name: call.name, error: err.message || 'Unknown error', content: null
+            });
+        }
+    }
+
     async #sendMcpRequest(url, method, params, isNotification = false, returnHeaders = false) {
         if (!url) throw new Error('No MCP server URL set');
         const body = { jsonrpc: '2.0', method, params };
@@ -127,22 +163,16 @@ class McpPlugin {
                 throw new Error(`MCP error: ${resp.statusText} - ${errorText}`);
             }
 
-            if (returnHeaders) {
-                return resp.headers;
-            }
-
+            if (returnHeaders) return resp.headers;
             if (isNotification) return null;
 
             const rawText = await resp.text();
-            console.log(`DEBUG: Raw response from ${url} for method ${method}:`, rawText);
-
             try {
                 const data = JSON.parse(rawText);
                 if (data.error) throw new Error(data.error.message || 'MCP call failed');
                 return data.result;
             } catch (error) {
                 if (error instanceof SyntaxError && rawText.includes('data:')) {
-                    console.warn('MCP: JSON parsing failed, attempting to parse as event-stream.');
                     let result = null;
                     const lines = rawText.split('\n');
                     for (const line of lines) {
@@ -151,7 +181,7 @@ class McpPlugin {
                                 const partial = JSON.parse(line.slice(6));
                                 if (partial.jsonrpc) result = partial.result;
                             } catch (e) {
-                                console.warn("MCP: Could not parse event-stream data chunk as JSON.", line.slice(6));
+                                console.warn("MCP: Could not parse event-stream data chunk.", line.slice(6));
                             }
                         }
                     }
@@ -166,19 +196,10 @@ class McpPlugin {
         }
     }
 
-    /**
-     * Performs the full MCP session initialization handshake for a given URL.
-     * @param {string} url - The MCP server URL.
-     * @returns {Promise<void>}
-     * @private
-     */
     async #initMcpSession(url) {
         if (this.#initPromises.has(url)) return this.#initPromises.get(url);
-
         const promise = (async () => {
             if (this.#sessionCache.has(url)) return;
-
-            console.log(`MCP: Initializing session for ${url}`);
             const initParams = {
                 protocolVersion: '2025-03-26',
                 capabilities: { roots: { listChanged: false }, sampling: {} },
@@ -186,15 +207,10 @@ class McpPlugin {
             };
             const respHeaders = await this.#sendMcpRequest(url, 'initialize', initParams, false, true);
             const sessionId = respHeaders.get('mcp-session-id');
-
-            if (!sessionId) {
-                throw new Error('No session ID returned in initialize response header');
-            }
+            if (!sessionId) throw new Error('No session ID in initialize response');
             this.#sessionCache.set(url, sessionId);
             await this.#sendMcpRequest(url, 'notifications/initialized', {}, true);
-            console.log(`MCP: Session initialized for ${url}`, sessionId);
         })();
-
         this.#initPromises.set(url, promise);
         try {
             await promise;
@@ -203,15 +219,6 @@ class McpPlugin {
         }
     }
 
-    /**
-     * Performs a JSON-RPC call to the MCP server, handling session initialization and retries.
-     * @param {string} url - The MCP server URL.
-     * @param {string} method - The JSON-RPC method name.
-     * @param {object} [params={}] - The JSON-RPC parameters.
-     * @param {boolean} [retry=false] - Internal flag to prevent infinite retry loops.
-     * @returns {Promise<any>}
-     * @private
-     */
     async #mcpJsonRpc(url, method, params = {}, retry = false) {
         try {
             await this.#initMcpSession(url);
@@ -221,110 +228,49 @@ class McpPlugin {
             if (error.message.includes('session') && !retry) {
                 this.#sessionCache.delete(url);
                 this.#initPromises.delete(url);
-                console.log('MCP: Retrying MCP call after session re-init');
                 return this.#mcpJsonRpc(url, method, params, true);
             }
-            throw new AggregateError([error], `Failed to perform MCP JSON-RPC call to ${url}.`);
+            throw new AggregateError([error], `Failed MCP call to ${url}.`);
         }
     }
 
-    /**
-     * Executes a single MCP tool call after checking agent permissions.
-     * @param {import('../tool-processor.js').ToolCall} call
-     * @param {Message} message
-     * @param {string} mcpUrl
-     * @returns {Promise<import('../tool-processor.js').ToolResult>}
-     * @private
-     */
-    async #executeMcpCall(call, message, mcpUrl) {
-        const agentId = message.value.agent;
-        const agent = agentId ? this.#app.agentManager.getAgent(agentId) : null;
-        const defaultAgent = this.#app.agentManager.getAgent('agent-default');
-        let effectiveToolSettings = defaultAgent.toolSettings;
-        if (agent?.useCustomToolSettings) {
-            effectiveToolSettings = agent.toolSettings;
-        }
-
-        const isAllowed = effectiveToolSettings.allowAll || effectiveToolSettings.allowed?.includes(call.name);
-        if (!isAllowed) {
-            return { name: call.name, tool_call_id: call.id, error: `Tool "${call.name}" is not enabled.` };
-        }
-
-        try {
-            const result = await this.#mcpJsonRpc(mcpUrl, 'tools/call', { name: call.name, arguments: call.params });
-            if (result.isError) {
-                return { name: call.name, tool_call_id: call.id, error: JSON.stringify(result.content) };
-            }
-            if (call.name === 'web_search' || call.name === 'browse_page' || call.name.startsWith('x_')) {
-                if (!message.metadata) message.metadata = {};
-                message.metadata.sources = result.sources || [];
-            }
-            return { name: call.name, tool_call_id: call.id, content: JSON.stringify(result.content, null, 2) };
-        } catch (err) {
-            console.error('MCP: Tool execution error', err);
-            return { name: call.name, tool_call_id: call.id, error: err.message || 'Unknown error' };
-        }
-    }
-
-    /**
-     * Gets tools for a given MCP server URL, using cache if available, or fetching otherwise.
-     * @param {string} url - The MCP server URL.
-     * @returns {Promise<ToolSchema[]>}
-     */
     async getTools(url, force = false) {
         if (force) {
             this.#toolCache.delete(url);
-            this.#initPromises.delete(url); // Also clear any pending/failed init promises
+            this.#initPromises.delete(url);
         }
-        if (this.#toolCache.has(url)) {
-            return this.#toolCache.get(url);
-        }
+        if (this.#toolCache.has(url)) return this.#toolCache.get(url);
         if (!url) {
             this.#toolCache.set(url, []);
             return [];
         }
-        console.log('MCP: Fetching tools from', url);
         try {
             const response = await this.#mcpJsonRpc(url, 'tools/list');
             const tools = Array.isArray(response?.tools) ? response.tools : [];
             this.#toolCache.set(url, tools);
-            console.log(`DEBUG: Successfully fetched and cached ${tools.length} tools for ${url}.`);
             document.body.dispatchEvent(new CustomEvent('mcp-tools-updated', { detail: { url } }));
             return tools;
         } catch (error) {
             console.error(`MCP: Failed to fetch tools for ${url}`, error);
-            alert(`Failed to connect to MCP server at ${url}. Please check the URL and server status.\n\n${error.message}`);
+            alert(`Failed to connect to MCP server at ${url}.\n\n${error.message}`);
             this.#toolCache.set(url, []);
             return [];
         }
     }
 
-    /**
-     * Generates the tools Markdown section for the system prompt based on agent settings.
-     * @param {Agent | null} agent
-     * @param {ToolSchema[]} availableTools
-     * @returns {string}
-     */
     generateToolsSection(agent, availableTools) {
         const agentManager = this.#app?.agentManager;
         if (!agentManager) return '';
-
         const defaultAgent = agentManager.getAgent('agent-default');
         let effectiveToolSettings = defaultAgent.toolSettings;
         if (agent?.useCustomToolSettings) {
             effectiveToolSettings = agent.toolSettings;
         }
-
         if (!effectiveToolSettings) return '';
-
         const allowedTools = effectiveToolSettings.allowAll
             ? availableTools
             : availableTools.filter(tool => effectiveToolSettings.allowed?.includes(tool.name));
-
-        if (!allowedTools || allowedTools.length === 0) {
-            return '';
-        }
-
+        if (!allowedTools || allowedTools.length === 0) return '';
         return allowedTools.map((tool, idx) => {
             const desc = tool.description || 'No description provided.';
             const action = tool.name;
@@ -341,36 +287,10 @@ class McpPlugin {
             return `${idx + 1}. **${displayName}**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${action}\`\n - **Arguments** (parameter name): \n${argsStr}`;
         }).join('\n');
     }
-
-    /**
-     * Gets the application instance.
-     * @returns {App}
-     */
-    getApp() {
-        return this.#app;
-    }
-
-    /**
-     * A wrapper for the private #executeMcpCall method to be used in the plugin hooks.
-     * @param {import('../tool-processor.js').ToolCall} call
-     * @param {Message} message
-     * @param {string} mcpUrl
-     * @returns {Promise<import('../tool-processor.js').ToolResult>}
-     */
-    executeMcpCall(call, message, mcpUrl) {
-        return this.#executeMcpCall(call, message, mcpUrl);
-    }
 }
 
-// --- Singleton Instance ---
 const mcpPluginSingleton = new McpPlugin();
 
-// --- Plugin Definition ---
-
-/**
- * Plugin for integrating with an MCP (Model Context Protocol) server.
- * @type {import('../plugin-manager.js').Plugin}
- */
 const mcpPluginDefinition = {
     name: 'MCP',
 
@@ -383,48 +303,15 @@ const mcpPluginDefinition = {
 
     async onSystemPromptConstruct(systemPrompt, allSettings, agent) {
         const mcpUrl = allSettings.toolSettings?.mcpServer;
-        if (!mcpUrl) {
-            return systemPrompt;
-        }
-
+        if (!mcpUrl) return systemPrompt;
         const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (tools.length === 0) {
-            return systemPrompt;
-        }
-
+        if (tools.length === 0) return systemPrompt;
         const dynamicToolsSection = mcpPluginSingleton.generateToolsSection(agent, tools);
         if (dynamicToolsSection) {
-            if (systemPrompt) {
-                systemPrompt += '\n\n';
-            }
+            if (systemPrompt) systemPrompt += '\n\n';
             systemPrompt += toolsHeader + dynamicToolsSection;
         }
         return systemPrompt;
-    },
-
-    async onResponseComplete(message, activeChat) {
-        // This handler is for tool calls. If there's no message, it's an idle check, so do nothing.
-        if (!message) {
-            return false;
-        }
-
-        const app = mcpPluginSingleton.getApp();
-        const agentId = message.value.agent || null;
-        const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
-        const mcpUrl = effectiveConfig.toolSettings.mcpServer;
-        if (!mcpUrl) return false;
-
-        const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (!tools || tools.length === 0) return false;
-
-        return await genericProcessToolCalls(
-            app,
-            activeChat,
-            message,
-            tools,
-            (call) => !call.name.endsWith('_agent'), // filter
-            (call, msg) => mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl) // executor
-        );
     },
 
     onFormatMessageContent(contentEl, message) {
