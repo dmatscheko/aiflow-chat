@@ -14,9 +14,9 @@ import { pluginManager } from './plugin-manager.js';
 
 /**
  * Manages the queue and execution of AI response generation.
- * It scans for pending messages, processes them, and then allows plugins
- * to handle the completed response, potentially creating more work. This cycle
- * continues until no more work is pending and no plugin takes further action.
+ * It scans for pending messages, processes them, and then either hands off
+ * to the ToolCallManager if tools are present, or continues to the next
+ * message. This cycle continues until no more work is pending.
  * @class
  */
 class ResponseProcessor {
@@ -35,13 +35,16 @@ class ResponseProcessor {
     }
 
     /**
-     * Schedules a processing check. If not already processing, it starts the robust processing loop.
+     * Schedules a processing check. If not already processing, it starts the loop.
      * @param {App} app - The main application instance.
      */
     scheduleProcessing(app) {
         this.app = app;
         if (!this.isProcessing) {
-            this.processLoop();
+            // Use a timeout to allow the call stack to clear. This helps prevent race
+            // conditions where a process (like the tool manager) might be initiated
+            // but hasn't yet set its `isProcessing` flag.
+            setTimeout(() => this.processLoop(), 0);
         }
     }
 
@@ -52,7 +55,17 @@ class ResponseProcessor {
      */
     _findNextPendingMessage() {
         if (!this.app) return null;
+        // Prioritize the active chat
+        const activeChat = this.app.chatManager.getActiveChat();
+        if (activeChat) {
+            const pendingMessage = activeChat.log.findNextPendingMessage();
+            if (pendingMessage) {
+                return { chat: activeChat, message: pendingMessage };
+            }
+        }
+        // Check other chats
         for (const chat of this.app.chatManager.chats) {
+            if (chat.id === activeChat?.id) continue;
             const pendingMessage = chat.log.findNextPendingMessage();
             if (pendingMessage) {
                 return { chat, message: pendingMessage };
@@ -62,15 +75,10 @@ class ResponseProcessor {
     }
 
     /**
-     * The main processing loop. It robustly handles a cycle of AI responses and
-     * subsequent plugin actions.
-     * 1. It first prioritizes and processes any pending AI message.
-     * 2. After processing, it immediately triggers `onResponseComplete` for that message.
-     * 3. If a handler acts, the loop restarts to handle any new work.
-     * 4. If no messages are pending, it triggers `onResponseComplete` with a null context
-     *    to allow plugins to act on the idle state.
-     * 5. The loop only terminates when a full pass results in no pending messages and no
-     *    plugin actions.
+     * The main processing loop.
+     * It processes one pending message at a time. If the message contains tool
+     * calls, it hands off control to the ToolCallManager. The loop is restarted
+     * by the component that finishes its work.
      * @private
      */
     async processLoop() {
@@ -79,40 +87,32 @@ class ResponseProcessor {
 
         try {
             while (true) {
+                if (this.app.toolCallManager.isProcessing) {
+                    // Yield to the tool manager if it's running.
+                    break;
+                }
+
                 const workItem = this._findNextPendingMessage();
                 if (workItem) {
                     const { chat, message } = workItem;
-                    // Highest priority: process any pending AI response.
                     await this.processMessage(chat, message);
 
-                    // Immediately give plugins a chance to react to the new message.
-                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', message, chat);
-                    if (aHandlerTookAction) {
-                        // A plugin (e.g., mcp-plugin) took action, so new work might exist.
-                        // Restart the loop to handle it immediately.
-                        continue;
+                    const hasToolCalls = message.value.content?.includes('<dma:tool_call');
+                    if (hasToolCalls) {
+                        this.app.toolCallManager.createJob(message);
+                        // The manager is now running, so break this loop.
+                        // It will call scheduleProcessing() when it's done.
+                        break;
                     }
-                    // If no handler acted on this specific message, we still continue,
-                    // as there might be other pending messages.
-                    continue;
-                }
-
-                // If we're here, the AI is idle. Check if any plugin wants to take a follow-up action.
-                const activeChat = this.app.chatManager.getActiveChat();
-                if (activeChat) {
-                    // Trigger with a null message to signify an idle-state check.
-                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', null, activeChat);
-                    if (aHandlerTookAction) {
-                        // A plugin (e.g., flows-plugin) took action. Loop again.
-                        continue;
+                    // No tool calls, continue loop to find next pending message.
+                } else {
+                    // No more pending messages. Trigger idle handlers and exit.
+                    const activeChat = this.app.chatManager.getActiveChat();
+                    if (activeChat) {
+                        await pluginManager.triggerSequentially('onIdle', activeChat);
                     }
+                    break;
                 }
-
-                // If we reach this point, it means:
-                // 1. There were no pending messages to process.
-                // 2. No plugin took any action on the idle state.
-                // Therefore, all work is truly complete.
-                break;
             }
         } catch (error) {
             console.error('Error in processing loop:', error);

@@ -5,13 +5,14 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { processToolCalls as genericProcessToolCalls } from '../tool-processor.js';
 
 /**
  * @typedef {import('../main.js').App} App
  * @typedef {import('../chat-data.js').Message} Message
  * @typedef {import('../main.js').Chat} Chat
  * @typedef {import('../tool-processor.js').ToolSchema} ToolSchema
+ * @typedef {import('../tool-processor.js').ToolCall} ToolCall
+ * @typedef {import('../tool-processor.js').ToolExecutionResult} ToolExecutionResult
  * @typedef {import('./agents-plugin.js').Agent} Agent
  */
 
@@ -134,7 +135,6 @@ class McpPlugin {
             if (isNotification) return null;
 
             const rawText = await resp.text();
-            console.log(`DEBUG: Raw response from ${url} for method ${method}:`, rawText);
 
             try {
                 const data = JSON.parse(rawText);
@@ -230,10 +230,10 @@ class McpPlugin {
 
     /**
      * Executes a single MCP tool call after checking agent permissions.
-     * @param {import('../tool-processor.js').ToolCall} call
-     * @param {Message} message
+     * @param {ToolCall} call
+     * @param {Message} message - The message that contained the tool call.
      * @param {string} mcpUrl
-     * @returns {Promise<import('../tool-processor.js').ToolResult>}
+     * @returns {Promise<ToolExecutionResult>}
      * @private
      */
     async #executeMcpCall(call, message, mcpUrl) {
@@ -247,28 +247,30 @@ class McpPlugin {
 
         const isAllowed = effectiveToolSettings.allowAll || effectiveToolSettings.allowed?.includes(call.name);
         if (!isAllowed) {
-            return { name: call.name, tool_call_id: call.id, error: `Tool "${call.name}" is not enabled.` };
+            return { error: `Tool "${call.name}" is not enabled.` };
         }
 
         try {
             const result = await this.#mcpJsonRpc(mcpUrl, 'tools/call', { name: call.name, arguments: call.params });
             if (result.isError) {
-                return { name: call.name, tool_call_id: call.id, error: JSON.stringify(result.content) };
+                return { error: JSON.stringify(result.content) };
             }
+            // Attach citation metadata to the *original message* for later rendering.
             if (call.name === 'web_search' || call.name === 'browse_page' || call.name.startsWith('x_')) {
-                if (!message.metadata) message.metadata = {};
-                message.metadata.sources = result.sources || [];
+                if (!message.value.metadata) message.value.metadata = {};
+                message.value.metadata.sources = result.sources || [];
             }
-            return { name: call.name, tool_call_id: call.id, content: JSON.stringify(result.content, null, 2) };
+            return { content: JSON.stringify(result.content, null, 2) };
         } catch (err) {
             console.error('MCP: Tool execution error', err);
-            return { name: call.name, tool_call_id: call.id, error: err.message || 'Unknown error' };
+            return { error: err.message || 'Unknown error' };
         }
     }
 
     /**
      * Gets tools for a given MCP server URL, using cache if available, or fetching otherwise.
      * @param {string} url - The MCP server URL.
+     * @param {boolean} [force=false] - Whether to force a refresh of the cache.
      * @returns {Promise<ToolSchema[]>}
      */
     async getTools(url, force = false) {
@@ -288,7 +290,6 @@ class McpPlugin {
             const response = await this.#mcpJsonRpc(url, 'tools/list');
             const tools = Array.isArray(response?.tools) ? response.tools : [];
             this.#toolCache.set(url, tools);
-            console.log(`DEBUG: Successfully fetched and cached ${tools.length} tools for ${url}.`);
             document.body.dispatchEvent(new CustomEvent('mcp-tools-updated', { detail: { url } }));
             return tools;
         } catch (error) {
@@ -351,11 +352,11 @@ class McpPlugin {
     }
 
     /**
-     * A wrapper for the private #executeMcpCall method to be used in the plugin hooks.
-     * @param {import('../tool-processor.js').ToolCall} call
+     * A wrapper for the private #executeMcpCall method.
+     * @param {ToolCall} call
      * @param {Message} message
      * @param {string} mcpUrl
-     * @returns {Promise<import('../tool-processor.js').ToolResult>}
+     * @returns {Promise<ToolExecutionResult>}
      */
     executeMcpCall(call, message, mcpUrl) {
         return this.#executeMcpCall(call, message, mcpUrl);
@@ -402,42 +403,45 @@ const mcpPluginDefinition = {
         return systemPrompt;
     },
 
-    async onResponseComplete(message, activeChat) {
-        // This handler is for tool calls. If there's no message, it's an idle check, so do nothing.
-        if (!message) {
-            return false;
-        }
-
+    async onToolCall(call, message) {
         const app = mcpPluginSingleton.getApp();
         const agentId = message.value.agent || null;
         const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
-        const mcpUrl = effectiveConfig.toolSettings.mcpServer;
-        if (!mcpUrl) return false;
+        const mcpUrl = effectiveConfig.toolSettings?.mcpServer;
+
+        if (!mcpUrl) {
+            return null; // Not for us if no MCP server is configured
+        }
 
         const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (!tools || tools.length === 0) return false;
+        const isMcpTool = tools.some(tool => tool.name === call.name);
 
-        return await genericProcessToolCalls(
-            app,
-            activeChat,
-            message,
-            tools,
-            (call) => !call.name.endsWith('_agent'), // filter
-            (call, msg) => mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl) // executor
-        );
+        if (!isMcpTool) {
+            return null; // Not a tool for this MCP server
+        }
+
+        // It's an MCP tool, so execute it.
+        return mcpPluginSingleton.executeMcpCall(call, message, mcpUrl);
     },
 
     onFormatMessageContent(contentEl, message) {
+        // This feature for rendering citations must be preserved.
         if (!contentEl.innerHTML.includes('&lt;dma:render')) return;
+
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = contentEl.innerHTML;
+
         tempDiv.querySelectorAll('dma\\:render[type="render_inline_citation"]').forEach(node => {
             const argNode = node.querySelector('argument[name="citation_id"]');
             const id = argNode ? parseInt(argNode.textContent.trim(), 10) : null;
             if (id === null || isNaN(id)) return;
-            const source = message.metadata?.sources?.[id - 1];
+
+            // The metadata is on the message that *initiated* the tool call.
+            const source = message.value.metadata?.sources?.[id - 1];
+
             const sup = document.createElement('sup');
             const a = document.createElement('a');
+            a.textContent = `[${id}]`;
             if (source) {
                 a.href = source.url;
                 a.title = source.title || 'Source';
@@ -445,7 +449,6 @@ const mcpPluginDefinition = {
                 a.title = 'Citation not found';
                 a.style.color = 'red';
             }
-            a.textContent = `[${id}]`;
             a.target = '_blank';
             sup.appendChild(a);
             node.parentNode.replaceChild(sup, node);

@@ -1,18 +1,30 @@
 /**
- * @fileoverview Reusable tool processing logic.
+ * @fileoverview Centralized logic for parsing and managing tool calls.
+ * This file introduces the ToolCallManager, which orchestrates the entire
+ * tool call lifecycle, from parsing to execution and response handling.
  */
 
 'use strict';
 
+import { pluginManager } from './plugin-manager.js';
+
 /**
- * @typedef {import('./chat-data.js').Message} Message
  * @typedef {import('./main.js').App} App
- * @typedef {import('./main.js').Chat} Chat
+ * @typedef {import('./chat-data.js').Message} Message
+ * @typedef {import('./chat-data.js').MessageValue} MessageValue
  */
 
 /**
+ * Represents a parsed tool call before system IDs are assigned.
+ * @typedef {object} RawToolCall
+ * @property {string} name - The name of the tool being called.
+ * @property {object} params - The parameters for the tool call.
+ */
+
+/**
+ * Represents a tool call with a system-assigned unique ID.
  * @typedef {object} ToolCall
- * @property {string} id - A unique identifier for the tool call.
+ * @property {string} id - A system-generated unique identifier for the tool call.
  * @property {string} name - The name of the tool being called.
  * @property {object} params - The parameters for the tool call.
  */
@@ -25,7 +37,7 @@
 
 /**
  * @typedef {object} ParsedToolCalls
- * @property {ToolCall[]} toolCalls - The parsed tool calls.
+ * @property {RawToolCall[]} toolCalls - The parsed tool calls.
  * @property {ToolCallPosition[]} positions - The positions of the tool calls in the content.
  * @property {boolean[]} isSelfClosings - Flags indicating if a tool call was self-closing.
  */
@@ -36,7 +48,14 @@
  * @property {object} [inputSchema] - The JSON schema for the tool's input.
  */
 
-// --- Tool Call Processing Functions (adapted from mcp-plugin.js) ---
+/**
+ * @typedef {object} ToolExecutionResult
+ * @property {string} [content] - The result of the tool execution.
+ * @property {string} [error] - An error message if the execution failed.
+ * @property {boolean} [isStreaming] - Whether the result is a stream.
+ * @property {ReadableStreamDefaultReader<Uint8Array>} [streamReader] - The reader for the streaming response.
+ */
+
 
 /**
  * Parses tool calls from an assistant's message content.
@@ -48,7 +67,6 @@ function parseToolCalls(content, tools = []) {
     const toolCalls = [];
     const positions = [];
     const isSelfClosings = [];
-    // This regex handles both self-closing tags and tags with content.
     const functionCallRegex = /<dma:tool_call\s+([^>]+?)\/>|<dma:tool_call\s+([^>]*?)>([\s\S]*?)<\/dma:tool_call\s*>/gi;
     const nameRegex = /name="([^"]*)"/;
     const paramsRegex = /<parameter\s+name="([^"]*)">([\s\S]*?)<\/parameter>/g;
@@ -95,7 +113,7 @@ function parseToolCalls(content, tools = []) {
                 params[paramName] = value;
             }
         }
-        const call = { id: `call_${Date.now()}_${toolCalls.length}`, name, params };
+        const call = { name, params };
         toolCalls.push(call);
         positions.push({ start: startIndex, end: endIndex });
         isSelfClosings.push(isSelfClosing);
@@ -104,87 +122,185 @@ function parseToolCalls(content, tools = []) {
     return { toolCalls, positions, isSelfClosings };
 }
 
-
 /**
- * @callback ToolFilterCallback
- * @param {ToolCall} call - The tool call to check.
- * @returns {boolean} Whether the tool call should be processed.
+ * @typedef {object} ToolCallJob
+ * @property {string} id - A unique ID for the job.
+ * @property {Message} originalMessage - The assistant message that initiated the tool calls.
+ * @property {ToolCall[]} calls - The queue of tool calls to be executed for this job.
+ * @property {string} lastMessageId - The ID of the last message created by this job, used for chaining.
  */
 
 /**
- * @typedef {object} ToolResult
- * @property {string} name - The name of the tool that was called.
- * @property {string} tool_call_id - The ID of the tool call this is a result for.
- * @property {string | null} content - The stringified result of the tool execution.
- * @property {string | null} error - A string describing an error, if one occurred.
+ * Orchestrates the processing of tool calls in a stateful, sequential, and nestable manner.
+ * @class
  */
-
-/**
- * @callback ToolExecuteCallback
- * @param {ToolCall} call - The tool call to execute.
- * @param {Message} message - The message containing the tool call.
- * @returns {Promise<ToolResult>} A promise that resolves to the result of the tool execution.
- */
-
-/**
- * A generic function to process tool calls found in a message.
- * It parses, filters, executes, and then formats the results into a new
- * 'tool' role message. If tool calls were processed, it queues up the next
- * assistant turn by creating a new pending message.
- * @param {App} app - The main application instance.
- * @param {Chat} chat - The chat object this message belongs to.
- * @param {Message} message - The message containing tool calls.
- * @param {ToolSchema[]} tools - A list of available tools with their schemas.
- * @param {ToolFilterCallback} filterCallback - A function to filter which tool calls to process.
- * @param {ToolExecuteCallback} executeCallback - An async function to execute a tool call and return the result.
- * @returns {Promise<boolean>} A promise that resolves to `true` if tool calls were processed and a new turn was queued, `false` otherwise.
- */
-async function processToolCalls(app, chat, message, tools, filterCallback, executeCallback) {
-    const { toolCalls, positions, isSelfClosings } = parseToolCalls(message.value.content, tools);
-    if (toolCalls.length === 0) return false;
-
-    const applicableCalls = toolCalls.filter(filterCallback);
-    if (applicableCalls.length === 0) return false;
-
-    const promises = applicableCalls.map(call => executeCallback(call, message));
-    const results = await Promise.all(promises);
-
-    // Inject tool_call_id into the original message content
-    let content = message.value.content;
-    for (let i = positions.length - 1; i >= 0; i--) {
-        const call = toolCalls[i];
-        if (!applicableCalls.find(ac => ac.id === call.id)) continue;
-
-        const pos = positions[i];
-        const gtIndex = content.indexOf('>', pos.start);
-        let startTag = content.slice(pos.start, gtIndex + 1);
-
-        startTag = startTag.replace(/\s+tool_call_id\s*=\s*["'][^"']*["']/g, '');
-        const insert = ` tool_call_id="${call.id}"`;
-        const endSlice = isSelfClosings[i] ? -2 : -1;
-        const endTag = isSelfClosings[i] ? '/>' : '>';
-        startTag = startTag.slice(0, endSlice) + insert + endTag;
-        content = content.slice(0, pos.start) + startTag + content.slice(gtIndex + 1);
+class ToolCallManager {
+    constructor() {
+        /** @type {App | null} */
+        this.app = null;
+        /** @type {ToolCallJob[]} */
+        this.jobStack = [];
+        /** @type {boolean} */
+        this.isProcessing = false;
     }
-    message.value.content = content;
-    message.cache = null; // Invalidate cache to force re-render
-    chat.log.notify(); // Notify UI to re-render the message
 
-    let toolContents = '';
-    results.forEach((tr) => {
-        const inner = tr.error
-            ? `<error>\n${tr.error}\n</error>`
-            : `<content>\n${tr.content}\n</content>`;
-        toolContents += `<dma:tool_response name="${tr.name}" tool_call_id="${tr.tool_call_id}">\n${inner}\n</dma:tool_response>\n`;
-    });
-
-    if (toolContents) {
-        chat.log.addMessage({ role: 'tool', content: toolContents });
-        // After adding tool results, queue up the next step for the AI.
-        chat.log.addMessage({ role: 'assistant', content: null });
-        return true;
+    /**
+     * @param {App} app The main application instance.
+     */
+    init(app) {
+        this.app = app;
     }
-    return false;
+
+    /**
+     * Generates a globally unique ID for a tool call.
+     * @returns {string} A unique identifier.
+     */
+    generateUniqueToolCallId() {
+        return `tcid_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    }
+
+    /**
+     * Creates a new job from an assistant message containing tool calls.
+     * This function parses the calls, assigns unique IDs, updates the original message content,
+     * and pushes the new job onto the LIFO stack for processing.
+     * @param {Message} assistantMessage The message containing `<dma:tool_call>` tags.
+     */
+    createJob(assistantMessage) {
+        const { toolCalls: rawCalls, positions, isSelfClosings } = parseToolCalls(assistantMessage.value.content);
+
+        if (rawCalls.length === 0) return;
+
+        let updatedContent = assistantMessage.value.content;
+        const finalToolCalls = [];
+
+        for (let i = rawCalls.length - 1; i >= 0; i--) {
+            const rawCall = rawCalls[i];
+            const newId = this.generateUniqueToolCallId();
+            const callWithId = { ...rawCall, id: newId };
+            finalToolCalls.unshift(callWithId);
+
+            const pos = positions[i];
+            const gtIndex = updatedContent.indexOf('>', pos.start);
+            let startTag = updatedContent.slice(pos.start, gtIndex + 1);
+
+            startTag = startTag.replace(/\s+tool_call_id\s*=\s*["'][^"']*["']/g, '');
+            const insert = ` tool_call_id="${newId}"`;
+            const endSlice = isSelfClosings[i] ? -2 : -1;
+            const endTag = isSelfClosings[i] ? '/>' : '>';
+            startTag = startTag.slice(0, endSlice) + insert + endTag;
+            updatedContent = updatedContent.slice(0, pos.start) + startTag + updatedContent.slice(gtIndex + 1);
+        }
+
+        assistantMessage.value.content = updatedContent;
+        if ('cache' in assistantMessage) assistantMessage.cache = null;
+
+        const newJob = {
+            id: `job_${Date.now()}`,
+            originalMessage: assistantMessage,
+            calls: finalToolCalls,
+            lastMessageId: assistantMessage.id,
+        };
+
+        this.jobStack.push(newJob);
+        this.app.chatManager.getActiveChat()?.log.notify();
+        this.processNext();
+    }
+
+    /**
+     * The main processing loop. It processes jobs from the LIFO stack.
+     * @private
+     */
+    async processNext() {
+        if (this.isProcessing) return;
+        if (this.jobStack.length === 0) return;
+
+        this.isProcessing = true;
+        const currentJob = this.jobStack[this.jobStack.length - 1];
+        const callToExecute = currentJob.calls.shift();
+
+        if (callToExecute) {
+            await this.executeCall(callToExecute, currentJob);
+            this.isProcessing = false;
+            this.processNext();
+        } else {
+            this.finishJob(currentJob);
+            this.isProcessing = false;
+            this.processNext();
+        }
+    }
+
+    /**
+     * Executes a single tool call by dispatching it to the appropriate plugin.
+     * It creates the tool response message and handles both regular and streaming results.
+     * @param {ToolCall} call The tool call to execute.
+     * @param {ToolCallJob} job The job this call belongs to.
+     * @private
+     */
+    async executeCall(call, job) {
+        const activeChat = this.app.chatManager.getActiveChat();
+        if (!activeChat) {
+            console.error("Cannot execute tool call: No active chat.");
+            return;
+        }
+
+        const toolResponseValue = {
+            role: 'tool',
+            name: call.name,
+            tool_call_id: call.id,
+            content: '',
+        };
+
+        const responseMessage = activeChat.log.addMessage(toolResponseValue, job.lastMessageId);
+        job.lastMessageId = responseMessage.id;
+
+        try {
+            // Pass both the call and the original message to the handler for context.
+            const result = await pluginManager.triggerAsync('onToolCall', call, job.originalMessage);
+
+            if (!result) {
+                responseMessage.value.content = `<error>No plugin handled the tool call: "${call.name}".</error>`;
+            } else if (result.error) {
+                responseMessage.value.content = `<error>${result.error}</error>`;
+            } else if (result.isStreaming && result.streamReader) {
+                const reader = result.streamReader;
+                const decoder = new TextDecoder();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    responseMessage.value.content += decoder.decode(value, { stream: true });
+                    activeChat.log.notify();
+                }
+            } else {
+                responseMessage.value.content = result.content;
+            }
+        } catch (e) {
+            console.error(`Error executing tool call ${call.id}:`, e);
+            responseMessage.value.content = `<error>${e.message}</error>`;
+        } finally {
+            activeChat.log.notify();
+        }
+    }
+
+    /**
+     * Finishes a job by removing it from the stack and queueing the next assistant turn.
+     * @param {ToolCallJob} job The job to finish.
+     * @private
+     */
+    finishJob(job) {
+        this.jobStack.pop();
+
+        const activeChat = this.app.chatManager.getActiveChat();
+        const callingAgentId = job.originalMessage.value.agent || 'agent-default';
+
+        activeChat.log.addMessage(
+            { role: 'assistant', content: null, agent: callingAgentId },
+            job.lastMessageId
+        );
+
+        this.app.responseProcessor.scheduleProcessing(this.app);
+    }
 }
 
-export { parseToolCalls, processToolCalls };
+const toolCallManager = new ToolCallManager();
+
+export { parseToolCalls, toolCallManager };

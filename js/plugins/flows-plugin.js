@@ -404,13 +404,13 @@ class FlowRunner {
     }
 
     /**
-     * @param {Message | null} message - The message that was just completed, or null if it's an idle check.
+     * Called when the AI is idle to potentially continue a running flow.
      * @param {Chat} chat - The active chat instance.
      * @returns {boolean} - `true` if the flow proceeded and scheduled new work, `false` otherwise.
      */
-    continue(message, chat) {
-         // Only act when a flow is running, a step is selected, and the AI is idle
-        if (!this.isRunning || !this.currentStepId || message !== null) return false;
+    continue(chat) {
+        // Only act when a flow is running and a step is selected.
+        if (!this.isRunning || !this.currentStepId) return false;
 
         if (this.multiPromptInfo.active) {
             // --- Multi-Prompt Handling ---
@@ -669,17 +669,16 @@ const flowsPlugin = {
 
     /**
      * This handler is called by the ResponseProcessor when the AI is idle.
-     * It checks if a flow is running and proceeds to the next step if the
-     * previous step was a prompt that just completed.
-     * @param {Message | null} message - The message that was just completed, or null if it's an idle check.
+     * It checks if a flow is running and proceeds to the next step.
      * @param {Chat} chat - The active chat instance.
      * @returns {boolean} - `true` if the flow proceeded and scheduled new work, `false` otherwise.
      */
-    onResponseComplete(message, chat) {
+    onIdle(chat) {
         if (!flowsManager.activeFlowRunner) {
             return false;
         }
-        return flowsManager.activeFlowRunner.continue(message, chat);
+        // The `continue` method is now only called on idle, so no message is passed.
+        return flowsManager.activeFlowRunner.continue(chat);
     }
 };
 
