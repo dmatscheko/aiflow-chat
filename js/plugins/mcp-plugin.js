@@ -288,7 +288,8 @@ class McpPlugin {
         console.log('MCP: Fetching tools from', url);
         try {
             const response = await this.#mcpJsonRpc(url, 'tools/list');
-            const tools = Array.isArray(response?.tools) ? response.tools : [];
+            // Filter out any nullish values from the tools array for robustness.
+            const tools = (Array.isArray(response?.tools) ? response.tools : []).filter(Boolean);
             this.#toolCache.set(url, tools);
             document.body.dispatchEvent(new CustomEvent('mcp-tools-updated', { detail: { url } }));
             return tools;
