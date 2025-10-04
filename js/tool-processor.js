@@ -166,6 +166,13 @@ class ToolCallManager {
      * @param {Message} assistantMessage The message containing `<dma:tool_call>` tags.
      */
     createJob(assistantMessage) {
+        // If this is the first job being pushed, we are starting a new tool call phase.
+        // Create the AbortController and show the stop button.
+        if (this.jobStack.length === 0) {
+            this.app.abortController = new AbortController();
+            this.app.dom.stopButton.style.display = 'block';
+        }
+
         const { toolCalls: rawCalls, positions, isSelfClosings } = parseToolCalls(assistantMessage.value.content);
 
         if (rawCalls.length === 0) return;
@@ -212,7 +219,16 @@ class ToolCallManager {
      */
     async processNext() {
         if (this.isProcessing) return;
-        if (this.jobStack.length === 0) return;
+        if (this.jobStack.length === 0) {
+            // All jobs are done. Clean up the controller and button.
+            if (this.app.abortController) {
+                this.app.abortController = null;
+                this.app.dom.stopButton.style.display = 'none';
+            }
+            // The last `finishJob` call added a pending message. Now, schedule the AI to process it.
+            this.app.responseProcessor.scheduleProcessing(this.app);
+            return;
+        }
 
         this.isProcessing = true;
         const currentJob = this.jobStack[this.jobStack.length - 1];
@@ -292,12 +308,11 @@ class ToolCallManager {
         const activeChat = this.app.chatManager.getActiveChat();
         const callingAgentId = job.originalMessage.value.agent || 'agent-default';
 
+        // Queue up the next step for the AI, which will be handled when the job stack is empty.
         activeChat.log.addMessage(
             { role: 'assistant', content: null, agent: callingAgentId },
             job.lastMessageId
         );
-
-        this.app.responseProcessor.scheduleProcessing(this.app);
     }
 }
 

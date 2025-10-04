@@ -414,7 +414,7 @@ const mcpPluginDefinition = {
         }
 
         const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        const isMcpTool = tools.some(tool => tool.name === call.name);
+        const isMcpTool = tools && tools.some(tool => tool && tool.name === call.name);
 
         if (!isMcpTool) {
             return null; // Not a tool for this MCP server
