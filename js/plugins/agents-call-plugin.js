@@ -24,7 +24,14 @@ Example of calling an agent with the ID 'agent-598356234':
 <parameter name="prompt">
 What is the square root of 144?
 </parameter>
+<parameter name="full_context">
+false
+</parameter>
 </dma:tool_call>
+
+Parameter Description:
+  - \`prompt\`: The user\'s or assistant\'s request to the agent. (type: string)(required)
+  - \`full_context\`: Whether to provide the full conversational history to the called agent. If false, only the history up to and including the call is seen by the called agent. (type: boolean)(optional, default: false)
 
 #### Available Agents:\n\n`;
 
@@ -63,7 +70,7 @@ class AgentsCallPlugin {
 
         const agentsSection = callableAgents.map((a, idx) => {
             const desc = a.description || 'No description provided.';
-            return `${idx + 1}. **${a.name} (ID: ${a.id})**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${a.id}\`\n - **Arguments** (parameter name): \n   - \`prompt\`: The user's request to the agent. (type: string)(required)`;
+            return `${idx + 1}. **${a.name} (ID: ${a.id})**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${a.id}\`\n - **Arguments** (parameter name): prompt, full_context`;
         }).join('\n');
 
         if (systemPrompt) {
@@ -93,21 +100,26 @@ class AgentsCallPlugin {
             return false;
         }
 
-        let wasAborted = false;
+        let nestedCallQueued = false;
         for (const call of agentCalls) {
-            const wasCallAborted = await this._handleAgentCall(call, message, activeChat);
-            if (wasCallAborted) {
-                wasAborted = true;
+            // A sub-agent call may itself queue a nested tool call.
+            const subAgentHandledNestedCall = await this._handleAgentCall(call, message, activeChat);
+            if (subAgentHandledNestedCall) {
+                nestedCallQueued = true;
             }
         }
 
-        if (wasAborted) {
-            return true; // Stop processing, don't queue the next turn.
+        if (nestedCallQueued) {
+            // A nested call was queued, so stop this chain and let the main loop handle the new work.
+            return true;
         }
 
-        // After all agent calls are handled, queue up the next step for the AI.
+        // After all agent calls are handled, and if no nested calls were queued, queue up the next step for the AI.
         const callingAgentId = message.value.agent || 'agent-default';
-        activeChat.log.addMessage({ role: 'assistant', content: null, agent: callingAgentId });
+        activeChat.log.addMessage(
+            { role: 'assistant', content: null, agent: callingAgentId },
+            { depth: message.depth }
+        );
         this.app.responseProcessor.scheduleProcessing(this.app);
         return true;
     }
@@ -117,7 +129,7 @@ class AgentsCallPlugin {
      * @param {ToolCall} call - The tool call to process.
      * @param {Message} message - The original message containing the tool call.
      * @param {Chat} activeChat - The active chat instance.
-     * @returns {Promise<boolean>} A promise that resolves to true if the call was aborted, false otherwise.
+     * @returns {Promise<boolean>} A promise that resolves to true if a nested call was queued, false otherwise.
      * @private
      */
     async _handleAgentCall(call, message, activeChat) {
@@ -128,46 +140,68 @@ class AgentsCallPlugin {
 
         // 1. Validate the call and check permissions first.
         if (!callingAgent || !targetAgent) {
-            this._addErrorToolResponse(activeChat, message.id, call, 'Invalid agent specified.');
+            this._addErrorToolResponse(activeChat, message, call, 'Invalid agent specified.');
             return false;
         }
 
         const callingAgentConfig = agentManager.getEffectiveApiConfig(callingAgent.id);
         const isAllowed = callingAgentConfig.agentCallSettings.allowAll || callingAgentConfig.agentCallSettings.allowed?.includes(targetAgent.id);
         if (!isAllowed) {
-            this._addErrorToolResponse(activeChat, message.id, call, `Agent "${callingAgent.name}" is not permitted to call agent "${targetAgent.name}".`);
+            this._addErrorToolResponse(activeChat, message, call, `Agent "${callingAgent.name}" is not permitted to call agent "${targetAgent.name}".`);
             return false;
         }
 
         const prompt = call.params.prompt;
         if (!prompt) {
-            this._addErrorToolResponse(activeChat, message.id, call, 'The "prompt" parameter is required when calling an agent.');
+            this._addErrorToolResponse(activeChat, message, call, 'The "prompt" parameter is required when calling an agent.');
             return false;
         }
 
+        const fullContext = call.params.full_context === true;
+        const newDepth = fullContext ? message.depth : message.depth + 1;
+
+        // Push the calling agent's context onto the stack.
+        this.app.responseProcessor.agentCallStack.push({
+            agentId: callingAgentId,
+            depth: message.depth,
+        });
+
         const abortController = new AbortController();
-        this.app.abortController = abortController; // Make it accessible to the stop button
+        this.app.abortController = abortController;
+
+        // The tool response message will be updated as the agent streams its response.
+        const toolResponseMessage = {
+            role: 'tool',
+            content: '',
+            tool_call_id: call.id,
+            agent: targetAgent.id,
+            model: null,
+            is_full_context_call: fullContext,
+        };
+
+        // Add the placeholder message with the correct depth.
+        const toolResponseAsMessage = activeChat.log.addMessage(toolResponseMessage, { depth: newDepth });
 
         try {
             this.app.dom.stopButton.style.display = 'block';
 
-            // 2. Now that validation is done, create the message and perform the call.
+            // 2. Now that validation is done, construct the payload and perform the call.
             const targetAgentConfig = agentManager.getEffectiveApiConfig(targetAgent.id);
-            const toolResponseMessage = {
-                role: 'tool',
-                content: '',
-                tool_call_id: call.id,
-                name: call.name,
-                agent: targetAgent.id,
-                model: targetAgentConfig.model,
-            };
-            activeChat.log.addMessage(toolResponseMessage, message.id);
+            toolResponseMessage.model = targetAgentConfig.model;
+
+            const systemPrompt = await agentManager.constructSystemPrompt(targetAgent.id);
+
+            const history = activeChat.log.getHistoryForAgentCall(message, fullContext);
+            const messagesForPayload = [
+                ...history,
+                { role: 'user', content: prompt }
+            ];
 
             const payload = {
                 model: targetAgentConfig.model,
                 messages: [
-                    { role: 'system', content: targetAgentConfig.systemPrompt },
-                    { role: 'user', content: prompt }
+                    { role: 'system', content: systemPrompt },
+                    ...messagesForPayload
                 ],
                 stream: true,
                 temperature: targetAgentConfig.temperature,
@@ -198,35 +232,39 @@ class AgentsCallPlugin {
         } catch (error) {
             if (error.name === 'AbortError') {
                 toolResponseMessage.content += '\n\n[Aborted by user]';
-                activeChat.log.notify();
-                return true; // Signal that it was aborted.
             } else {
                 toolResponseMessage.content = `<error>An error occurred while calling the agent: ${error.message}</error>`;
-                activeChat.log.notify();
             }
+            activeChat.log.notify();
         } finally {
             this.app.abortController = null;
             this.app.dom.stopButton.style.display = 'none';
         }
-        return false; // Signal that it was not aborted.
+
+        // After the sub-agent has responded, check its response for tool calls.
+        const nestedCallHandled = await pluginManager.triggerSequentially('onResponseComplete', toolResponseAsMessage, activeChat);
+
+        // If a nested call was handled, it will queue new messages and return true.
+        // We propagate this signal up to the main onResponseComplete loop.
+        return nestedCallHandled;
     }
 
     /**
      * Adds a tool response message with a pre-formatted error.
      * @param {Chat} activeChat
-     * @param {string} originalMessageId
+     * @param {Message} originalMessage
      * @param {ToolCall} call
      * @param {string} errorMessage
      * @private
      */
-    _addErrorToolResponse(activeChat, originalMessageId, call, errorMessage) {
+    _addErrorToolResponse(activeChat, originalMessage, call, errorMessage) {
         const toolResponseMessage = {
             role: 'tool',
             content: `<error>${errorMessage}</error>`,
             tool_call_id: call.id,
             name: call.name,
         };
-        activeChat.log.addMessage(toolResponseMessage, originalMessageId);
+        activeChat.log.addMessage(toolResponseMessage, { depth: originalMessage.depth + 1 });
     }
 }
 

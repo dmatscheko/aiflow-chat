@@ -144,9 +144,9 @@ export function registerFlowStepDefinitions(flowsManager) {
             if (!chat) return context.stopFlow('No active chat.');
 
             // Add the user message that starts the multi-prompt
-            chat.log.addMessage({ role: 'user', content: step.data.prompt });
+            chat.log.addMessage({ role: 'user', content: step.data.prompt }, {});
             // Add a placeholder for the first assistant message
-            const assistantPlaceholder = chat.log.addMessage({ role: 'assistant', content: null, agent: step.data.agentId });
+            const assistantPlaceholder = chat.log.addMessage({ role: 'assistant', content: null, agent: step.data.agentId }, {});
 
             runner.multiPromptInfo = {
                 active: true,

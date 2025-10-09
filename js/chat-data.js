@@ -16,11 +16,14 @@
  * @property {string} [agent] - The ID of the agent used for this message.
  * @property {string} [model] - The model used for the message.
  * @property {object} [metadata] - Optional metadata, e.g., for sources.
+ * @property {boolean} [is_full_context_call] - For agent calls, whether full context was provided.
  */
 
 /**
  * @typedef {object} SerializedMessage
+ * @property {string} id - The unique ID of the message.
  * @property {MessageValue} value - The value of the message.
+ * @property {number} depth - The stack depth of the message.
  * @property {SerializedAlternatives | null} answerAlternatives - The serialized answer alternatives.
  */
 
@@ -39,10 +42,19 @@
 class Message {
     /**
      * @param {MessageValue} value - The message value, e.g., `{ role: 'user', content: 'Hello' }`.
+     * @param {number} depth - The stack depth of the message.
+     * @param {string|null} id - The unique ID of the message. If null, a new ID will be generated.
      */
-    constructor(value) {
+    constructor(value, depth = 0, id = null) {
+        /** @type {string} */
+        this.id = id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
         /** @type {MessageValue} */
         this.value = value;
+        /**
+         * The stack depth of the message.
+         * @type {number}
+         */
+        this.depth = depth;
         /**
          * The set of alternative messages that are answers to this message.
          * @type {Alternatives | null}
@@ -64,7 +76,9 @@ class Message {
      */
     toJSON() {
         return {
+            id: this.id,
             value: this.value,
+            depth: this.depth,
             answerAlternatives: this.answerAlternatives ? this.answerAlternatives.toJSON() : null,
         };
     }
@@ -86,10 +100,11 @@ class Alternatives {
     /**
      * Adds a new message to the list of alternatives and sets it as the active one.
      * @param {MessageValue} value - The value for the new message.
+     * @param {number} depth - The stack depth of the message.
      * @returns {Message} The newly created message instance.
      */
-    addMessage(value) {
-        const newMessage = new Message(value);
+    addMessage(value, depth) {
+        const newMessage = new Message(value, depth);
         this.activeMessageIndex = this.messages.push(newMessage) - 1;
         return newMessage;
     }
@@ -142,19 +157,30 @@ export class ChatLog {
      * @param {MessageValue} value - The value of the message to add.
      * @returns {Message} The newly added message instance.
      */
-    addMessage(value) {
+    addMessage(value, { depth = null } = {}) {
         const lastMessage = this.getLastMessage();
         let newMessage;
+
+        let finalDepth = 0;
+        if (depth !== null) {
+            // If depth is explicitly provided, use it.
+            finalDepth = depth;
+        } else if (lastMessage) {
+            // Otherwise, calculate based on the last message.
+            // User messages always reset depth to 0.
+            finalDepth = (value.role === 'user') ? 0 : lastMessage.depth;
+        }
+
         if (!lastMessage) {
             // This is the first message in the chat.
             this.rootAlternatives = new Alternatives();
-            newMessage = this.rootAlternatives.addMessage(value);
+            newMessage = this.rootAlternatives.addMessage(value, finalDepth);
         } else {
             // Add the new message as an answer to the last message.
             if (!lastMessage.answerAlternatives) {
                 lastMessage.answerAlternatives = new Alternatives();
             }
-            newMessage = lastMessage.answerAlternatives.addMessage(value);
+            newMessage = lastMessage.answerAlternatives.addMessage(value, finalDepth);
         }
         this.notify();
         return newMessage;
@@ -191,11 +217,6 @@ export class ChatLog {
         }
         return result;
     }
-
-    /**
-     * Returns an array of all message instances in the active path.
-     * @returns {Message[]}
-     */
     getActiveMessages() {
         const result = [];
         if (!this.rootAlternatives) {
@@ -210,8 +231,8 @@ export class ChatLog {
     }
 
     /**
-     * Finds the first pending assistant message in the log.
-     * A pending message is one with a role of 'assistant' and content of null.
+     * Finds the first pending message in the log.
+     * A pending message is one with a role of 'assistant' or 'tool' and content of null.
      * @returns {Message | null}
      */
     findNextPendingMessage() {
@@ -223,7 +244,7 @@ export class ChatLog {
         const findInAlternatives = (alternatives) => {
             for (const message of alternatives.messages) {
                 // Check the current message
-                if (message.value.role === 'assistant' && message.value.content === null) {
+                if ((message.value.role === 'assistant' || message.value.role === 'tool') && message.value.content === null) {
                     return message;
                 }
                 // Recurse into the answers of the current message
@@ -241,18 +262,59 @@ export class ChatLog {
     }
 
     /**
-     * Gets the history of message values leading up to a specific message.
-     * @param {Message} targetMessage - The message to get the history for.
-     * @returns {MessageValue[] | null} An array of message values, or null if the message isn't found.
+     * Gets the history of messages for an agent call, respecting the context rules.
+     * @param {Message} callingMessage - The message that initiates the agent call.
+     * @param {boolean} fullContext - Whether to provide the full context.
+     * @returns {MessageValue[]} An array of message values for the API call.
      */
-    getHistoryBeforeMessage(targetMessage) {
+    getHistoryForAgentCall(callingMessage, fullContext) {
+        if (!fullContext) {
+            return [];
+        }
+
+        const history = this.getMessagesBefore(callingMessage);
+        if (!history) {
+            return [];
+        }
+
+        let boundaryIndex = -1;
+
+        // Find the boundary index by traversing backwards.
+        for (let i = history.length - 1; i >= 0; i--) {
+            const msg = history[i];
+
+            // Check if this message is the start of a new depth block.
+            if (i === 0 || history[i-1].depth < msg.depth) {
+                // If this block was initiated by a partial-context agent call, it's a boundary.
+                if (msg.value.role === 'tool' && msg.value.is_full_context_call === false) {
+                    boundaryIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (boundaryIndex !== -1) {
+            // If a boundary was found, return only the history from that point forward.
+            return history.slice(boundaryIndex).map(msg => msg.value);
+        } else {
+            // No boundary found, so the agent sees the full history.
+            return history.map(msg => msg.value);
+        }
+    }
+
+    /**
+     * Gets the history of message instances leading up to a specific message.
+     * @param {Message} targetMessage - The message to get the history for.
+     * @returns {Message[] | null} An array of message instances, or null if the message isn't found.
+     */
+    getMessagesBefore(targetMessage) {
         if (!this.rootAlternatives) {
             return null;
         }
 
         const findPath = (alternatives, path) => {
             for (const message of alternatives.messages) {
-                const currentPath = [...path, message.value];
+                const currentPath = [...path, message];
                 if (message === targetMessage) {
                     // Exclude the target message itself from the history.
                     return currentPath.slice(0, -1);
@@ -268,6 +330,16 @@ export class ChatLog {
         };
 
         return findPath(this.rootAlternatives, []);
+    }
+
+    /**
+     * Gets the history of message values leading up to a specific message.
+     * @param {Message} targetMessage - The message to get the history for.
+     * @returns {MessageValue[] | null} An array of message values, or null if the message isn't found.
+     */
+    getMessageValuesBefore(targetMessage) {
+        const messages = this.getMessagesBefore(targetMessage);
+        return messages ? messages.map(message => message.value) : null;
     }
 
     /**
@@ -307,7 +379,7 @@ export class ChatLog {
     addAlternative(existingMessage, newContent) {
         const alternatives = this.findAlternatives(existingMessage);
         if (alternatives) {
-            const newMessage = alternatives.addMessage(newContent);
+            const newMessage = alternatives.addMessage(newContent, existingMessage.depth);
             this.notify();
             return newMessage;
         }
@@ -436,7 +508,7 @@ export class ChatLog {
             const alternatives = new Alternatives();
             alternatives.activeMessageIndex = altData.activeMessageIndex;
             alternatives.messages = altData.messages.map(msgData => {
-                const message = new Message(msgData.value);
+                const message = new Message(msgData.value, msgData.depth, msgData.id);
                 if (msgData.answerAlternatives) {
                     message.answerAlternatives = buildAlternatives(msgData.answerAlternatives);
                 }

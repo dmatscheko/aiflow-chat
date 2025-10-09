@@ -213,13 +213,13 @@ class ChatManager {
         if (!isContinuation) {
             const userInput = this.app.dom.messageInput.value.trim();
             if (!userInput) return;
-            activeChat.log.addMessage({ role: 'user', content: userInput });
+            activeChat.log.addMessage({ role: 'user', content: userInput }, {});
             this.app.dom.messageInput.value = '';
             activeChat.draftMessage = '';
             this.saveChats();
         }
         const finalAgentId = agentId || activeChat.agent || null;
-        activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId });
+        activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId }, {});
         responseProcessor.scheduleProcessing(this.app);
     }
 
@@ -301,13 +301,12 @@ class ChatUI {
         this.container.innerHTML = ''; // Clear previous content
 
         const fragment = document.createDocumentFragment();
-        let current = this.chatLog.rootAlternatives ? this.chatLog.rootAlternatives.getActiveMessage() : null;
+        const messages = this.chatLog.getActiveMessages();
 
-        while (current) {
-            const messageEl = this.formatMessage(current);
+        messages.forEach(message => {
+            const messageEl = this.formatMessage(message);
             fragment.appendChild(messageEl);
-            current = current.getActiveAnswer();
-        }
+        });
 
         this.container.appendChild(fragment);
 
@@ -317,16 +316,39 @@ class ChatUI {
     }
 
     /**
-     * Creates an HTML element for a single message.
-     * It constructs the basic message structure and then allows plugins to
-     * modify the content element before it's added to the DOM.
+     * Creates an HTML element for a single message, including its depth visualization.
      * @param {Message} message - The message object to format.
-     * @returns {HTMLElement} The formatted message element.
+     * @returns {HTMLElement} The formatted message element, wrapped with depth lines if necessary.
      * @private
      */
     formatMessage(message) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'message-wrapper';
+
+        const depth = message.value.role !== 'user' ? message.depth : 0;
+
+        // Add vertical lines for depth visualization
+        if (depth > 0) {
+            const linesContainer = document.createElement('div');
+            linesContainer.className = 'depth-lines';
+            for (let i = 0; i < depth; i++) {
+                const line = document.createElement('div');
+                line.className = 'depth-line';
+                // Offset each line so they appear as parallel lines
+                line.style.left = `${i * 20 + 10}px`;
+                linesContainer.appendChild(line);
+            }
+            wrapper.appendChild(linesContainer);
+        }
+
         const el = document.createElement('div');
         el.classList.add('message', `role-${message.value.role}`);
+        el.dataset.messageId = message.id;
+
+        if (depth > 0) {
+            // Indent the message bubble to make space for the depth lines
+            el.style.marginLeft = `${depth * 20}px`;
+        }
 
         const titleRow = document.createElement('div');
         titleRow.className = 'message-title';
@@ -362,7 +384,7 @@ class ChatUI {
         contentEl.className = 'message-content';
         contentEl.textContent = message.value.content || '';
 
-        // Allow plugins to modify the content element (e.g., for rich formatting)
+        // Allow plugins to modify the content element (e.g., for rich formatting).
         pluginManager.trigger('onFormatMessageContent', contentEl, message);
 
         el.appendChild(titleRow);
@@ -371,7 +393,8 @@ class ChatUI {
         // Hook for adding controls after the message element is fully constructed.
         pluginManager.trigger('onMessageRendered', el, message);
 
-        return el;
+        wrapper.appendChild(el);
+        return wrapper;
     }
 
     /**

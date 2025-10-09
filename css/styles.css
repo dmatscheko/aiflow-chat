@@ -296,6 +296,31 @@ h2 {
     padding: 1rem;
 }
 
+.message-wrapper {
+    position: relative;
+    padding-left: 0; /* Default no padding */
+}
+
+.message-group-wrapper {
+    position: relative;
+}
+
+.depth-lines {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    pointer-events: none; /* Make sure it doesn't interfere with mouse events */
+}
+
+.depth-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: var(--border-color);
+}
+
 .message {
     padding: 0.75rem 1rem;
     border-radius: 8px;

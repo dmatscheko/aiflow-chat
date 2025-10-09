@@ -251,6 +251,29 @@ class AgentManager {
         return effectiveConfig;
     }
 
+    /**
+     * Constructs the full system prompt for a given agent, including tools and other dynamic content.
+     * @param {string | null} agentId - The ID of the agent.
+     * @returns {Promise<string>} The fully constructed system prompt.
+     */
+    async constructSystemPrompt(agentId = null) {
+        const activeChat = this.app.chatManager ? this.app.chatManager.getActiveChat() : null;
+        const finalAgentId = agentId || activeChat?.agent || DEFAULT_AGENT_ID;
+
+        const agent = this.getAgent(finalAgentId);
+        const effectiveConfig = this.getEffectiveApiConfig(finalAgentId);
+
+        // Construct the system prompt by allowing plugins to contribute.
+        const finalSystemPrompt = await pluginManager.triggerAsync(
+            'onSystemPromptConstruct',
+            effectiveConfig.systemPrompt, // Initial value
+            effectiveConfig,              // All settings for context
+            agent                         // The specific agent instance
+        );
+
+        return finalSystemPrompt;
+    }
+
     async fetchModels(agentId = null, targetSelectElement = null) {
         const effectiveConfig = this.getEffectiveApiConfig(agentId);
         const { apiUrl, apiKey, model: currentModelValue } = effectiveConfig;

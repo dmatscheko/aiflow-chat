@@ -8,7 +8,7 @@
       "y": 56,
       "isMinimized": false,
       "data": {
-        "prompt": "Hi! Please as your answer, say either \"This is A\", or \"This is B\".",
+        "prompt": "Hi! Please as your answer to this message, say either \"This is A\", or \"This is B\".",
         "agentId": ""
       }
     },

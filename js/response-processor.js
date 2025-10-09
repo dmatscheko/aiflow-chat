@@ -32,6 +32,11 @@ class ResponseProcessor {
          * @private
          */
         this.app = null;
+        /**
+         * A stack to manage nested agent calls.
+         * @type {Array<{agentId: string, depth: number}>}
+         */
+        this.agentCallStack = [];
     }
 
     /**
@@ -106,11 +111,23 @@ class ResponseProcessor {
                         // A plugin (e.g., flows-plugin) took action. Loop again.
                         continue;
                     }
+
+                    // If all work is done, check if we need to return control to a parent agent.
+                    if (this.agentCallStack.length > 0) {
+                        const parentAgentContext = this.agentCallStack.pop();
+                        activeChat.log.addMessage(
+                            { role: 'assistant', content: null, agent: parentAgentContext.agentId },
+                            { depth: parentAgentContext.depth }
+                        );
+                        // A new turn has been queued, so restart the loop.
+                        continue;
+                    }
                 }
 
                 // If we reach this point, it means:
                 // 1. There were no pending messages to process.
                 // 2. No plugin took any action on the idle state.
+                // 3. The agent call stack is empty.
                 // Therefore, all work is truly complete.
                 break;
             }
@@ -131,7 +148,7 @@ class ResponseProcessor {
         const app = this.app;
         if (!app) return;
 
-        if (assistantMsg.value.role !== 'assistant' || assistantMsg.value.content !== null) {
+        if ((assistantMsg.value.role !== 'assistant' && assistantMsg.value.role !== 'tool') || assistantMsg.value.content !== null) {
             console.warn('Response processor asked to process an invalid message.', assistantMsg);
             return;
         }
@@ -140,7 +157,7 @@ class ResponseProcessor {
         app.abortController = new AbortController();
 
         try {
-            const messages = chat.log.getHistoryBeforeMessage(assistantMsg);
+            const messages = chat.log.getMessageValuesBefore(assistantMsg);
             if (!messages) {
                 console.error("Could not find message history for processing.", assistantMsg);
                 assistantMsg.value.content = "Error: Could not reconstruct message history.";
@@ -149,11 +166,10 @@ class ResponseProcessor {
             }
 
             const agentId = assistantMsg.value.agent;
-            const agent = agentId ? app.agentManager.getAgent(agentId) : null;
             const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
 
-            // Construct the system prompt by allowing plugins to contribute.
-            const finalSystemPrompt = await pluginManager.triggerAsync('onSystemPromptConstruct', effectiveConfig.systemPrompt, effectiveConfig, agent);
+            // Use the centralized method to construct the system prompt.
+            const finalSystemPrompt = await app.agentManager.constructSystemPrompt(agentId);
 
             if (finalSystemPrompt) {
                 messages.unshift({ role: 'system', content: finalSystemPrompt });
