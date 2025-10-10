@@ -1,5 +1,8 @@
 /**
  * @fileoverview Manages the queue and execution of AI response generation.
+ * This file is responsible for orchestrating the process of generating AI
+ * responses, handling streaming from the API, and managing a processing loop
+ * that allows for complex, multi-step interactions involving agents and tools.
  */
 
 'use strict';
@@ -8,39 +11,50 @@ import { pluginManager } from './plugin-manager.js';
 
 /**
  * @typedef {import('./main.js').App} App
- * @typedef {import('./main.js').Chat} Chat
+ * @typedef {import('./plugins/chats-plugin.js').Chat} Chat
  * @typedef {import('./chat-data.js').Message} Message
  */
 
 /**
  * Manages the queue and execution of AI response generation.
- * It scans for pending messages, processes them, and then allows plugins
- * to handle the completed response, potentially creating more work. This cycle
- * continues until no more work is pending and no plugin takes further action.
+ * It scans for pending messages (assistant turns with null content), processes them
+ * by calling the AI API, and then allows plugins to handle the completed response,
+ * which might in turn create more pending messages (e.g., for tool calls or sub-agents).
+ * This cycle continues until no more work is pending and no plugin takes further action.
+ * It also manages a stack for nested agent calls, ensuring control returns to parent agents.
  * @class
  */
 class ResponseProcessor {
+    /**
+     * Creates an instance of the ResponseProcessor.
+     */
     constructor() {
         /**
-         * Flag to prevent multiple concurrent processing loops.
+         * A flag to prevent multiple concurrent processing loops, ensuring that only
+         * one `processLoop` runs at a time.
          * @type {boolean}
          */
         this.isProcessing = false;
         /**
-         * The main application instance.
+         * The main application instance, providing access to other components like
+         * `chatManager`, `agentManager`, and `apiService`.
          * @type {App | null}
          * @private
          */
         this.app = null;
         /**
-         * A stack to manage nested agent calls.
+         * A stack to manage nested agent calls. When a sub-agent is called, its parent
+         * is pushed onto this stack. When the sub-agent finishes, the parent is popped
+         * and its turn is resumed.
          * @type {Array<{agentId: string, depth: number}>}
          */
         this.agentCallStack = [];
     }
 
     /**
-     * Schedules a processing check. If not already processing, it starts the robust processing loop.
+     * Schedules a processing check. If the processor is not already running,
+     * it kicks off the main processing loop. This is the primary entry point
+     * for initiating AI responses.
      * @param {App} app - The main application instance.
      */
     scheduleProcessing(app) {
@@ -51,12 +65,14 @@ class ResponseProcessor {
     }
 
     /**
-     * Finds the next pending message across all chats.
-     * @returns {{chat: Chat, message: Message} | null} The chat and message to process, or null if none.
+     * Finds the next pending message across all chats managed by the `chatManager`.
+     * A pending message is an assistant or tool message with `null` content.
+     * @returns {{chat: Chat, message: Message} | null} An object containing the chat
+     * and the pending message, or null if no pending messages are found.
      * @private
      */
     _findNextPendingMessage() {
-        if (!this.app) return null;
+        if (!this.app || !this.app.chatManager) return null;
         for (const chat of this.app.chatManager.chats) {
             const pendingMessage = chat.log.findNextPendingMessage();
             if (pendingMessage) {
@@ -67,16 +83,19 @@ class ResponseProcessor {
     }
 
     /**
-     * The main processing loop. It robustly handles a cycle of AI responses and
-     * subsequent plugin actions.
-     * 1. It first prioritizes and processes any pending AI message.
-     * 2. After processing, it immediately triggers `onResponseComplete` for that message.
-     * 3. If a handler acts, the loop restarts to handle any new work.
-     * 4. If no messages are pending, it triggers `onResponseComplete` with a null context
-     *    to allow plugins to act on the idle state.
-     * 5. The loop only terminates when a full pass results in no pending messages and no
-     *    plugin actions.
+     * The main processing loop that drives the AI interaction cycle.
+     * It robustly handles a sequence of events:
+     * 1. It first prioritizes and processes any pending AI message by calling `processMessage`.
+     * 2. After a message is generated, it immediately triggers the `onResponseComplete` hook,
+     *    allowing plugins (like tool processors) to react.
+     * 3. If a plugin takes action (e.g., queues a new tool call), the loop restarts to handle the new work.
+     * 4. If no messages are pending, it triggers `onResponseComplete` with a `null` context
+     *    to allow plugins to perform actions in an idle state (e.g., starting a new "flow").
+     * 5. If the agent call stack is not empty, it pops the parent agent to resume its turn.
+     * 6. The loop only terminates when a full pass results in no pending messages, no plugin actions,
+     *    and an empty agent call stack, ensuring all work is truly complete.
      * @private
+     * @async
      */
     async processLoop() {
         if (this.isProcessing) return;
@@ -139,10 +158,14 @@ class ResponseProcessor {
     }
 
     /**
-     * Processes a single pending assistant message by making an API call.
+     * Processes a single pending assistant or tool message by making an API call.
+     * It constructs the appropriate payload, including the system prompt and message history,
+     * calls the `apiService` to get a streaming response, and updates the message
+     * content in real-time.
      * @param {Chat} chat - The chat object the message belongs to.
-     * @param {Message} assistantMsg - The pending assistant message to fill.
+     * @param {Message} assistantMsg - The pending assistant or tool message to be filled with content.
      * @private
+     * @async
      */
     async processMessage(chat, assistantMsg) {
         const app = this.app;

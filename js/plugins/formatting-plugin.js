@@ -1,7 +1,14 @@
 /**
- * @fileoverview A plugin for formatting message content.
- * It handles Markdown rendering, syntax highlighting, KaTeX for math,
- * and wraps special elements like tool calls and thinking blocks in <details> tags.
+ * @fileoverview A plugin dedicated to formatting message content for display.
+ * It processes raw text content through a multi-stage pipeline:
+ * 1. **Pre-processing**: Replaces special syntax (like tool calls and thinking blocks)
+ *    with placeholders to protect them from the Markdown renderer.
+ * 2. **Markdown Rendering**: Converts Markdown to HTML using `markdown-it`.
+ * 3. **Syntax Highlighting**: Applies syntax highlighting to code blocks using `highlight.js`.
+ * 4. **Post-processing**: Restores the special syntax from placeholders into styled
+ *    HTML elements (e.g., `<details>` blocks).
+ * 5. **Math Rendering**: Renders LaTeX mathematical expressions using `KaTeX`.
+ * 6. **UI Enhancements**: Adds copy-to-clipboard badges to code blocks and tables.
  */
 
 'use strict';
@@ -12,155 +19,166 @@ import { pluginManager } from '../plugin-manager.js';
  * @typedef {import('../chat-data.js').Message} Message
  */
 
+/**
+ * The plugin object for handling all rich-text formatting of message content.
+ * @type {import('../plugin-manager.js').Plugin}
+ */
 const formattingPlugin = {
     /**
-     * Formats the message content.
-     * This hook is the core of the formatting process. It takes the content element,
-         * performs a series of transformations, and populates it with the final HTML.
-         * @param {HTMLElement} contentEl - The HTML element containing the raw message content.
-         * @param {Message} message - The message object.
-         */
-        onFormatMessageContent(contentEl, message) {
-            let text = contentEl.textContent || '';
+     * The `onFormatMessageContent` hook, which transforms raw message text into
+     * formatted HTML. This is the core of the formatting pipeline.
+     * @param {HTMLElement} contentEl - The HTML element containing the raw message content.
+     * @param {Message} message - The message object being formatted.
+     */
+    onFormatMessageContent(contentEl, message) {
+        let text = contentEl.textContent || '';
 
-            // 1. Pre-Markdown String Transformations (placeholders, etc.)
-            //    These need to run before the markdown renderer to avoid
-            //    it interfering with special syntax.
+        // 1. Pre-Markdown String Transformations (placeholders, etc.)
+        //    These need to run before the markdown renderer to avoid
+        //    it interfering with special syntax.
 
-            // SVG normalization
-            text = text.replace(/((?:```\w*?\s*?)|(?:<render_component[^>]*?>\s*?)|)(<svg[^>]*?>)([\s\S]*?)(<\/svg>(?:\s*?```|\s*?<\/render_component>|)|$)/gi,
-                (match, prefix, svgStart, content, closing) => {
-                    let output = '```svg\n' + svgStart;
-                    if (closing?.startsWith('</svg>')) {
-                        output += content + '</svg>\n```';
-                    } else {
-                        output += content; // Incomplete, don't add closing tags
-                    }
-                    return output;
+        // SVG normalization
+        text = text.replace(/((?:```\w*?\s*?)|(?:<render_component[^>]*?>\s*?)|)(<svg[^>]*?>)([\s\S]*?)(<\/svg>(?:\s*?```|\s*?<\/render_component>|)|$)/gi,
+            (match, prefix, svgStart, content, closing) => {
+                let output = '```svg\n' + svgStart;
+                if (closing?.startsWith('</svg>')) {
+                    output += content + '</svg>\n```';
+                } else {
+                    output += content; // Incomplete, don't add closing tags
                 }
-            );
-            text = text.replace(/\(data:image\/svg\+xml,([a-z0-9_"'%+-]+?)\)/gmi, (match, g1) => {
-                let data = decodeURIComponent(g1);
-                data = data.replace(/<svg\s/gmi, '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" ');
-                return `(data:image/svg+xml,${encodeURIComponent(data)})`;
-            });
-
-            // Placeholder for tool calls
-            text = text.replace(/<dma:tool_call[^>]+?name="([^>]*?)"[^>]*?(?:\/>|>[\s\S]*?<\/dma:tool_call\s*>)/gi, (match, name) => {
-                const title = name || '';
-                return `\n-#--#- TOOL CALL -#--#- ${title.trim()} -#--#-\n\`\`\`html\n${match.trim()}\n\`\`\`\n-#--#- END TOOL CALL -#--#-\n`;
-            });
-
-            // Placeholder for tool responses
-            text = text.replace(/<dma:tool_response[^>]+?name="([^>]*?)"[^>]*?(?:\/>|>[\s\S]*?<\/dma:tool_response\s*>)/gi, (match, name) => {
-                const title = name || '';
-                return `\n-#--#- TOOL RESPONSE -#--#- ${title.trim()} -#--#-\n\`\`\`html\n${match.trim()}\n\`\`\`\n-#--#- END TOOL RESPONSE -#--#-\n`;
-            });
-
-            // Placeholder for <think> tags
-            text = text.replace(/<think>([\s\S]*?)(?:<\/think>|$)/g, (match, content) => {
-                return `\n-#--#- THINK -#--#-\n${content.trim()}\n-#--#- END THINK -#--#-\n`;
-            });
-
-
-            // 2. Markdown Rendering with Syntax Highlighting
-            const md = window.markdownit({
-                html: false,
-                linkify: true,
-                highlight: function (str, lang) {
-                    if (lang && hljs.getLanguage(lang)) {
-                        try {
-                            return '<pre class="hljs"><code>' +
-                                   hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
-                                   '</code></pre>';
-                        } catch (__) {}
-                    }
-                    return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
-                }
-            });
-            let html = md.render(text);
-
-            // 3. Post-Markdown HTML Transformations
-
-            const open = ' open'; // TODO: Make this conditional
-
-            // Wrap tool calls in <details>
-            html = html.replace(/-#--#- TOOL CALL -#--#- (.*?) -#--#-<\/p>([\s\S]*?)<p>-#--#- END TOOL CALL -#--#-/g, (match, name, content) => {
-                const title = name ? `: ${name}` : '';
-                return `<details${open} class="tool-call"><summary>Tool Call${title}</summary>${content}</details>`;
-            });
-            // Wrap tool responses in <details>
-            html = html.replace(/-#--#- TOOL RESPONSE -#--#- (.*?) -#--#-<\/p>([\s\S]*?)<p>-#--#- END TOOL RESPONSE -#--#-/g, (match, name, content) => {
-                const title = name ? `: ${name}` : '';
-                return `<details${open} class="tool-response"><summary>Tool Response${title}</summary>${content}</details>`;
-            });
-            // Wrap thinking in <details>
-            html = html.replace(/-#--#- THINK -#--#-<\/p>([\s\S]*?)<p>-#--#- END THINK -#--#-/g, (match, content) => {
-                return `<details class="think"><summary>Thinking</summary><div class="think-content">${content}</div></details>`;
-            });
-
-            contentEl.innerHTML = html;
-
-            // 4. Post-DOM Transformations (KaTeX)
-            renderMathInElement(contentEl, {
-                delimiters: [
-                    { left: '$$', right: '$$', display: true },
-                    { left: '$', right: '$', display: false },
-                    { left: '\\(', right: '\\)', display: false },
-                    { left: '\\[', right: '\\]', display: true }
-                ],
-                throwOnError: false
-            });
-        },
-
-        /**
-         * Adds copy-to-clipboard badges to code blocks and tables after the message is rendered.
-         * @param {HTMLElement} messageEl - The fully constructed message element.
-         * @param {Message} message - The message object.
-         */
-        onMessageRendered(messageEl, message) {
-            messageEl.classList.add('hljs-message');
-            const contentToCopy = message.value.content || '';
-            messageEl.dataset.plaintext = encodeURIComponent(contentToCopy.trim());
-
-            const tableToCSV = (table) => {
-                const separator = ';';
-                const rows = table.querySelectorAll('tr');
-                return Array.from(rows).map(row =>
-                    Array.from(row.querySelectorAll('td, th')).map(col =>
-                        `"${col.innerText.replace(/(\r\n|\n|\r)/gm, '').replace(/(\s\s)/gm, ' ').replace(/"/g, '""')}"`
-                    ).join(separator)
-                ).join('\n');
-            };
-
-            messageEl.querySelectorAll('table').forEach(table => {
-                const div = document.createElement('div');
-                div.classList.add('hljs-nobg', 'language-table');
-                div.dataset.plaintext = encodeURIComponent(tableToCSV(table));
-                const pe = table.parentElement;
-                pe.insertBefore(div, table);
-                div.appendChild(table);
-            });
-
-            const clipBadge = new ClipBadge({ autoRun: false });
-            clipBadge.addTo(messageEl);
-
-            const titleRow = messageEl.querySelector('.message-title');
-            if (titleRow) {
-                titleRow.style.paddingRight = '40px';
+                return output;
             }
+        );
+        text = text.replace(/\(data:image\/svg\+xml,([a-z0-9_"'%+-]+?)\)/gmi, (match, g1) => {
+            let data = decodeURIComponent(g1);
+            data = data.replace(/<svg\s/gmi, '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" ');
+            return `(data:image/svg+xml,${encodeURIComponent(data)})`;
+        });
+
+        // Placeholder for tool calls
+        text = text.replace(/<dma:tool_call[^>]+?name="([^>]*?)"[^>]*?(?:\/>|>[\s\S]*?<\/dma:tool_call\s*>)/gi, (match, name) => {
+            const title = name || '';
+            return `\n-#--#- TOOL CALL -#--#- ${title.trim()} -#--#-\n\`\`\`html\n${match.trim()}\n\`\`\`\n-#--#- END TOOL CALL -#--#-\n`;
+        });
+
+        // Placeholder for tool responses
+        text = text.replace(/<dma:tool_response[^>]+?name="([^>]*?)"[^>]*?(?:\/>|>[\s\S]*?<\/dma:tool_response\s*>)/gi, (match, name) => {
+            const title = name || '';
+            return `\n-#--#- TOOL RESPONSE -#--#- ${title.trim()} -#--#-\n\`\`\`html\n${match.trim()}\n\`\`\`\n-#--#- END TOOL RESPONSE -#--#-\n`;
+        });
+
+        // Placeholder for <think> tags
+        text = text.replace(/<think>([\s\S]*?)(?:<\/think>|$)/g, (match, content) => {
+            return `\n-#--#- THINK -#--#-\n${content.trim()}\n-#--#- END THINK -#--#-\n`;
+        });
+
+
+        // 2. Markdown Rendering with Syntax Highlighting
+        const md = window.markdownit({
+            html: false,
+            linkify: true,
+            highlight: function (str, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        return '<pre class="hljs"><code>' +
+                               hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
+                               '</code></pre>';
+                    } catch (__) {}
+                }
+                return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
+            }
+        });
+        let html = md.render(text);
+
+        // 3. Post-Markdown HTML Transformations
+
+        const open = ' open'; // TODO: Make this conditional
+
+        // Wrap tool calls in <details>
+        html = html.replace(/-#--#- TOOL CALL -#--#- (.*?) -#--#-<\/p>([\s\S]*?)<p>-#--#- END TOOL CALL -#--#-/g, (match, name, content) => {
+            const title = name ? `: ${name}` : '';
+            return `<details${open} class="tool-call"><summary>Tool Call${title}</summary>${content}</details>`;
+        });
+        // Wrap tool responses in <details>
+        html = html.replace(/-#--#- TOOL RESPONSE -#--#- (.*?) -#--#-<\/p>([\s\S]*?)<p>-#--#- END TOOL RESPONSE -#--#-/g, (match, name, content) => {
+            const title = name ? `: ${name}` : '';
+            return `<details${open} class="tool-response"><summary>Tool Response${title}</summary>${content}</details>`;
+        });
+        // Wrap thinking in <details>
+        html = html.replace(/-#--#- THINK -#--#-<\/p>([\s\S]*?)<p>-#--#- END THINK -#--#-/g, (match, content) => {
+            return `<details class="think"><summary>Thinking</summary><div class="think-content">${content}</div></details>`;
+        });
+
+        contentEl.innerHTML = html;
+
+        // 4. Post-DOM Transformations (KaTeX)
+        renderMathInElement(contentEl, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\(', right: '\\)', display: false },
+                { left: '\\[', right: '\\]', display: true }
+            ],
+            throwOnError: false
+        });
+    },
+
+    /**
+     * The `onMessageRendered` hook, which runs after a message element has been
+     * fully constructed. It adds final UI enhancements like copy-to-clipboard badges.
+     * @param {HTMLElement} messageEl - The fully constructed message element (`<div class="message">...</div>`).
+     * @param {Message} message - The corresponding message object.
+     */
+    onMessageRendered(messageEl, message) {
+        messageEl.classList.add('hljs-message');
+        const contentToCopy = message.value.content || '';
+        messageEl.dataset.plaintext = encodeURIComponent(contentToCopy.trim());
+
+        const tableToCSV = (table) => {
+            const separator = ';';
+            const rows = table.querySelectorAll('tr');
+            return Array.from(rows).map(row =>
+                Array.from(row.querySelectorAll('td, th')).map(col =>
+                    `"${col.innerText.replace(/(\r\n|\n|\r)/gm, '').replace(/(\s\s)/gm, ' ').replace(/"/g, '""')}"`
+                ).join(separator)
+            ).join('\n');
+        };
+
+        messageEl.querySelectorAll('table').forEach(table => {
+            const div = document.createElement('div');
+            div.classList.add('hljs-nobg', 'language-table');
+            div.dataset.plaintext = encodeURIComponent(tableToCSV(table));
+            const pe = table.parentElement;
+            pe.insertBefore(div, table);
+            div.appendChild(table);
+        });
+
+        const clipBadge = new ClipBadge({ autoRun: false });
+        clipBadge.addTo(messageEl);
+
+        const titleRow = messageEl.querySelector('.message-title');
+        if (titleRow) {
+            titleRow.style.paddingRight = '40px';
         }
+    }
 };
 
 pluginManager.register(formattingPlugin);
 
 
 /**
- * @class ClipBadge
- * Provides copy-to-clipboard badges for code blocks.
- * Adapted from https://unpkg.com/highlightjs-badge@0.1.9/highlightjs-badge.js
+ * A helper class to create and manage copy-to-clipboard badges for code blocks
+ * and other elements. It is adapted from the `highlightjs-badge` library to be
+ * integrated directly into the application's module system and to handle both
+ * code blocks and tables.
+ * @class
+ * @see {@link https://unpkg.com/highlightjs-badge@0.1.9/highlightjs-badge.js}
  */
 class ClipBadge {
+    /**
+     * Creates an instance of ClipBadge.
+     * @param {object} [options={}] - Configuration options for the badges.
+     */
     constructor(options = {}) {
         this.settings = { ...this.defaults, ...options };
         if (document.readyState === 'loading') {
@@ -170,6 +188,11 @@ class ClipBadge {
         }
     }
 
+    /**
+     * Default settings for the ClipBadge.
+     * @type {object}
+     * @private
+     */
     defaults = {
         templateSelector: '#clip-badge-template',
         copyIconContent: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-4H4a2 2 0 0 1-2-2V4zm8 12v4h10V10h-4v4a2 2 0 0 1-2 2h-4zm4-2V4H4v10h10z" fill="currentColor"/></svg>',
@@ -177,6 +200,11 @@ class ClipBadge {
         autoRun: true,
     };
 
+    /**
+     * Initializes the badge system by creating and injecting the necessary styles
+     * and template into the DOM.
+     * @private
+     */
     init() {
         const node = this.getTemplate();
         if(!document.head.querySelector('#clip-badge-styles')) {
@@ -188,6 +216,11 @@ class ClipBadge {
         if (this.settings.autoRun) this.addAll();
     }
 
+    /**
+     * Retrieves or creates the HTML template for the badge.
+     * @returns {HTMLTemplateElement} The template element.
+     * @private
+     */
     getTemplate() {
         let node = document.querySelector(this.settings.templateSelector);
         if (!node) {
@@ -210,10 +243,18 @@ class ClipBadge {
         return node;
     }
 
+    /**
+     * Finds all `pre.hljs` elements on the page and adds a badge to each.
+     * (Not used in the current implementation, but kept for completeness).
+     */
     addAll() {
         document.querySelectorAll('pre.hljs').forEach(el => this.addBadge(el));
     }
 
+    /**
+     * Adds badges to all valid target elements within a given container.
+     * @param {HTMLElement} container - The container element to search within.
+     */
     addTo(container) {
         container.querySelectorAll('pre.hljs, .language-table').forEach(el => this.addBadge(el));
         if (container.classList.contains('hljs-message')) {
@@ -221,6 +262,11 @@ class ClipBadge {
         }
     }
 
+    /**
+     * Adds a single copy badge to a specified element.
+     * @param {HTMLElement} highlightEl - The element to add the badge to.
+     * @private
+     */
     addBadge(highlightEl) {
         if (highlightEl.classList.contains('clip-badge-pre')) return;
         highlightEl.classList.add('clip-badge-pre');
@@ -228,6 +274,12 @@ class ClipBadge {
         highlightEl.insertAdjacentElement('afterbegin', badge);
     }
 
+    /**
+     * Creates the badge DOM element and sets up its click event listener for copying.
+     * @param {HTMLElement} highlightEl - The element the badge will be associated with.
+     * @returns {HTMLElement} The created badge element.
+     * @private
+     */
     createBadgeElement(highlightEl) {
         const codeBlock = highlightEl.querySelector('code');
         const plainText = highlightEl.dataset.plaintext ? decodeURIComponent(highlightEl.dataset.plaintext) : (codeBlock ? codeBlock.textContent : highlightEl.textContent);

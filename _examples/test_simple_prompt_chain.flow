@@ -14,8 +14,8 @@
     {
       "id": "step-1757507719110",
       "type": "simple-prompt",
-      "x": 100,
-      "y": 464,
+      "x": 465,
+      "y": 47,
       "data": {
         "prompt": "How are you?",
         "agentId": ""
@@ -24,8 +24,8 @@
     {
       "id": "step-1757766348084",
       "type": "simple-prompt",
-      "x": 482,
-      "y": 458,
+      "x": 817,
+      "y": 50,
       "isMinimized": false,
       "data": {
         "prompt": "Please tell me the time via tool call.",
@@ -35,8 +35,8 @@
     {
       "id": "step-1757766432447",
       "type": "simple-prompt",
-      "x": 840,
-      "y": 457,
+      "x": 98,
+      "y": 415,
       "data": {
         "prompt": "Please show me a table of the last 5 US presidents with their good and bad attributes according to history.",
         "agentId": ""
@@ -45,8 +45,8 @@
     {
       "id": "step-1757774172015",
       "type": "simple-prompt",
-      "x": 1230,
-      "y": 469,
+      "x": 454,
+      "y": 417,
       "data": {
         "prompt": "Please write python code to calculate Pi.",
         "agentId": ""
@@ -55,10 +55,21 @@
     {
       "id": "step-1757774217323",
       "type": "simple-prompt",
-      "x": 98,
-      "y": 851,
+      "x": 823,
+      "y": 418,
       "data": {
         "prompt": "Please write that in latex notation.",
+        "agentId": ""
+      }
+    },
+    {
+      "id": "step-1760101983925",
+      "type": "simple-prompt",
+      "x": 100,
+      "y": 770,
+      "isMinimized": false,
+      "data": {
+        "prompt": "Please draw a SVG of a house with a tree and the sun shining.",
         "agentId": ""
       }
     }
@@ -87,6 +98,11 @@
     {
       "from": "step-1757774172015",
       "to": "step-1757774217323",
+      "outputName": "default"
+    },
+    {
+      "from": "step-1757774217323",
+      "to": "step-1760101983925",
       "outputName": "default"
     }
   ],

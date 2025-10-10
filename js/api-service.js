@@ -1,26 +1,31 @@
 /**
  * @fileoverview Service for handling all interactions with an OpenAI-compatible API.
- * This file is self-contained and has no external dependencies.
+ * This class abstracts the details of making `fetch` calls to an AI backend,
+ * handling authentication, endpoint resolution, and error handling for both
+ * standard and streaming API requests. It is self-contained and has no
+ * external application dependencies.
  */
 
 'use strict';
 
 /**
+ * Represents a single AI model available from the API.
  * @typedef {object} ApiModel
- * @property {string} id - The unique identifier of the model.
+ * @property {string} id - The unique identifier of the model (e.g., "gpt-4").
  */
 
 /**
- * Handles all interactions with an OpenAI-compatible API.
+ * Handles all interactions with an OpenAI-compatible API, providing methods
+ * for fetching models and streaming chat completions.
  * @class
  */
 export class ApiService {
     /**
-     * Fetches the list of available models from the API.
-     * @param {string} apiUrl - The base URL of the API (e.g., "https://api.someai.com/").
-     * @param {string} apiKey - The user's API key.
-     * @returns {Promise<ApiModel[]>} A promise that resolves to an array of model objects, sorted by ID.
-     * @throws {Error} If the API request fails.
+     * Fetches the list of available AI models from the API.
+     * @param {string} apiUrl - The base URL of the API (e.g., "https://api.openai.com/").
+     * @param {string} apiKey - The user's API key for authentication.
+     * @returns {Promise<ApiModel[]>} A promise that resolves to an array of model objects, sorted alphabetically by ID.
+     * @throws {Error} Throws an error if the API request fails or returns a non-ok status.
      */
     async getModels(apiUrl, apiKey) {
         console.log('Fetching models ...');

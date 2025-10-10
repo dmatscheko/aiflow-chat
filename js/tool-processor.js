@@ -1,5 +1,11 @@
 /**
  * @fileoverview Reusable tool processing logic.
+ * This file provides a set of generic functions for parsing and processing
+ * tool calls embedded in assistant messages. It defines a custom XML-like
+ * syntax for representing tool calls and their results, and offers a
+ * high-level function (`processToolCalls`) to orchestrate the entire
+ * parse-filter-execute-respond cycle. This makes the tool-handling logic
+ * reusable across different plugins.
  */
 
 'use strict';
@@ -7,42 +13,46 @@
 /**
  * @typedef {import('./chat-data.js').Message} Message
  * @typedef {import('./main.js').App} App
- * @typedef {import('./main.js').Chat} Chat
+ * @typedef {import('./plugins/chats-plugin.js').Chat} Chat
  */
 
 /**
+ * Represents a single, parsed tool call extracted from a message.
  * @typedef {object} ToolCall
- * @property {string} id - A unique identifier for the tool call.
- * @property {string} name - The name of the tool being called.
- * @property {object} params - The parameters for the tool call.
+ * @property {string} id - A unique identifier for the tool call, generated during parsing.
+ * @property {string} name - The name of the tool to be executed.
+ * @property {object} params - A key-value map of parameters for the tool call.
  */
 
 /**
+ * Stores the start and end character indices of a matched tool call within a string.
  * @typedef {object} ToolCallPosition
- * @property {number} start - The starting index of the tool call in the content.
- * @property {number} end - The ending index of the tool call in the content.
+ * @property {number} start - The starting index of the tool call substring.
+ * @property {number} end - The ending index of the tool call substring.
  */
 
 /**
+ * The result of parsing tool calls from a string.
  * @typedef {object} ParsedToolCalls
- * @property {ToolCall[]} toolCalls - The parsed tool calls.
- * @property {ToolCallPosition[]} positions - The positions of the tool calls in the content.
- * @property {boolean[]} isSelfClosings - Flags indicating if a tool call was self-closing.
+ * @property {ToolCall[]} toolCalls - An array of the parsed tool call objects.
+ * @property {ToolCallPosition[]} positions - An array of the positions corresponding to each parsed tool call.
+ * @property {boolean[]} isSelfClosings - An array of flags indicating if a tool call was self-closing (`<.../>`).
  */
 
 /**
+ * Defines the schema for a tool, including its name and input parameters.
  * @typedef {object} ToolSchema
  * @property {string} name - The name of the tool.
- * @property {object} [inputSchema] - The JSON schema for the tool's input.
+ * @property {object} [inputSchema] - The JSON schema definition for the tool's input parameters.
  */
 
-// --- Tool Call Processing Functions (adapted from mcp-plugin.js) ---
-
 /**
- * Parses tool calls from an assistant's message content.
- * @param {string | null} content - The message content to parse.
- * @param {ToolSchema[]} [tools=[]] - A list of available tools with their schemas, used for type coercion.
- * @returns {ParsedToolCalls} The parsed tool calls, their positions, and self-closing flags.
+ * Parses tool calls from an assistant's message content using a regex-based approach.
+ * It looks for `<dma:tool_call>` tags, extracts the tool name and parameters,
+ * and performs type coercion on parameters if a `ToolSchema` is provided.
+ * @param {string | null} content - The message content to parse for tool calls.
+ * @param {ToolSchema[]} [tools=[]] - A list of available tools with their schemas, used for type coercion of parameters.
+ * @returns {ParsedToolCalls} An object containing the parsed tool calls, their positions, and self-closing flags.
  */
 function parseToolCalls(content, tools = []) {
     const toolCalls = [];
@@ -106,38 +116,46 @@ function parseToolCalls(content, tools = []) {
 
 
 /**
+ * A callback function used to determine if a specific tool call should be processed.
  * @callback ToolFilterCallback
- * @param {ToolCall} call - The tool call to check.
- * @returns {boolean} Whether the tool call should be processed.
+ * @param {ToolCall} call - The tool call to inspect.
+ * @returns {boolean} `true` if the tool call should be processed, otherwise `false`.
  */
 
 /**
+ * Represents the result of a single tool execution.
  * @typedef {object} ToolResult
- * @property {string} name - The name of the tool that was called.
- * @property {string} tool_call_id - The ID of the tool call this is a result for.
- * @property {string | null} content - The stringified result of the tool execution.
- * @property {string | null} error - A string describing an error, if one occurred.
+ * @property {string} name - The name of the tool that was executed.
+ * @property {string} tool_call_id - The unique ID of the tool call this result corresponds to.
+ * @property {string | null} content - The stringified successful result of the tool execution. `null` if an error occurred.
+ * @property {string | null} error - A string describing an error, if one occurred during execution. `null` if the execution was successful.
  */
 
 /**
+ * An asynchronous callback function responsible for executing a single tool call.
  * @callback ToolExecuteCallback
  * @param {ToolCall} call - The tool call to execute.
- * @param {Message} message - The message containing the tool call.
+ * @param {Message} message - The message that contained the tool call.
  * @returns {Promise<ToolResult>} A promise that resolves to the result of the tool execution.
  */
 
 /**
- * A generic function to process tool calls found in a message.
- * It parses, filters, executes, and then formats the results into a new
- * 'tool' role message. If tool calls were processed, it queues up the next
- * assistant turn by creating a new pending message.
+ * A generic, high-level function to process tool calls found in a message.
+ * It orchestrates the entire cycle:
+ * 1. Parses tool calls from the message content.
+ * 2. Filters them using a provided callback to see which ones are applicable.
+ * 3. Executes the applicable calls in parallel using another callback.
+ * 4. Injects the `tool_call_id` back into the original assistant message for traceability.
+ * 5. Creates a new 'tool' role message containing the results of all executions.
+ * 6. Queues up the next assistant turn by creating a new pending message.
+ *
  * @param {App} app - The main application instance.
- * @param {Chat} chat - The chat object this message belongs to.
- * @param {Message} message - The message containing tool calls.
- * @param {ToolSchema[]} tools - A list of available tools with their schemas.
- * @param {ToolFilterCallback} filterCallback - A function to filter which tool calls to process.
- * @param {ToolExecuteCallback} executeCallback - An async function to execute a tool call and return the result.
- * @returns {Promise<boolean>} A promise that resolves to `true` if tool calls were processed and a new turn was queued, `false` otherwise.
+ * @param {Chat} chat - The chat object where the message resides.
+ * @param {Message} message - The assistant message containing the tool calls to process.
+ * @param {ToolSchema[]} tools - A list of available tools and their schemas, passed to the parser.
+ * @param {ToolFilterCallback} filterCallback - A function to select which of the parsed tool calls should be executed.
+ * @param {ToolExecuteCallback} executeCallback - An async function that executes a single tool call and returns its result.
+ * @returns {Promise<boolean>} A promise that resolves to `true` if any tool calls were processed and a new assistant turn was queued, otherwise `false`.
  */
 async function processToolCalls(app, chat, message, tools, filterCallback, executeCallback) {
     const { toolCalls, positions, isSelfClosings } = parseToolCalls(message.value.content, tools);

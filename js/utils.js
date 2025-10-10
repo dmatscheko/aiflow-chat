@@ -1,5 +1,7 @@
 /**
- * @fileoverview Shared utility functions.
+ * @fileoverview A collection of shared utility functions used across the application.
+ * This module includes helpers for DOM manipulation, data handling (import/export),
+ * event debouncing, and generating unique identifiers.
  */
 
 'use strict';
@@ -7,9 +9,10 @@
 /**
  * Returns a function that, as long as it continues to be invoked, will not
  * be triggered. The function will be called after it stops being called for
- * `wait` milliseconds.
+ * `wait` milliseconds. This is useful for delaying the execution of a function
+ * until after a burst of events has ended (e.g., resizing a window, typing in a search box).
  * @param {Function} func The function to debounce.
- * @param {number} wait The number of milliseconds to delay.
+ * @param {number} wait The number of milliseconds to delay after the last invocation.
  * @returns {(...args: any[]) => void} The new debounced function.
  */
 export function debounce(func, wait) {
@@ -26,10 +29,10 @@ export function debounce(func, wait) {
 }
 
 /**
- * Creates a JSON file from the given data and triggers a download.
- * @param {object|Array} data - The JSON data to export.
- * @param {string} filenameBase - The base name for the downloaded file.
- * @param {string} extension - The file extension (e.g., 'chat', 'flow').
+ * Creates a JSON file from the given data object and triggers a browser download.
+ * @param {object|Array} data The JSON-serializable data to export.
+ * @param {string} filenameBase The base name for the downloaded file (without extension).
+ * @param {string} extension The file extension to use (e.g., 'chat', 'flow').
  */
 export function exportJson(data, filenameBase, extension) {
     if (!data) {
@@ -54,9 +57,9 @@ export function exportJson(data, filenameBase, extension) {
 }
 
 /**
- * Creates a file input to import a JSON file and processes its content.
- * @param {string} extension - The file extension to accept (e.g., '.chat').
- * @param {function(object): void} onParsedData - The callback to handle the parsed data.
+ * Opens a file dialog for the user to select a JSON file, then reads and parses it.
+ * @param {string} extension The file extension to accept (e.g., '.chat'), including the dot.
+ * @param {(parsedData: object) => void} onParsedData The callback function to handle the successfully parsed JSON data.
  */
 export function importJson(extension, onParsedData) {
     const input = document.createElement('input');
@@ -82,11 +85,11 @@ export function importJson(extension, onParsedData) {
 }
 
 /**
- * Generates a unique ID with a given prefix.
- * If the initial ID conflicts with an existing one, it appends a random suffix.
- * @param {string} prefix - The prefix for the ID (e.g., 'agent', 'chat').
- * @param {Set<string>} existingIds - A set of already existing IDs to check against for uniqueness.
- * @returns {string} A new, unique ID.
+ * Generates a unique ID with a given prefix, ensuring it does not conflict with existing IDs.
+ * If the initial timestamp-based ID conflicts, it appends a random suffix until it is unique.
+ * @param {string} prefix The prefix for the ID (e.g., 'agent', 'chat').
+ * @param {Set<string>} existingIds A `Set` of already existing IDs to check against for uniqueness.
+ * @returns {string} A new, unique ID (e.g., 'chat-1678886400000').
  */
 export function generateUniqueId(prefix, existingIds) {
     let id = `${prefix}-${Date.now()}`;
@@ -98,11 +101,12 @@ export function generateUniqueId(prefix, existingIds) {
 
 /**
  * Ensures that a given ID is unique within a set of existing IDs.
- * If the proposed ID is missing or already exists, it generates a new unique ID.
- * @param {string | null | undefined} proposedId - The ID to check for uniqueness.
- * @param {string} prefix - The prefix to use if a new ID needs to be generated (e.g., 'agent').
- * @param {Set<string>} existingIds - A set of already existing IDs.
- * @returns {string} The original ID if it was unique, or a newly generated unique ID.
+ * If the proposed ID is null, undefined, or already exists in the set, it generates a new unique ID.
+ * Otherwise, it returns the proposed ID.
+ * @param {string | null | undefined} proposedId The ID to check for uniqueness.
+ * @param {string} prefix The prefix to use if a new ID needs to be generated (e.g., 'agent').
+ * @param {Set<string>} existingIds A `Set` of already existing IDs.
+ * @returns {string} The original ID if it was valid and unique, or a newly generated unique ID.
  */
 export function ensureUniqueId(proposedId, prefix, existingIds) {
     if (!proposedId || existingIds.has(proposedId)) {
@@ -114,21 +118,13 @@ export function ensureUniqueId(proposedId, prefix, existingIds) {
 }
 
 /**
- * Makes a container's content editable in-place.
- * Replaces the container's content with a textarea for editing.
- * @param {HTMLElement} containerEl - The element to make editable.
- * @param {string} initialText - The initial text to populate the editor with.
- * @param {(newText: string) => void} onSave - Callback to execute when saving.
- * @param {() => void} [onCancel] - Optional callback to execute on cancellation.
- */
-/**
- * Makes a container's content editable in-place using a single-line input.
- * Replaces the container's content with an input field for editing.
+ * Makes an element's content editable in-place using a single-line input field.
+ * Replaces the target element with an `<input type="text">`.
  * Saves on Enter or blur, cancels on Escape.
- * @param {HTMLElement} containerEl - The element to make editable.
- * @param {string} initialText - The initial text to populate the editor with.
- * @param {(newText: string) => void} onSave - Callback to execute when saving.
- * @param {() => void} [onCancel] - Optional callback to execute on cancellation.
+ * @param {HTMLElement} containerEl The element to make editable. Its display will be toggled.
+ * @param {string} initialText The initial text to populate the editor with.
+ * @param {(newText: string) => void} onSave Callback executed when saving the new text.
+ * @param {(() => void)|null} [onCancel=null] Optional callback executed on cancellation.
  */
 export function makeSingleLineEditable(containerEl, initialText, onSave, onCancel = null) {
     containerEl.style.display = 'none';
@@ -180,13 +176,14 @@ export function makeSingleLineEditable(containerEl, initialText, onSave, onCance
 }
 
 /**
- * Makes a container's content editable in-place with a multi-line textarea.
- * Replaces the container's content with a textarea and Save/Cancel buttons.
- * Saves on button click or Enter, cancels on button click or Escape.
- * @param {HTMLElement} containerEl - The element to make editable.
- * @param {string} initialText - The initial text to populate the editor with.
- * @param {(newText: string) => void} onSave - Callback to execute when saving.
- * @param {() => void} [onCancel] - Optional callback to execute on cancellation.
+ * Makes an element's content editable in-place with a multi-line textarea and Save/Cancel buttons.
+ * Replaces the target element with a `<textarea>` and associated controls.
+ * Saves on button click or Enter (without modifiers), cancels on button click or Escape.
+ * The textarea automatically resizes to fit its content.
+ * @param {HTMLElement} containerEl The element to make editable. Its display will be toggled.
+ * @param {string} initialText The initial text to populate the editor with.
+ * @param {(newText: string) => void} onSave Callback executed when saving the new text.
+ * @param {(() => void)|null} [onCancel=null] Optional callback executed on cancellation.
  */
 export function makeEditable(containerEl, initialText, onSave, onCancel = null) {
     containerEl.style.display = 'none';
@@ -263,10 +260,11 @@ export function makeEditable(containerEl, initialText, onSave, onCancel = null) 
 
 
 /**
- * Generates a unique name from a base name by appending a number in parentheses if needed.
- * e.g., "New Flow" -> "New Flow (2)"
+ * Generates a unique name from a base name by appending a number if needed.
+ * If `baseName` is "New Flow" and "New Flow" already exists, it will return "New Flow 2".
+ * If "New Flow 2" also exists, it will return "New Flow 3", and so on.
  * @param {string} baseName The desired base name.
- * @param {string[]} existingNames A list of names that already exist.
+ * @param {string[]} existingNames An array of names that already exist.
  * @returns {string} A unique name.
  */
 export function generateUniqueName(baseName, existingNames) {

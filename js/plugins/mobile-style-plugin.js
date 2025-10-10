@@ -1,16 +1,26 @@
 /**
- * @fileoverview Plugin to handle mobile-specific layout adjustments.
+ * @fileoverview A simple plugin to handle mobile-specific layout adjustments.
+ * It primarily adds a toggle button to show/hide the right-hand sidebar
+ * on smaller screens where it is hidden by default via CSS.
  */
 
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
 
+/**
+ * The plugin object for mobile-specific style and layout handling.
+ * @type {import('../plugin-manager.js').Plugin}
+ */
 const mobileStylePlugin = {
     name: 'MobileStyle',
 
     /**
-     * @param {import('../main.js').App} app
+     * The `onAppInit` hook, called when the application starts.
+     * It creates and injects a toggle button into the DOM. This button's click
+     * event toggles the 'right-panel-visible' class on the main app container,
+     * which is used by CSS to control the visibility of the sidebar on mobile.
+     * @param {import('../main.js').App} app - The main application instance.
      */
     onAppInit(app) {
         const appContainer = document.getElementById('app-container');
@@ -34,4 +44,7 @@ const mobileStylePlugin = {
     }
 };
 
+/**
+ * Registers the Mobile Style Plugin with the application's plugin manager.
+ */
 pluginManager.register(mobileStylePlugin);

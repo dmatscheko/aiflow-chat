@@ -1,5 +1,7 @@
 /**
- * @fileoverview Plugin for creating title bars and handling file operations.
+ * @fileoverview A plugin that provides a factory function for creating
+ * standardized, dynamic title bars and uses it to add a feature-rich
+ * title bar to the main chat view.
  * @version 2.0.1
  */
 
@@ -15,32 +17,38 @@ import { importJson, exportJson, makeSingleLineEditable } from '../utils.js';
  */
 
 /**
+ * Defines the configuration for a button in the title bar.
  * @typedef {object} TitleBarButton
- * @property {string} id - The button's ID.
- * @property {string} label - The button's text label.
- * @property {string} [className] - Optional CSS class for the button.
- * @property {() => void} onClick - The function to call when the button is clicked.
- * @property {string} [dropdownContent] - Optional HTML content for a dropdown.
+ * @property {string} id - The unique ID for the button element.
+ * @property {string} label - The text label displayed on the button.
+ * @property {string} [className] - An optional CSS class to apply to the button for styling.
+ * @property {() => void} onClick - The callback function to execute when the button is clicked.
+ * @property {string} [dropdownContent] - If provided, the button will act as a dropdown trigger, and this HTML string will be the content of the dropdown menu.
  */
 
 /**
+ * Defines a custom control to be inserted into the title bar.
  * @typedef {object} TitleBarControl
- * @property {string} id - The control's container ID.
- * @property {string} html - The HTML content of the control.
- * @property {() => void} [onMount] - Function to call after the control is added to the DOM.
+ * @property {string} id - The unique ID for the control's container element.
+ * @property {string} html - The raw HTML string for the control.
+ * @property {(container: HTMLElement) => void} [onMount] - An optional callback function that is executed after the control's HTML has been added to the DOM, allowing for event listener attachment.
  */
 
-
-/** @type {App | null} */
+/**
+ * The singleton instance of the main App class.
+ * @type {App | null}
+ */
 let appInstance = null;
 
 /**
- * Creates a standardized title bar for a main panel view.
+ * A factory function that creates a standardized title bar element for a main panel view.
+ * It supports editable title segments, custom controls, and buttons with optional dropdowns.
  *
- * @param {Array<string|{text: string, onSave: (newText: string) => void}>} titleParts - An array of strings or editable title part objects.
- * @param {TitleBarControl[]} [controls=[]] - An array of control objects to add to the controls area.
- * @param {TitleBarButton[]} [buttons=[]] - An array of button objects to add to the buttons area.
- * @returns {HTMLElement} The generated title bar element.
+ * @param {Array<string|{text: string, onSave: (newText: string) => void}>} titleParts - An array of strings or objects for the title.
+ *        If an object, it creates an editable title segment with a save callback.
+ * @param {TitleBarControl[]} [controls=[]] - An array of custom control definitions to be placed in the center of the title bar.
+ * @param {TitleBarButton[]} [buttons=[]] - An array of button definitions to be placed on the right side of the title bar.
+ * @returns {HTMLElement} The fully constructed title bar `<div>` element.
  */
 export function createTitleBar(titleParts, controls = [], buttons = []) {
     const titleBar = document.createElement('div');
@@ -150,19 +158,28 @@ export function createTitleBar(titleParts, controls = [], buttons = []) {
 }
 
 
+/**
+ * The plugin object for the Title Bar feature.
+ * @type {import('../plugin-manager.js').Plugin}
+ */
 const titleBarPlugin = {
     name: 'TitleBar',
 
     /**
-     * @param {App} app
+     * The `onAppInit` hook, called when the application starts.
+     * It simply stores a reference to the main app instance for later use.
+     * @param {App} app - The main application instance.
      */
     onAppInit(app) {
         appInstance = app;
     },
 
     /**
-     * @param {View} view - The rendered view object.
-     * @param {Chat} chat
+     * The `onViewRendered` hook. If the rendered view is a 'chat', this function
+     * uses the `createTitleBar` factory to construct a title bar with an editable
+     * chat title, agent and flow selectors, and load/save buttons.
+     * @param {View} view - The view object that was just rendered.
+     * @param {Chat} chat - The active chat instance, which is non-null if the view is 'chat'.
      */
     onViewRendered(view, chat) {
         if (!appInstance) return;
@@ -170,7 +187,7 @@ const titleBarPlugin = {
         if (!mainPanel) return;
 
         if (view.type === 'chat' && chat) {
-            // Remove any existing title bar to prevent duplicates on re-renders
+            // Remove any existing title bar to prevent duplicates on re-renders.
             const existingTitleBar = mainPanel.querySelector('.main-title-bar');
             if (existingTitleBar) {
                 existingTitleBar.remove();
@@ -266,4 +283,7 @@ const titleBarPlugin = {
     }
 };
 
+/**
+ * Registers the Title Bar Plugin with the application's plugin manager.
+ */
 pluginManager.register(titleBarPlugin);
