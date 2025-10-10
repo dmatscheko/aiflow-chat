@@ -1,8 +1,12 @@
 /**
  * @fileoverview Manages all application settings, including UI rendering and storage.
+ * This file provides a centralized way to handle application settings, from their
+ * definition and storage to dynamically rendering a user interface for them.
+ * It includes a generic function `createSettingsUI` that can build an entire
+ * settings panel from a declarative configuration object.
  */
 
-'use strict';
+'use.strict';
 
 import { pluginManager } from './plugin-manager.js';
 
@@ -12,13 +16,18 @@ import { pluginManager } from './plugin-manager.js';
  * @typedef {import('./tool-processor.js').ToolSchema} ToolSchema
  */
 
-// --- Private Helper Functions (moved from utils.js) ---
+// --- Private Helper Functions ---
 
 /**
- * Gets a nested property from an object using a dot-notation string.
- * @param {object} obj - The object to query.
- * @param {string} path - The dot-notation path to the property.
- * @returns {any} The value of the property, or undefined if not found.
+ * Safely gets a nested property from an object using a dot-notation string.
+ * For example, `getPropertyByPath(obj, 'a.b.c')` is equivalent to `obj.a.b.c`.
+ * @param {object} obj The object to query.
+ * @param {string} path The dot-notation path to the property.
+ * @returns {any} The value of the property, or `undefined` if the path is invalid or not found.
+ * @example
+ * const obj = { a: { b: { c: 10 } } };
+ * getPropertyByPath(obj, 'a.b.c'); // Returns 10
+ * getPropertyByPath(obj, 'a.d');   // Returns undefined
  */
 export function getPropertyByPath(obj, path) {
     if (!path) return undefined;
@@ -26,10 +35,15 @@ export function getPropertyByPath(obj, path) {
 }
 
 /**
- * Sets a nested property on an object using a dot-notation string.
- * @param {object} obj - The object to modify.
- * @param {string} path - The dot-notation path to the property.
- * @param {any} value - The value to set.
+ * Safely sets a nested property on an object using a dot-notation string.
+ * It creates nested objects if they do not exist along the path.
+ * @param {object} obj The object to modify.
+ * @param {string} path The dot-notation path to the property.
+ * @param {any} value The value to set at the specified path.
+ * @example
+ * const obj = { a: {} };
+ * setPropertyByPath(obj, 'a.b.c', 20);
+ * // obj is now { a: { b: { c: 20 } } }
  */
 export function setPropertyByPath(obj, path, value) {
     const keys = path.split('.');
@@ -45,37 +59,47 @@ export function setPropertyByPath(obj, path, value) {
 
 /**
  * Manages the definition, storage, and UI rendering of application settings.
+ * This class is intended to be extended by plugins to manage their own settings.
  * @class
  */
 export class SettingsManager {
     /**
+     * Creates an instance of SettingsManager.
      * @param {App} app - The main application instance.
      */
     constructor(app) {
-        /** @type {App} */
+        /**
+         * The main application instance.
+         * @type {App}
+         */
         this.app = app;
     }
 }
 
 
 /**
+ * A callback function that is invoked when a setting's value changes in the UI.
  * @callback SettingChangedCallback
  * @param {string} id - The dot-notation ID of the setting that changed (e.g., 'name', 'modelSettings.apiKey').
  * @param {any} newValue - The new value of the setting.
- * @param {string} context - The context string passed to createSettingsUI.
- * @param {HTMLElement} inputElement - The specific input element that triggered the change.
+ * @param {string} context - The context string that was passed to `createSettingsUI`, useful for identifying which settings panel triggered the change.
+ * @param {HTMLElement} inputElement - The specific HTML input element that triggered the change event.
  */
 
 /**
- * Creates and manages a settings UI from a declarative definition.
- * @param {Setting[]} settings - The array of setting definitions.
- * @param {object} currentValues - An object containing the current values for the settings.
- * @param {SettingChangedCallback} [onChange] - A single callback function to handle all data changes.
- * @param {string} [idPrefix=''] - A prefix for generated element IDs.
- * @param {string} [context=''] - A context string to be passed to the onChange callback.
- * @param {string} [pathPrefix=''] - A prefix for the dot-notation path.
- * @param {Map<string, any[]>} [dependencyMap] - For internal recursive use.
- * @returns {DocumentFragment} A fragment containing the rendered and interactive settings UI.
+ * Creates and manages a settings UI from a declarative array of setting definitions.
+ * This powerful function recursively builds a complete HTML form structure based on
+ * the provided configuration, handling various input types, dependencies between fields,
+ * and data binding.
+ *
+ * @param {Setting[]} settings - The array of setting definitions that describe the UI to be created.
+ * @param {object} currentValues - An object containing the current values for the settings, which will be used to populate the form fields.
+ * @param {SettingChangedCallback} [onChange] - A single callback function that will be invoked whenever any setting's value changes.
+ * @param {string} [idPrefix=''] - A prefix to be added to all generated HTML element IDs to ensure uniqueness in complex UIs.
+ * @param {string} [context=''] - A context string that is passed through to the `onChange` callback, useful for identifying the source of the change.
+ * @param {string} [pathPrefix=''] - (For internal use) A prefix for the dot-notation path used in recursive calls to build nested setting paths.
+ * @param {Map<string, any[]>} [dependencyMap] - (For internal use) A map used to track dependencies between settings for visibility toggling.
+ * @returns {DocumentFragment} A `DocumentFragment` containing the fully rendered and interactive settings UI. This can be appended to any DOM element.
  */
 export function createSettingsUI(settings, currentValues, onChange, idPrefix = '', context = '', pathPrefix = '', dependencyMap = new Map()) {
     const fragment = document.createDocumentFragment();

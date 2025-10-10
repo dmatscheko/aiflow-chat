@@ -1,5 +1,7 @@
 /**
- * @fileoverview Plugin for creating and executing complex, node-based flows.
+ * @fileoverview Plugin for creating, managing, and executing complex, node-based
+ * workflows called "Flows". This plugin provides a visual editor for building
+ * flows and a runner for executing their logic.
  * @version 2.3.0
  */
 
@@ -12,86 +14,141 @@ import { registerFlowStepDefinitions } from './flows-plugin-step-definitions.js'
 
 /**
  * @typedef {import('../main.js').App} App
- * @typedef {import('../main.js').Chat} Chat
+ * @typedef {import('./chats-plugin.js').Chat} Chat
  * @typedef {import('../main.js').View} View
  * @typedef {import('../main.js').Tab} Tab
  */
 
 /**
+ * Represents a single step (or node) within a flow.
  * @typedef {object} FlowStep
- * @property {string} id
- * @property {string} type
- * @property {number} x
- * @property {number} y
- * @property {boolean} isMinimized
- * @property {object} data
+ * @property {string} id - The unique identifier for this step instance.
+ * @property {string} type - The type of the step (e.g., 'simple-prompt', 'branch').
+ * @property {number} x - The x-coordinate of the step's position on the canvas.
+ * @property {number} y - The y-coordinate of the step's position on the canvas.
+ * @property {boolean} isMinimized - Whether the step's UI is currently minimized.
+ * @property {object} data - A key-value store for the step's specific configuration data.
  */
 
 /**
+ * Represents a connection (or edge) between two steps in a flow.
  * @typedef {object} FlowConnection
- * @property {string} from
- * @property {string} to
- * @property {string} outputName
+ * @property {string} from - The ID of the step where the connection originates.
+ * @property {string} to - The ID of the step where the connection terminates.
+ * @property {string} outputName - The name of the output connector on the 'from' step.
  */
 
 /**
+ * Represents a complete flow, including its steps and their connections.
  * @typedef {object} Flow
- * @property {string} id
- * @property {string} name
- * @property {FlowStep[]} steps
- * @property {FlowConnection[]} connections
+ * @property {string} id - The unique identifier for the flow.
+ * @property {string} name - The display name of the flow.
+ * @property {FlowStep[]} steps - An array of all the steps in the flow.
+ * @property {FlowConnection[]} connections - An array of all the connections in the flow.
  */
 
 /**
+ * The execution context object passed to a step's `execute` function.
+ * It provides the step with access to the application and methods to control the flow's execution.
  * @typedef {object} FlowExecutionContext
- * @property {App} app
- * @property {(fromStepId: string, outputName?: string) => FlowStep | undefined} getNextStep
- * @property {(step: FlowStep) => void} executeStep
- * @property {(message?: string) => void} stopFlow
+ * @property {App} app - The main application instance.
+ * @property {(fromStepId: string, outputName?: string) => FlowStep | undefined} getNextStep - A function to get the next step connected to a specific output.
+ * @property {(step: FlowStep) => void} executeStep - A function to immediately execute a given step.
+ * @property {(message?: string) => void} stopFlow - A function to stop the current flow's execution.
  */
 
 /**
+ * Defines the behavior and appearance of a type of flow step.
  * @typedef {object} FlowStepDefinition
- * @property {string} label
- * @property {() => object} getDefaults
- * @property {(step: FlowStep, agentOptions: string) => string} render
- * @property {(step: FlowStep, target: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) => void} onUpdate
- * @property {(step: FlowStep, context: FlowExecutionContext) => void} execute
+ * @property {string} label - The display name of the step type in the "Add Step" menu.
+ * @property {() => object} getDefaults - A function that returns the default data object for a new step of this type.
+ * @property {(step: FlowStep, agentOptions: string) => string} render - A function that returns the HTML for the step's UI.
+ * @property {(step: FlowStep, target: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, renderAndConnect: () => void) => void} onUpdate - A function called when a UI input value changes.
+ * @property {(step: FlowStep, context: FlowExecutionContext) => void} execute - The function that contains the step's execution logic.
  */
 
 let flowsManager = null;
 
 /**
- * Manages the entire lifecycle, execution, and UI of flows.
+ * Manages the entire lifecycle, execution, and UI of flows. It handles loading,
+ * saving, and editing flows, as well as orchestrating the flow editor canvas
+ * and delegating execution to the `FlowRunner`.
  * @class
  */
 export class FlowsManager {
-    /** @param {App} app */
+    /**
+     * Initializes the FlowsManager.
+     * @param {App} app - The main application instance.
+     */
     constructor(app) {
-        /** @type {App} */
+        /**
+         * The main application instance.
+         * @type {App}
+         */
         this.app = app;
-        /** @type {Flow[]} */
+        /**
+         * An array holding all loaded flow objects.
+         * @type {Flow[]}
+         */
         this.flows = this._loadFlows();
-        /** @type {Object.<string, FlowStepDefinition & {type: string}>} */
+        /**
+         * A map of registered step type definitions.
+         * @type {Object.<string, FlowStepDefinition & {type: string}>}
+         */
         this.stepTypes = {};
-        /** @type {FlowRunner | null} */
+        /**
+         * The currently active `FlowRunner` instance, or `null` if no flow is running.
+         * @type {FlowRunner | null}
+         */
         this.activeFlowRunner = null;
-        /** @type {object} */
+        /**
+         * State object for managing node dragging on the canvas.
+         * @type {object}
+         * @private
+         */
         this.dragInfo = {};
-        /** @type {object} */
+        /**
+         * State object for managing canvas panning.
+         * @type {object}
+         * @private
+         */
         this.panInfo = {};
-        /** @type {object} */
+        /**
+         * State object for managing the creation of new connections.
+         * @type {object}
+         * @private
+         */
         this.connectionInfo = {};
 
         this._defineSteps();
     }
 
     // --- Core Flow Management ---
+    /**
+     * Loads flows from local storage.
+     * @returns {Flow[]} The loaded flows.
+     * @private
+     */
     _loadFlows() { try { return JSON.parse(localStorage.getItem('core_flows_v2')) || []; } catch (e) { console.error('Failed to load flows:', e); return []; } }
+
+    /**
+     * Saves all flows to local storage.
+     * @private
+     */
     _saveFlows() { localStorage.setItem('core_flows_v2', JSON.stringify(this.flows)); }
-    /** @param {string} id */
+
+    /**
+     * Retrieves a flow by its ID.
+     * @param {string} id - The ID of the flow to retrieve.
+     * @returns {Flow | undefined} The found flow, or `undefined`.
+     */
     getFlow(id) { return this.flows.find(f => f.id === id); }
-    /** @param {Omit<Flow, 'id'>} flowData */
+
+    /**
+     * Creates a new flow, adds it to the list, and saves it.
+     * @param {Omit<Flow, 'id'>} flowData - The data for the new flow, without an ID.
+     * @returns {Flow} The newly created flow object.
+     */
     addFlow(flowData) {
         const existingIds = new Set(this.flows.map(f => f.id));
         const newFlow = { ...flowData, id: generateUniqueId('flow', existingIds) };
@@ -99,11 +156,24 @@ export class FlowsManager {
         this._saveFlows();
         return newFlow;
     }
-    /** @param {Flow} flowData */
+
+    /**
+     * Updates an existing flow with new data.
+     * @param {Flow} flowData - The full flow object to update.
+     */
     updateFlow(flowData) { const i = this.flows.findIndex(f => f.id === flowData.id); if (i !== -1) { this.flows[i] = flowData; this._saveFlows(); } }
-    /** @param {string} id */
+
+    /**
+     * Deletes a flow by its ID.
+     * @param {string} id - The ID of the flow to delete.
+     */
     deleteFlow(id) { this.flows = this.flows.filter(f => f.id !== id); this._saveFlows(); }
-    /** @param {Flow} flowData */
+
+    /**
+     * Adds a flow from imported data, ensuring its ID is unique.
+     * @param {Flow} flowData - The flow data to import.
+     * @returns {Flow} The newly added flow object.
+     */
     addFlowFromData(flowData) {
         const existingIds = new Set(this.flows.map(f => f.id));
         const finalId = ensureUniqueId(flowData.id, 'flow', existingIds);
@@ -116,7 +186,10 @@ export class FlowsManager {
         return newFlow;
     }
 
-    /** @param {string} flowId */
+    /**
+     * Starts the execution of a flow by creating and starting a `FlowRunner`.
+     * @param {string} flowId - The ID of the flow to start.
+     */
     startFlow(flowId) {
         const flow = this.getFlow(flowId);
         if (flow) {
@@ -126,13 +199,26 @@ export class FlowsManager {
     }
 
     // --- Step Definition ---
-    /** @param {string} type, @param {FlowStepDefinition} definition */
+    /**
+     * Defines a new type of flow step.
+     * @param {string} type - The unique identifier for the step type.
+     * @param {FlowStepDefinition} definition - The definition object for the step.
+     * @private
+     */
     _defineStep(type, definition) { this.stepTypes[type] = { ...definition, type }; }
+
+    /**
+     * Registers all built-in step type definitions.
+     * @private
+     */
     _defineSteps() {
         registerFlowStepDefinitions(this);
     }
 
     // --- UI Rendering ---
+    /**
+     * Updates the visual state of the flow list to highlight the currently active flow.
+     */
     updateActiveFlowInList() {
         const flowListEl = document.getElementById('flow-list');
         if (!flowListEl || !this.app) return;
@@ -140,6 +226,9 @@ export class FlowsManager {
         flowListEl.querySelectorAll('li').forEach(item => item.classList.toggle('active', item.dataset.id === activeFlowId));
     }
 
+    /**
+     * Renders the list of flows in the sidebar pane.
+     */
     renderFlowList() {
         const listEl = document.getElementById('flow-list');
         if (!listEl) return;
@@ -154,7 +243,11 @@ export class FlowsManager {
         this.updateActiveFlowInList();
     }
 
-    /** @param {string | null} flowId */
+    /**
+     * Renders the placeholder container for the flow editor view.
+     * @param {string | null} flowId - The ID of the flow to render the editor for. If null, shows a welcome message.
+     * @returns {string} The HTML string for the editor's container.
+     */
     renderFlowEditor(flowId) {
         if (flowId) {
             return `
@@ -174,7 +267,10 @@ export class FlowsManager {
         }
     }
 
-    /** @param {Flow} flow */
+    /**
+     * Renders the connections (lines) between steps on the SVG layer.
+     * @param {Flow} flow - The flow whose connections are to be rendered.
+     */
     updateConnections(flow) {
         const nodeContainer = document.getElementById('flow-node-container');
         const svgLayer = document.getElementById('flow-svg-layer');
@@ -220,7 +316,10 @@ export class FlowsManager {
         });
     }
 
-    /** @param {Flow} flow */
+    /**
+     * Renders all the steps (nodes) for a given flow onto the canvas.
+     * @param {Flow} flow - The flow to render.
+     */
     renderFlow(flow) {
         const nodeContainer = document.getElementById('flow-node-container');
         if (!nodeContainer) return;
@@ -228,6 +327,7 @@ export class FlowsManager {
 
         const svgLayer = document.getElementById('flow-svg-layer');
         if (svgLayer && !svgLayer.querySelector('defs')) {
+            // Add SVG definitions for the arrowhead marker on connections.
             svgLayer.innerHTML = '<defs><marker id="arrowhead" viewBox="0 0 10 10" refX="15" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--text-color)"></path></marker></defs>';
         }
 
@@ -248,16 +348,23 @@ export class FlowsManager {
             node.innerHTML = `<button class="minimize-flow-step-btn" data-id="${step.id}">${step.isMinimized ? '+' : '-'}</button><div class="connector top" data-id="${step.id}" data-type="in"></div>${stepDef.render(step, selectedAgentOptions)}<div class="flow-step-footer"><button class="delete-flow-step-btn" data-id="${step.id}">Delete</button></div>${outputConnectors}`;
             nodeContainer.appendChild(node);
         });
-        // Connection rendering is now handled separately with a timeout
     }
 
-    /** @param {string | null} activeFlowId */
+    /**
+     * Generates the HTML for the flow selector dropdown displayed above the chat input.
+     * @param {string | null} activeFlowId - The ID of the flow to pre-select.
+     * @returns {string} The HTML string for the flow selector component.
+     */
     getFlowSelectorHtml(activeFlowId) {
         const optionsHtml = this.flows.map(flow => `<option value="${flow.id}" ${flow.id === activeFlowId ? 'selected' : ''}>${flow.name}</option>`).join('');
         return `<div id="flow-runner-container"><label for="flow-selector">Flow:</label><select id="flow-selector"><option value="">Select a flow</option>${optionsHtml}</select><button id="run-chat-flow-btn">Run</button></div>`;
     }
 
     // --- Canvas Interaction ---
+    /**
+     * Resets all canvas interaction states (dragging, panning, connecting).
+     * @private
+     */
     _resetInteractions() {
         const canvas = document.getElementById('flow-canvas');
         if (canvas) canvas.classList.remove('panning');
@@ -266,7 +373,14 @@ export class FlowsManager {
         this.connectionInfo = { active: false };
     }
 
-    /** @param {MouseEvent} e, @param {Flow} flow, @param {() => void} debouncedUpdate */
+    /**
+     * Handles the `mousedown` event on the flow canvas to initiate dragging,
+     * panning, or creating a new connection.
+     * @param {MouseEvent} e - The mouse event.
+     * @param {Flow} flow - The current flow.
+     * @param {() => void} debouncedUpdate - The debounced function to save the flow.
+     * @private
+     */
     _handleCanvasMouseDown(e, flow, debouncedUpdate) {
         const target = e.target;
         if (target.classList.contains('connector') && target.dataset.type === 'out') {
@@ -284,7 +398,13 @@ export class FlowsManager {
         }
     }
 
-    /** @param {MouseEvent} e, @param {Flow} flow */
+    /**
+     * Handles the `mousemove` event on the flow canvas to update the position
+     * of a dragged node, pan the canvas, or draw a temporary connection line.
+     * @param {MouseEvent} e - The mouse event.
+     * @param {Flow} flow - The current flow.
+     * @private
+     */
     _handleCanvasMouseMove(e, flow) {
         if (this.dragInfo.active) {
             this.dragInfo.target.style.left = `${e.clientX - this.dragInfo.offsetX}px`;
@@ -314,7 +434,14 @@ export class FlowsManager {
         }
     }
 
-    /** @param {MouseEvent} e, @param {Flow} flow, @param {() => void} debouncedUpdate */
+    /**
+     * Handles the `mouseup` event on the flow canvas to finalize dragging,
+     * panning, or creating a new connection.
+     * @param {MouseEvent} e - The mouse event.
+     * @param {Flow} flow - The current flow.
+     * @param {() => void} debouncedUpdate - The debounced function to save the flow.
+     * @private
+     */
     _handleCanvasMouseUp(e, flow, debouncedUpdate) {
         if (this.dragInfo.active) {
             const step = flow.steps.find(s => s.id === this.dragInfo.target.dataset.id);
@@ -345,14 +472,16 @@ export class FlowsManager {
 }
 
 /**
- * Executes a flow by traversing its steps and connections.
+ * Executes a flow by traversing its steps and connections based on the flow's
+ * structure and the logic defined in each step.
  * @class
  */
 class FlowRunner {
     /**
-     * @param {Flow} flow
-     * @param {App} app
-     * @param {FlowsManager} manager
+     * Creates an instance of FlowRunner.
+     * @param {Flow} flow - The flow to be executed.
+     * @param {App} app - The main application instance.
+     * @param {FlowsManager} manager - The `FlowsManager` instance.
      */
     constructor(flow, app, manager) {
         this.flow = flow;
@@ -363,6 +492,10 @@ class FlowRunner {
         this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
     }
 
+    /**
+     * Starts the execution of the flow. It finds the starting node (one with no
+     * incoming connections) and begins execution from there.
+     */
     start() {
         if (this.isRunning) return;
         const startNode = this.flow.steps.find(s => !this.flow.connections.some(c => c.to === s.id));
@@ -371,7 +504,10 @@ class FlowRunner {
         this.executeStep(startNode);
     }
 
-    /** @param {string} [message='Flow stopped.'] */
+    /**
+     * Stops the execution of the flow and resets its state.
+     * @param {string} [message='Flow stopped.'] - A message to log to the console.
+     */
     stop(message = 'Flow stopped.') {
         this.isRunning = false;
         this.currentStepId = null;
@@ -380,7 +516,10 @@ class FlowRunner {
         this.manager.activeFlowRunner = null;
     }
 
-    /** @param {FlowStep} step */
+    /**
+     * Executes a single step of the flow.
+     * @param {FlowStep} step - The step to execute.
+     */
     executeStep(step) {
         if (!this.isRunning) return;
         this.currentStepId = step.id;
@@ -397,19 +536,26 @@ class FlowRunner {
         }
     }
 
-    /** @param {string} stepId, @param {string} [outputName='default'] */
+    /**
+     * Finds the next step in the flow connected to a given step's output.
+     * @param {string} stepId - The ID of the step to start from.
+     * @param {string} [outputName='default'] - The name of the output connector.
+     * @returns {FlowStep | undefined} The next step, or `undefined` if not found.
+     */
     getNextStep(stepId, outputName = 'default') {
         const conn = this.flow.connections.find(c => c.from === stepId && (c.outputName || 'default') === outputName);
         return conn ? this.flow.steps.find(s => s.id === conn.to) : undefined;
     }
 
     /**
-     * @param {Message | null} message - The message that was just completed, or null if it's an idle check.
+     * Continues the flow execution after an asynchronous operation (like an AI response) has completed.
+     * This method is called by the `onResponseComplete` hook.
+     * @param {Message | null} message - The message that was just completed, or `null` if it's an idle check.
      * @param {Chat} chat - The active chat instance.
-     * @returns {boolean} - `true` if the flow proceeded and scheduled new work, `false` otherwise.
+     * @returns {boolean} `true` if the flow proceeded and scheduled new work, `false` otherwise.
      */
     continue(message, chat) {
-         // Only act when a flow is running, a step is selected, and the AI is idle
+         // Only act when a flow is running, a step is selected, and the AI is idle.
         if (!this.isRunning || !this.currentStepId || message !== null) return false;
 
         if (this.multiPromptInfo.active) {
@@ -419,13 +565,13 @@ class FlowRunner {
 
             if (info.counter < step.data.count) {
                 info.counter++;
-                // Add a new alternative with a pending message
+                // Add a new alternative with a pending message.
                 chat.log.addAlternative(info.baseMessage, { role: 'assistant', content: null, agent: step.data.agentId });
-                // Trigger the processing of the new pending message
+                // Trigger the processing of the new pending message.
                 flowsManager.app.responseProcessor.scheduleProcessing(flowsManager.app);
                 return true; // Flow is still active, handled work.
             } else {
-                // Multi-prompt is finished
+                // Multi-prompt is finished.
                 this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
                 const nextStep = this.getNextStep(step.id);
                 if (nextStep) {
@@ -455,10 +601,16 @@ class FlowRunner {
     }
 }
 
-
+/**
+ * The plugin object for the Flows feature.
+ * @type {object}
+ */
 const flowsPlugin = {
     name: 'Flows',
-    /** @param {App} app */
+    /**
+     * Initializes the `FlowsManager` and registers the 'flow-editor' view.
+     * @param {App} app - The main application instance.
+     */
     onAppInit(app) {
         flowsManager = new FlowsManager(app);
         app.flowsManager = flowsManager;
@@ -466,7 +618,11 @@ const flowsPlugin = {
         pluginManager.registerView('flow-editor', (id) => flowsManager.renderFlowEditor(id));
     },
 
-    /** @param {Tab[]} tabs */
+    /**
+     * Adds the 'Flows' tab to the sidebar.
+     * @param {Tab[]} tabs - The current array of tabs.
+     * @returns {Tab[]} The updated array of tabs.
+     */
     onTabsRegistered(tabs) {
         tabs.push({
             id: 'flows',
@@ -495,7 +651,7 @@ const flowsPlugin = {
                         const doDelete = () => {
                             flowsManager.deleteFlow(id);
                             flowsManager.renderFlowList();
-                            // If the deleted flow was active, show the default view
+                            // If the deleted flow was active, show the default view.
                             if (flowsManager.app.activeView.id === id) {
                                 flowsManager.app.setView('flow-editor', null);
                             }
@@ -511,7 +667,7 @@ const flowsPlugin = {
                     }
                 });
 
-                // If no flow is active when the tab is shown, set the view to the default
+                // If no flow is active when the tab is shown, set the view to the default.
                 if (!flowsManager.app.lastActiveIds['flow-editor']) {
                     flowsManager.app.setView('flow-editor', null);
                 }
@@ -520,7 +676,11 @@ const flowsPlugin = {
         return tabs;
     },
 
-    /** @param {View} view, @param {Chat} chat */
+    /**
+     * Initializes the flow editor UI when its view is rendered.
+     * @param {View} view - The view that was rendered.
+     * @param {Chat} chat - The active chat instance.
+     */
     onViewRendered(view, chat) {
         if (view.type === 'flow-editor') {
             const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
@@ -668,12 +828,12 @@ const flowsPlugin = {
     },
 
     /**
-     * This handler is called by the ResponseProcessor when the AI is idle.
-     * It checks if a flow is running and proceeds to the next step if the
-     * previous step was a prompt that just completed.
-     * @param {Message | null} message - The message that was just completed, or null if it's an idle check.
+     * This handler is called by the `ResponseProcessor` when the AI is idle.
+     * It checks if a flow is running and, if so, allows the `FlowRunner` to
+     * continue to the next step.
+     * @param {Message | null} message - The message that was just completed, or `null` if it's an idle check.
      * @param {Chat} chat - The active chat instance.
-     * @returns {boolean} - `true` if the flow proceeded and scheduled new work, `false` otherwise.
+     * @returns {boolean} `true` if the flow proceeded and scheduled new work, `false` otherwise.
      */
     onResponseComplete(message, chat) {
         if (!flowsManager.activeFlowRunner) {
@@ -683,4 +843,7 @@ const flowsPlugin = {
     }
 };
 
+/**
+ * Registers the Flows Plugin with the application's plugin manager.
+ */
 pluginManager.register(flowsPlugin);

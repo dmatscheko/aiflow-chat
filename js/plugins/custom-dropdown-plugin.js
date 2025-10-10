@@ -1,21 +1,26 @@
 /**
- * @fileoverview Plugin to automatically convert all native select elements
- * into custom, styleable dropdowns. This is to work around the poor styling
- * support for <select> on mobile devices.
+ * @fileoverview A self-contained plugin that automatically converts all native
+ * `<select>` elements into custom, styleable dropdowns. This is primarily to
+ * work around the poor styling support for `<select>` on mobile devices and to
+ * ensure a consistent look and feel across the application.
  *
- * This script is self-contained and runs automatically. It finds all <select>
- * elements on the page, hides them, and replaces them with a custom-styled
- * dropdown that syncs with the original element. It uses a MutationObserver
- * to also handle any <select> elements that are added to the page dynamically.
+ * This script is wrapped in an Immediately-Invoked Function Expression (IIFE)
+ * to avoid polluting the global scope. It runs automatically upon being loaded,
+ * finds all `<select>` elements on the page, and replaces them with custom-styled
+ * markup that synchronizes with the original, now-hidden, `<select>` element.
+ * A `MutationObserver` is used to also handle any `<select>` elements that are
+ * added to the page dynamically after the initial load.
  */
 
 'use strict';
 
 (function() {
   /**
-   * Converts a single <select> element into a custom dropdown.
+   * Converts a single native `<select>` element into a custom dropdown component.
+   * It hides the original select, builds a new structure with a button and a list,
+   * and sets up event listeners to keep the original select's value in sync.
    * If the element has already been converted, it does nothing.
-   * @param {HTMLSelectElement} select The original select element.
+   * @param {HTMLSelectElement} select The original select element to be converted.
    */
   function convertSelect(select) {
     if (select.classList.contains("original-select")) return; // already converted
@@ -130,7 +135,7 @@
     wrapper.appendChild(select); // Move original select into wrapper
   }
 
-  // Close dropdowns when clicking anywhere else on the page
+  // A global click listener to close any open dropdowns when the user clicks elsewhere.
   document.addEventListener("click", () => {
       document.querySelectorAll('.custom-dropdown .dropdown-list.show').forEach(list => {
         list.classList.remove("show");
@@ -139,7 +144,11 @@
 
 
   /**
-   * Initializes the conversion for existing and future select elements.
+   * Initializes the custom dropdown functionality. It performs an initial conversion
+   * of all `<select>` elements currently in the DOM and then sets up a
+   * `MutationObserver` to automatically convert any `<select>` elements that are
+   * dynamically added later. It also handles reconversion if an existing
+   * select's options are modified.
    */
   function init() {
     // Convert all selects on page

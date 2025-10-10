@@ -1,5 +1,8 @@
 /**
- * @fileoverview Definitions for all standard flow steps.
+ * @fileoverview This file contains the definitions for all standard, built-in
+ * steps that can be used in the "Flows" feature. It includes helper functions for
+ * processing chat history and a main registration function that defines the
+ * UI, data structure, and execution logic for each step type.
  * @version 1.0.0
  */
 
@@ -11,6 +14,10 @@
  * @typedef {import('../chat-data.js').Message} Message
  */
 
+/**
+ * A mapping from internal role names to display-friendly names.
+ * @const {Object.<string, string>}
+ */
 const roleMapping = {
     user: 'User',
     assistant: 'AI',
@@ -19,9 +26,12 @@ const roleMapping = {
 };
 
 /**
- * Finds the last message in a chat log that has more than one alternative answer.
+ * Finds the last message in the active chat history that has more than one
+ * alternative answer. This is used by steps like the 'Consolidator' to find
+ * the conversational branch point to work from.
  * @param {ChatLog} chatLog The chat log to search.
- * @returns {Message | null} The message with alternatives, or null if not found.
+ * @returns {Message | null} The message with alternatives, or `null` if not found.
+ * @private
  */
 function _findLastMessageWithAlternatives(chatLog) {
     if (!chatLog.rootAlternatives) {
@@ -44,10 +54,13 @@ function _findLastMessageWithAlternatives(chatLog) {
 }
 
 /**
- * Extracts the full text content from a conversational branch starting from a given message.
+ * Extracts the full text content from one or more conversational branches starting from a given message.
+ * It recursively traverses all paths from the `startMessage` to each leaf node.
  * @param {Message} startMessage The message to start the traversal from.
- * @param {boolean} onlyLast A flag to indicate if only the last message content of a branch should be returned.
- * @returns {string} The concatenated content of the branch.
+ * @param {boolean} onlyLast If `true`, only the content of the very last message in each branch is returned.
+ * If `false`, the entire conversational path is formatted and returned.
+ * @returns {string} The concatenated content of all found branches, separated by '---'.
+ * @private
  */
 function _extractContentFromBranch(startMessage, onlyLast) {
     const contents = [];
@@ -80,8 +93,12 @@ function _extractContentFromBranch(startMessage, onlyLast) {
 }
 
 /**
- * @param {ChatLog} chatLog
- * @returns {Message[][]}
+ * Groups messages from the active chat history into "turns". A turn consists of a
+ * non-AI message (user, system) followed by all subsequent AI messages (assistant, tool)
+ * until the next non-AI message.
+ * @param {ChatLog} chatLog The chat log to process.
+ * @returns {Message[][]} An array of turns, where each turn is an array of messages.
+ * @private
  */
 function _getTurns(chatLog) {
     const messages = chatLog.getActiveMessages();
@@ -90,13 +107,14 @@ function _getTurns(chatLog) {
     messages.forEach(msg => {
         const role = msg.value.role;
         if (role !== 'assistant' && role !== 'tool') {
+            // A non-AI message starts a new turn.
             if (currentTurn.length > 0) {
                 turns.push(currentTurn);
             }
-            turns.push([msg]);
+            turns.push([msg]); // The new turn starts with this message.
             currentTurn = [];
         } else {
-            // Add assistant/tool messages to the current turn
+            // Add assistant/tool messages to the current turn.
             currentTurn.push(msg);
         }
     });
@@ -107,8 +125,10 @@ function _getTurns(chatLog) {
 }
 
 /**
- * Registers all the standard flow step definitions with the FlowsManager.
- * @param {FlowsManager} flowsManager The instance of the FlowsManager.
+ * Registers all the standard flow step definitions with the `FlowsManager`.
+ * Each step is defined with its label, default data, rendering logic (`render`),
+ * UI update handler (`onUpdate`), and execution logic (`execute`).
+ * @param {FlowsManager} flowsManager The instance of the FlowsManager to which the steps will be added.
  */
 export function registerFlowStepDefinitions(flowsManager) {
     const getAgentsDropdown = (step, agentOptions) => `

@@ -1,6 +1,8 @@
 /**
- * @fileoverview Main application logic for the Core Chat.
- * This script ties together the data, API, and UI components.
+ * @fileoverview Main application logic for AIFlow Chat.
+ * This script serves as the central entry point for the application. It initializes all
+ * core components, loads plugins, and orchestrates the overall application lifecycle,
+ * including UI rendering, event handling, and state management.
  */
 
 'use strict';
@@ -10,7 +12,9 @@ import { pluginManager } from './plugin-manager.js';
 import { SettingsManager } from './settings-manager.js';
 import { responseProcessor } from './response-processor.js';
 
-// Load plugins
+// --- Plugin Loading ---
+// The application's functionality is extended through plugins. Each imported plugin
+// file registers its hooks, views, and components with the PluginManager.
 import './plugins/chats-plugin.js';
 import './plugins/example-plugin.js';
 import './plugins/agents-plugin.js';
@@ -22,6 +26,7 @@ import './plugins/title-bar-plugin.js';
 import './plugins/mobile-style-plugin.js';
 import './plugins/custom-dropdown-plugin.js';
 import './plugins/ui-controls-plugin.js';
+// --- End Plugin Loading ---
 
 /**
  * @typedef {import('./chat-data.js').Message} Message
@@ -29,88 +34,133 @@ import './plugins/ui-controls-plugin.js';
  */
 
 /**
+ * Defines the structure for a declarative setting used by `createSettingsUI`.
  * @typedef {object} Setting
- * @property {string} id - The unique identifier for the setting.
- * @property {string} label - The display label for the setting.
- * @property {string} type - The input type (e.g., 'text', 'select').
+ * @property {string} id - The unique identifier for the setting (used as a key in the values object).
+ * @property {string} label - The display label for the setting's input field.
+ * @property {string} type - The input type (e.g., 'text', 'select', 'checkbox', 'fieldset').
  * @property {any} [default] - The default value for the setting.
- * @property {any[]} [options] - Options for 'select' type settings.
- * @property {string} [dependsOn]
- * @property {any} [dependsOnValue]
- * @property {Setting[]} [children]
+ * @property {Array<{label: string, value: any}>|string[]} [options] - Options for 'select', 'radio-list', or 'checkbox-list' types.
+ * @property {string} [dependsOn] - The ID of another setting that this setting's visibility depends on.
+ * @property {any} [dependsOnValue] - The value the `dependsOn` setting must have for this setting to be visible.
+ * @property {Setting[]} [children] - For 'fieldset' types, an array of nested setting definitions.
  */
 
 /**
+ * Defines the structure for a tab in the sidebar panel.
  * @typedef {object} Tab
- * @property {string} id - The unique identifier for the tab.
- * @property {string} label - The display label for the tab.
- * @property {string} [viewType] - The associated view type to restore.
- * @property {() => void} onActivate - A function to call when the tab is activated.
+ * @property {string} id - The unique identifier for the tab (e.g., 'chats', 'agents').
+ * @property {string} label - The display label for the tab button.
+ * @property {string} [viewType] - The view type associated with this tab, used for restoring the last active view.
+ * @property {() => void} onActivate - A function to call when the tab is clicked and becomes active.
  */
 
 /**
+ * Represents the currently active view in the main application panel.
  * @typedef {object} View
- * @property {string} type - The type of the view (e.g., 'chat', 'editor').
- * @property {string | null} id - The unique identifier for the content of the view (e.g., a chat ID).
+ * @property {string} type - The type of the view (e.g., 'chat', 'agent-editor'). This corresponds to a registered view renderer.
+ * @property {string | null} id - The unique identifier for the specific content being displayed (e.g., a chat ID or agent ID).
  */
 
 /**
  * The main application class.
- * Orchestrates all components of the chat application.
+ * This class orchestrates all components of the chat application, including
+ * services, managers, and UI elements. It follows a plugin-based architecture
+ * where core functionality is extended by various plugins.
  * @class
  */
 class App {
+    /**
+     * Initializes the application, sets up core services, and kicks off the
+     * asynchronous initialization process.
+     */
     constructor() {
-        /** @type {ApiService} */
+        /**
+         * Instance of the ApiService for making backend requests.
+         * @type {ApiService}
+         */
         this.apiService = new ApiService();
-        /** @type {View} */
+        /**
+         * The currently active view in the main panel.
+         * @type {View}
+         */
         this.activeView = { type: 'chat', id: null };
-        /** @type {AbortController | null} */
+        /**
+         * Controller for aborting in-progress fetch requests (e.g., streaming chat).
+         * @type {AbortController | null}
+         */
         this.abortController = null;
-        /** @type {Object.<string, string>} */
+        /**
+         * A map to store the last active ID for each view type, to restore state.
+         * @type {Object.<string, string>}
+         */
         this.lastActiveIds = {};
-        /** @type {Object.<string, HTMLElement>} */
+        /**
+         * A cache for frequently accessed DOM elements.
+         * @type {Object.<string, HTMLElement>}
+         */
         this.dom = {};
-        /** @type {Tab[]} */
+        /**
+         * An array of tab definitions, populated by plugins.
+         * @type {Tab[]}
+         */
         this.tabs = [];
-        /** @type {SettingsManager} */
-        this.settingsManager = null;
-        /** @type {import('./response-processor.js').ResponseProcessor} */
+        /**
+         * The application's settings manager.
+         * @type {SettingsManager}
+         */
+        this.settingsManager = new SettingsManager(this);
+        /**
+         * The application's response processor for handling AI response generation.
+         * @type {import('./response-processor.js').ResponseProcessor}
+         */
         this.responseProcessor = responseProcessor;
 
         this.initDOM();
 
         // --- Managers will be attached by plugins ---
+        // These properties are initialized to null and are expected to be
+        // populated by their respective plugins during the `onAppInit` hook.
         /** @type {import('./plugins/chats-plugin.js').ChatManager | null} */
         this.chatManager = null;
         /** @type {import('./plugins/agents-plugin.js').AgentManager | null} */
         this.agentManager = null;
         // --- End of Managers ---
 
-
-        // --- Settings Management ---
-        this.settingsManager = new SettingsManager(this);
-        // --- End Settings Management ---
-
-        // Initial async setup
+        // The constructor kicks off an async IIFE (Immediately Invoked Function Expression)
+        // to handle the asynchronous parts of initialization without making the
+        // constructor itself async.
         (async () => {
+            // Allow plugins to initialize and attach managers to the app instance.
             await pluginManager.triggerAsync('onAppInit', this);
+
             this.defineTabs();
             this.renderTabs();
             this._loadLastActiveIds();
+
+            // Initialize managers that require post-plugin setup.
             if (this.chatManager) {
                 this.chatManager.init();
             }
+
             await this.renderMainView();
             this.initEventListeners();
         })();
     }
 
+    /**
+     * Populates the `this.tabs` array by triggering the 'onTabsRegistered' plugin hook.
+     * @private
+     */
     defineTabs() {
         const coreTabs = [];
         this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
     }
 
+    /**
+     * Caches references to key DOM elements.
+     * @private
+     */
     initDOM() {
         this.dom = {
             mainPanel: document.getElementById('main-panel'),
@@ -119,6 +169,10 @@ class App {
         };
     }
 
+    /**
+     * Renders the tab buttons and their corresponding panes in the sidebar.
+     * @private
+     */
     renderTabs() {
         this.dom.panelTabs.innerHTML = '';
         this.dom.panelContent.innerHTML = '';
@@ -141,6 +195,12 @@ class App {
         }
     }
 
+    /**
+     * Sets the active view for the main panel, saves the state, and triggers a re-render.
+     * @param {string} type - The type of view to set (e.g., 'chat').
+     * @param {string} id - The ID of the content for the view (e.g., a chat ID).
+     * @async
+     */
     async setView(type, id) {
         this.activeView = { type, id };
         this.lastActiveIds[type] = id;
@@ -154,6 +214,11 @@ class App {
         await this.renderMainView();
     }
 
+    /**
+     * Renders the main content panel using the renderer function registered for the active view type.
+     * It then triggers the `onViewRendered` hook to allow plugins to modify the rendered view.
+     * @async
+     */
     async renderMainView() {
         const { type, id } = this.activeView;
         const renderer = pluginManager.getViewRenderer(type);
@@ -167,8 +232,11 @@ class App {
     }
 
     /**
-     * @param {string} tabId
+     * Handles the logic for switching between sidebar tabs, activating the correct
+     * tab and pane, and calling the tab's `onActivate` function.
+     * @param {string} tabId - The ID of the tab to show.
      * @private
+     * @async
      */
     async showTab(tabId) {
         if (!tabId) return;
@@ -192,7 +260,12 @@ class App {
         }
     }
 
+    /**
+     * Initializes global event listeners for the application.
+     * @private
+     */
     initEventListeners() {
+        // Listener for sidebar tab clicks.
         this.dom.panelTabs.addEventListener('click', async (e) => {
             const tabId = e.target.dataset.tabId;
             if (tabId) {
@@ -200,6 +273,7 @@ class App {
             }
         });
 
+        // Global keydown listener for the Escape key to abort chat generation.
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 // Only act if a chat is the active view.
@@ -207,8 +281,7 @@ class App {
                     return;
                 }
 
-                // If an edit-in-place element is active, don't interfere.
-                // The local Escape handler in makeEditable/makeSingleLineEditable will handle it.
+                // If an in-place editor is active, let its local handler manage the Escape key.
                 if (document.querySelector('.edit-in-place, .edit-in-place-input')) {
                     return;
                 }
@@ -221,7 +294,10 @@ class App {
         });
     }
 
-    /** @private */
+    /**
+     * Loads the last active ID for each view type from local storage.
+     * @private
+     */
     _loadLastActiveIds() {
         try {
             const ids = localStorage.getItem('core_last_active_ids');
@@ -232,12 +308,16 @@ class App {
         }
     }
 
-    /** @private */
+    /**
+     * Saves the map of last active IDs to local storage.
+     * @private
+     */
     _saveLastActiveIds() {
         localStorage.setItem('core_last_active_ids', JSON.stringify(this.lastActiveIds));
     }
 }
 
+// Instantiate the App class once the DOM is fully loaded.
 document.addEventListener('DOMContentLoaded', () => {
     new App();
 });

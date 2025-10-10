@@ -1,5 +1,6 @@
 /**
- * @fileoverview Plugin for core chat functionality.
+ * @fileoverview Plugin for core chat functionality, including chat management,
+ * UI rendering, and message handling.
  */
 
 'use strict';
@@ -13,43 +14,74 @@ import { responseProcessor } from '../response-processor.js';
  * @typedef {import('../main.js').App} App
  * @typedef {import('../main.js').View} View
  * @typedef {import('../chat-data.js').Message} Message
- * @typedef {object} Chat
- * @property {string} id - The unique identifier for the chat.
- * @property {string} title - The title of the chat.
- * @property {ChatLog} log - The ChatLog instance for the chat.
- * @property {string} draftMessage - The current draft message.
- * @property {string | null} agent - The ID of the active agent.
- * @property {string | null} flow - The ID of the active flow.
  */
 
+/**
+ * Represents a single chat session.
+ * @typedef {object} Chat
+ * @property {string} id - The unique identifier for the chat.
+ * @property {string} title - The display title of the chat.
+ * @property {ChatLog} log - The `ChatLog` instance containing the message history for the chat.
+ * @property {string} draftMessage - The current text in the message input box for this chat.
+ * @property {string | null} agent - The ID of the agent currently active for this chat.
+ * @property {string | null} flow - The ID of the flow currently active for this chat.
+ */
+
+/**
+ * The singleton instance of the main App class.
+ * @type {App | null}
+ */
 let appInstance = null;
 
 /**
- * Manages the lifecycle and storage of chats.
+ * Manages the lifecycle, storage, and UI of all chat sessions.
  * @class
  */
 class ChatManager {
     /**
-     * @param {App} app
+     * Initializes the ChatManager.
+     * @param {App} app - The main application instance.
      */
     constructor(app) {
-        /** @type {App} */
+        /**
+         * The main application instance.
+         * @type {App}
+         */
         this.app = app;
-        /** @type {Chat[]} */
+        /**
+         * An array holding all chat objects.
+         * @type {Chat[]}
+         */
         this.chats = [];
-        /** @type {string | null} */
+        /**
+         * The ID of the currently active chat.
+         * @type {string | null}
+         */
         this.activeChatId = null;
-        /** @type {ChatUI | null} */
+        /**
+         * The UI instance for the currently active chat.
+         * @type {ChatUI | null}
+         */
         this.chatUI = null;
 
+        /**
+         * A debounced version of `saveChats` to prevent excessive writes to local storage.
+         * @type {() => void}
+         */
         this.debouncedSave = debounce(() => this.saveChats(), 500);
     }
 
+    /**
+     * Initializes the chat manager by loading chats from storage and setting the active view.
+     */
     init() {
         this.loadChats();
         this.app.activeView.id = this.activeChatId;
     }
 
+    /**
+     * Loads all chats from local storage. If no chats are found, creates a new one.
+     */
     loadChats() {
         const savedChats = JSON.parse(localStorage.getItem('core_chat_logs'));
         if (savedChats && savedChats.length > 0) {
@@ -72,6 +104,9 @@ class ChatManager {
         }
     }
 
+    /**
+     * Saves all current chat data to local storage.
+     */
     saveChats() {
         const chatsToSave = this.chats.map(chat => ({
             id: chat.id,
@@ -85,6 +120,9 @@ class ChatManager {
         localStorage.setItem('core_active_chat_id', this.activeChatId);
     }
 
+    /**
+     * Creates a new, empty chat, adds it to the list, and makes it the active chat.
+     */
     createNewChat() {
         const existingIds = new Set(this.chats.map(c => c.id));
         const newChat = {
@@ -102,6 +140,10 @@ class ChatManager {
         this.saveChats();
     }
 
+    /**
+     * Creates a new chat from imported data, ensuring its ID is unique.
+     * @param {object} chatData - The partial chat data object to import.
+     */
     createChatFromData(chatData) {
         const existingIds = new Set(this.chats.map(c => c.id));
         const finalId = ensureUniqueId(chatData.id, 'chat', existingIds);
@@ -121,6 +163,10 @@ class ChatManager {
         this.saveChats();
     }
 
+    /**
+     * Deletes a chat by its ID. If the deleted chat was active, it activates another chat.
+     * @param {string} chatId - The ID of the chat to delete.
+     */
     deleteChat(chatId) {
         this.chats = this.chats.filter(c => c.id !== chatId);
         if (this.activeChatId === chatId) {
@@ -136,6 +182,9 @@ class ChatManager {
         this.saveChats();
     }
 
+    /**
+     * Renders the list of chats in the sidebar.
+     */
     renderChatList() {
         const chatListEl = document.getElementById('chat-list');
         if (!chatListEl) return;
@@ -150,6 +199,9 @@ class ChatManager {
         this.updateActiveChatInList();
     }
 
+    /**
+     * Updates the chat list UI to highlight the currently active chat.
+     */
     updateActiveChatInList() {
         const chatListEl = document.getElementById('chat-list');
         if (!chatListEl) return;
@@ -158,10 +210,18 @@ class ChatManager {
         });
     }
 
+    /**
+     * Retrieves the currently active chat object.
+     * @returns {Chat | undefined} The active chat object, or undefined if not found.
+     */
     getActiveChat() {
         return this.chats.find(c => c.id === this.activeChatId);
     }
 
+    /**
+     * Initializes the chat view, including the message display area and input form listeners.
+     * @param {string} chatId - The ID of the chat to initialize the view for.
+     */
     initChatView(chatId) {
         const chat = this.chats.find(c => c.id === chatId);
         if (!chat) return;
@@ -201,6 +261,15 @@ class ChatManager {
         });
     }
 
+    /**
+     * Handles the submission of the message form. It adds the user's message to the
+     * log (unless it's a continuation), then queues a pending assistant message
+     * to trigger the response generation process.
+     * @param {object} [options={}] - Options for the submission.
+     * @param {boolean} [options.isContinuation=false] - If true, a user message is not added, and the assistant just continues.
+     * @param {string|null} [options.agentId=null] - The ID of an agent to use for this specific turn.
+     * @async
+     */
     async handleFormSubmit(options = {}) {
         const { isContinuation = false, agentId = null } = options;
         const activeChat = this.getActiveChat();
@@ -220,6 +289,9 @@ class ChatManager {
         responseProcessor.scheduleProcessing(this.app);
     }
 
+    /**
+     * Stops any ongoing chat response generation or flow execution.
+     */
     stopChatFlow() {
         if (this.app.flowsManager && this.app.flowsManager.activeFlowRunner) {
             this.app.flowsManager.activeFlowRunner.stop('Flow stopped by user.');
@@ -232,15 +304,16 @@ class ChatManager {
 
 
 /**
- * Manages the rendering of a ChatLog instance into a designated HTML element.
- * It subscribes to a ChatLog and automatically re-renders the UI when the
- * log changes.
+ * Manages the rendering of a `ChatLog` instance into a designated HTML element.
+ * It subscribes to a `ChatLog` and automatically re-renders the UI whenever the
+ * log changes, ensuring the view is always synchronized with the data model.
  * @class
  */
 class ChatUI {
     /**
+     * Creates an instance of ChatUI.
      * @param {HTMLElement} container - The DOM element to render the chat messages into.
-     * @param {import('./agents-plugin.js').AgentManager} agentManager - The agent manager instance for displaying agent names.
+     * @param {import('./agents-plugin.js').AgentManager} agentManager - The agent manager instance for resolving agent names.
      * @throws {Error} If the container element is not provided.
      */
     constructor(container, agentManager) {
@@ -250,20 +323,23 @@ class ChatUI {
         /**
          * The DOM element where chat messages are rendered.
          * @type {HTMLElement}
+         * @private
          */
         this.container = container;
         /**
-         * The agent manager instance.
+         * The agent manager instance, used to look up agent details for display.
          * @type {import('./agents-plugin.js').AgentManager}
+         * @private
          */
         this.agentManager = agentManager;
         /**
          * The ChatLog instance this UI is currently displaying.
          * @type {ChatLog | null}
+         * @private
          */
         this.chatLog = null;
         /**
-         * A pre-bound reference to the update method for event listeners.
+         * A pre-bound reference to the update method, used for subscribing and unsubscribing.
          * @type {() => void}
          * @private
          */
@@ -271,9 +347,9 @@ class ChatUI {
     }
 
     /**
-     * Connects a ChatLog instance to this UI component.
-     * The UI will automatically update when the ChatLog changes.
-     * @param {ChatLog} chatLog - The chat log to display.
+     * Connects a `ChatLog` instance to this UI component. The UI will now subscribe
+     * to the log and automatically update whenever the log changes.
+     * @param {ChatLog} chatLog - The chat log to display and subscribe to.
      */
     setChatLog(chatLog) {
         if (this.chatLog) {
@@ -285,8 +361,8 @@ class ChatUI {
     }
 
     /**
-     * Renders the chat log content into the container.
-     * This method is typically called automatically when the connected ChatLog is updated.
+     * Renders the entire chat log content into the container element.
+     * This method is typically called automatically when the connected `ChatLog` is updated.
      */
     update() {
         if (!this.chatLog) {
@@ -313,7 +389,8 @@ class ChatUI {
     }
 
     /**
-     * Creates an HTML element for a single message, including its depth visualization.
+     * Creates and formats an HTML element for a single message, including its
+     * role, content, and depth visualization for nested agent calls.
      * @param {Message} message - The message object to format.
      * @returns {HTMLElement} The formatted message element, wrapped with depth lines if necessary.
      * @private
@@ -324,14 +401,14 @@ class ChatUI {
 
         const depth = message.value.role !== 'user' ? message.depth : 0;
 
-        // Add vertical lines for depth visualization
+        // Add vertical lines for depth visualization.
         if (depth > 0) {
             const linesContainer = document.createElement('div');
             linesContainer.className = 'depth-lines';
             for (let i = 0; i < depth; i++) {
                 const line = document.createElement('div');
                 line.className = 'depth-line';
-                // Offset each line so they appear as parallel lines
+                // Offset each line so they appear as parallel lines.
                 line.style.left = `${i * 20 + 10}px`;
                 linesContainer.appendChild(line);
             }
@@ -342,7 +419,7 @@ class ChatUI {
         el.classList.add('message', `role-${message.value.role}`);
 
         if (depth > 0) {
-            // Indent the message bubble to make space for the depth lines
+            // Indent the message bubble to make space for the depth lines.
             el.style.marginLeft = `${depth * 20}px`;
         }
 
@@ -356,6 +433,7 @@ class ChatUI {
         roleEl.textContent = message.value.role;
         titleTextEl.appendChild(roleEl);
 
+        // Display agent and model details for assistant/tool messages.
         if (message.value.role === 'assistant' || message.value.role === 'tool') {
             const details = [];
         
@@ -380,13 +458,13 @@ class ChatUI {
         contentEl.className = 'message-content';
         contentEl.textContent = message.value.content || '';
 
-        // Allow plugins to modify the content element (e.g., for rich formatting).
+        // Allow plugins to modify the content element (e.g., for Markdown formatting).
         pluginManager.trigger('onFormatMessageContent', contentEl, message);
 
         el.appendChild(titleRow);
         el.appendChild(contentEl);
 
-        // Hook for adding controls after the message element is fully constructed.
+        // Hook for adding controls (e.g., edit/delete buttons) after the message is rendered.
         pluginManager.trigger('onMessageRendered', el, message);
 
         wrapper.appendChild(el);
@@ -394,18 +472,18 @@ class ChatUI {
     }
 
     /**
-     * Checks if the container is scrolled to the bottom.
-     * @returns {boolean}
+     * Checks if the chat container is scrolled to the bottom.
+     * @returns {boolean} `true` if the container is scrolled to the bottom, otherwise `false`.
      * @private
      */
     isScrolledToBottom() {
         const { scrollHeight, clientHeight, scrollTop } = this.container;
-        // A little buffer of 5px
+        // A small buffer of 5px helps account for rounding errors.
         return scrollHeight - clientHeight <= scrollTop + 5;
     }
 
     /**
-     * Scrolls the container to the bottom.
+     * Scrolls the chat container to the bottom.
      * @private
      */
     scrollToBottom() {
@@ -413,12 +491,16 @@ class ChatUI {
     }
 }
 
-
+/**
+ * The plugin object for core chat functionality.
+ * @type {object}
+ */
 const chatPlugin = {
     name: 'Chat',
 
     /**
-     * @param {App} app
+     * Initializes the chat manager and registers the 'chat' view.
+     * @param {App} app - The main application instance.
      */
     onAppInit(app) {
         appInstance = app;
@@ -435,8 +517,9 @@ const chatPlugin = {
     },
 
     /**
-     * @param {import('../main.js').Tab[]} tabs
-     * @returns {import('../main.js').Tab[]}
+     * Adds the 'Chats' tab to the sidebar.
+     * @param {import('../main.js').Tab[]} tabs - The current array of tabs.
+     * @returns {import('../main.js').Tab[]} The updated array of tabs.
      */
     onTabsRegistered(tabs) {
         const chatManager = appInstance.chatManager;
@@ -470,6 +553,10 @@ const chatPlugin = {
         return newTabs;
     },
 
+    /**
+     * Initializes the chat view when it's rendered.
+     * @param {View} view - The view that was rendered.
+     */
     onViewRendered(view, chat) {
         if (view.type === 'chat') {
             appInstance.chatManager.initChatView(view.id);
@@ -477,4 +564,7 @@ const chatPlugin = {
     }
 };
 
+/**
+ * Registers the Chat Plugin with the application's plugin manager.
+ */
 pluginManager.register(chatPlugin);

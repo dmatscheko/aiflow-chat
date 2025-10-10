@@ -1,82 +1,103 @@
 /**
- * @fileoverview Defines the data structures for the chat history.
- * This file is self-contained and has no external dependencies.
+ * @fileoverview Defines the core data structures for managing chat history.
+ * This file provides the classes (`Message`, `Alternatives`, `ChatLog`) that
+ * model the chat as a tree structure, allowing for conversational branching,
+ * serialization, and complex history management required for features like
+ * agent calls and alternative responses. It is self-contained and has no
+ * external dependencies.
  */
 
 'use strict';
 
 /**
+ * Defines the possible roles for a message author in the chat.
  * @typedef {'user' | 'assistant' | 'system' | 'tool'} MessageRole
  */
 
 /**
+ * Represents the core content and properties of a message, designed to be
+ * compatible with AI API standards (e.g., OpenAI API).
  * @typedef {object} MessageValue
  * @property {MessageRole} role - The role of the message author.
- * @property {string | null} content - The content of the message.
- * @property {string} [model] - The model used for the message.
- * @property {object} [metadata] - Optional metadata, e.g., for sources.
+ * @property {string | null} content - The textual content of the message.
+ * @property {string} [model] - The model used to generate this message (if applicable).
+ * @property {object} [metadata] - Optional metadata, e.g., for tool call sources.
  */
 
 /**
+ * A JSON-serializable representation of a `Message` object.
  * @typedef {object} SerializedMessage
- * @property {MessageValue} value - The value of the message.
- * @property {number} depth - The stack depth of the message.
- * @property {string} [agent] - The ID of the agent used for this message.
- * @property {boolean} [is_full_context_call] - For agent calls, whether full context was provided.
- * @property {SerializedAlternatives | null} answerAlternatives - The serialized answer alternatives.
+ * @property {MessageValue} value - The core value of the message.
+ * @property {number} depth - The stack depth of the message, used for nesting agent calls.
+ * @property {string} [agent] - The ID of the agent that generated this message.
+ * @property {boolean} [is_full_context_call] - For agent calls, indicates if the full conversation history was provided.
+ * @property {SerializedAlternatives | null} answerAlternatives - The serialized representation of the message's alternative answers.
  */
 
 /**
+ * A JSON-serializable representation of an `Alternatives` object.
  * @typedef {object} SerializedAlternatives
- * @property {SerializedMessage[]} messages - The serialized messages.
- * @property {number} activeMessageIndex - The index of the active message.
+ * @property {SerializedMessage[]} messages - The array of serialized messages in this alternative set.
+ * @property {number} activeMessageIndex - The index of the currently active message within the `messages` array.
  */
 
 /**
- * Represents a single message in the chat log tree.
- * Each message is a node that contains its value and can have a child set of
- * alternative answers, forming a tree structure.
+ * Represents a single message node in the chat log tree.
+ * Each message is a node that contains its own value (`MessageValue`) and can
+ * have a child set of alternative answers (`Alternatives`), forming a tree
+ * structure that allows for branching conversations.
  * @class
  */
 class Message {
     /**
-     * @param {MessageValue} value - The message value, e.g., `{ role: 'user', content: 'Hello' }`.
-     * @param {number} depth - The stack depth of the message.
-     * @param {string} [agent]
-     * @param {boolean} [is_full_context_call]
+     * Creates an instance of a Message.
+     * @param {MessageValue} value - The core message value, e.g., `{ role: 'user', content: 'Hello' }`.
+     * @param {number} [depth=0] - The stack depth of the message, for indenting nested agent calls.
+     * @param {string|null} [agent=null] - The ID of the agent responsible for this message.
+     * @param {boolean|undefined} [is_full_context_call=undefined] - For agent calls, indicates if full context was provided.
      */
     constructor(value, depth = 0, agent = null, is_full_context_call = undefined) {
-        /** @type {MessageValue} */
+        /**
+         * The core properties of the message (role, content, etc.).
+         * @type {MessageValue}
+         */
         this.value = value;
         /**
-         * The ID of the agent used for this message.
+         * The ID of the agent that generated this message, if any.
          * @type {string|null}
          */
         this.agent = agent;
-        /** @type {boolean|undefined} */
+        /**
+         * For agent-generated messages, this flag indicates whether the agent was called
+         * with the full conversation history (`true`) or a partial history (`false`).
+         * @type {boolean|undefined}
+         */
         this.is_full_context_call = is_full_context_call;
         /**
-         * The stack depth of the message.
+         * The stack depth of the message, used for visual indentation of nested agent calls.
          * @type {number}
          */
         this.depth = depth;
         /**
-         * The set of alternative messages that are answers to this message.
+         * A container for alternative messages that are direct responses to this message.
+         * This allows for branching the conversation. `null` if there are no alternatives.
          * @type {Alternatives | null}
          */
         this.answerAlternatives = null;
     }
 
     /**
-     * Gets the currently active answer message from the alternatives.
-     * @returns {Message | null} The active answer message or null if no alternatives exist.
+     * Gets the currently active answer message from this message's alternatives.
+     * @returns {Message | null} The active `Message` instance from the `answerAlternatives`,
+     * or `null` if no alternatives exist or none are active.
      */
     getActiveAnswer() {
         return this.answerAlternatives ? this.answerAlternatives.getActiveMessage() : null;
     }
 
     /**
-     * Serializes the message to a JSON-compatible object.
+     * Serializes the message and its entire subtree of alternatives to a JSON-compatible object.
+     * This method is automatically called by `JSON.stringify`.
      * @returns {SerializedMessage} A serializable representation of the message.
      */
     toJSON() {
@@ -92,14 +113,24 @@ class Message {
 
 /**
  * Manages a set of alternative messages at a specific point in the conversation.
- * This allows for branching and exploring different conversational paths.
+ * This class holds an array of `Message` objects and tracks which one is currently
+ * active, allowing the user to cycle through different responses or branches.
  * @class
  */
 class Alternatives {
+    /**
+     * Creates an instance of Alternatives.
+     */
     constructor() {
-        /** @type {Message[]} */
+        /**
+         * The list of alternative messages.
+         * @type {Message[]}
+         */
         this.messages = [];
-        /** @type {number} */
+        /**
+         * The index of the currently active message in the `messages` array.
+         * @type {number}
+         */
         this.activeMessageIndex = -1;
     }
 
@@ -107,9 +138,9 @@ class Alternatives {
      * Adds a new message to the list of alternatives and sets it as the active one.
      * @param {MessageValue} value - The value for the new message.
      * @param {number} depth - The stack depth of the message.
-     * @param {string} [agent]
-     * @param {boolean} [is_full_context_call]
-     * @returns {Message} The newly created message instance.
+     * @param {string|null} [agent] - The ID of the agent responsible for the message.
+     * @param {boolean|undefined} [is_full_context_call] - For agent calls, indicates if full context was provided.
+     * @returns {Message} The newly created and added `Message` instance.
      */
     addMessage(value, depth, agent, is_full_context_call) {
         const newMessage = new Message(value, depth, agent, is_full_context_call);
@@ -119,7 +150,7 @@ class Alternatives {
 
     /**
      * Gets the currently active message in this set of alternatives.
-     * @returns {Message | null} The active message, or null if there are no messages.
+     * @returns {Message | null} The active `Message` instance, or `null` if the list is empty.
      */
     getActiveMessage() {
         if (this.activeMessageIndex === -1 || this.messages.length === 0) {
@@ -129,7 +160,8 @@ class Alternatives {
     }
 
     /**
-     * Serializes the alternatives to a JSON-compatible object.
+     * Serializes the Alternatives object and its messages to a JSON-compatible object.
+     * This method is automatically called by `JSON.stringify`.
      * @returns {SerializedAlternatives} A serializable representation of the alternatives.
      */
     toJSON() {
@@ -142,28 +174,39 @@ class Alternatives {
 
 /**
  * Manages the entire chat history as a tree of messages and their alternatives.
+ * This class is the primary data model for a single chat conversation. It uses a
+ * publish-subscribe pattern to notify listeners (like the UI) of any changes.
  * @class
  */
 export class ChatLog {
+    /**
+     * Creates an instance of ChatLog.
+     */
     constructor() {
         /**
-         * The root of the message tree.
+         * The root of the message tree. It's an `Alternatives` object to allow
+         * even the very first message to have alternatives.
          * @type {Alternatives | null}
          */
         this.rootAlternatives = null;
         /**
-         * A list of callback functions to be called on any change.
+         * A list of callback functions to be invoked when the chat log changes.
          * @type {Array<() => void>}
+         * @private
          */
         this.subscribers = [];
     }
 
     /**
-     * Adds a message to the active conversational path.
-     * If it's the first message, it creates the root. Otherwise, it adds it as an
-     * answer to the last message in the active path.
+     * Adds a message to the currently active conversational path.
+     * If it's the first message, it creates the root `Alternatives` set. Otherwise,
+     * it adds the message as an answer to the last message in the active path.
+     * The `depth` of the message can be explicitly set or is calculated based on the
+     * previous message's depth (with user messages resetting depth to 0).
      * @param {MessageValue} value - The value of the message to add.
-     * @returns {Message} The newly added message instance.
+     * @param {object} [options] - Additional options for the message.
+     * @param {number|null} [options.depth=null] - The explicit depth for the message. If null, it's calculated automatically.
+     * @returns {Message} The newly created and added `Message` instance.
      */
     addMessage(value, { depth = null } = {}) {
         const { agent, is_full_context_call, ...messageValue } = value;
@@ -196,8 +239,8 @@ export class ChatLog {
     }
 
     /**
-     * Gets the last message in the active conversational path.
-     * @returns {Message | null}
+     * Traverses the active conversational path to find the very last message.
+     * @returns {Message | null} The last `Message` in the active path, or `null` if the log is empty.
      */
     getLastMessage() {
         if (!this.rootAlternatives) {
@@ -211,8 +254,9 @@ export class ChatLog {
     }
 
     /**
-     * Returns an array of all message values in the active path.
-     * @returns {MessageValue[]}
+     * Returns an array of all message values (`MessageValue`) in the active conversational path,
+     * from the root to the last message.
+     * @returns {MessageValue[]} An array of the message values.
      */
     getActiveMessageValues() {
         const result = [];
@@ -226,6 +270,12 @@ export class ChatLog {
         }
         return result;
     }
+
+    /**
+     * Returns an array of all message instances (`Message`) in the active conversational path,
+     * from the root to the last message.
+     * @returns {Message[]} An array of the `Message` instances.
+     */
     getActiveMessages() {
         const result = [];
         if (!this.rootAlternatives) {
@@ -240,9 +290,10 @@ export class ChatLog {
     }
 
     /**
-     * Finds the first pending message in the log.
-     * A pending message is one with a role of 'assistant' or 'tool' and content of null.
-     * @returns {Message | null}
+     * Finds the first pending message anywhere in the entire message tree.
+     * A pending message is defined as one with a role of 'assistant' or 'tool' and `null` content.
+     * It performs a depth-first search through all branches.
+     * @returns {Message | null} The first pending `Message` found, or `null` if there are none.
      */
     findNextPendingMessage() {
         if (!this.rootAlternatives) {
@@ -271,10 +322,15 @@ export class ChatLog {
     }
 
     /**
-     * Gets the history of messages for an agent call, respecting the context rules.
-     * @param {Message} callingMessage - The message that initiates the agent call.
-     * @param {boolean} fullContext - Whether to provide the full context.
-     * @returns {MessageValue[]} An array of message values for the API call.
+     * Gets the appropriate message history for an agent call, respecting context rules.
+     * If `fullContext` is `false`, it returns an empty history.
+     * If `fullContext` is `true`, it traverses the history backwards from the `callingMessage`
+     * to find the correct context window, stopping at the boundary of a previous partial-context agent call.
+     * This ensures that a sub-agent does not see the history of its parent's parent if the parent
+     * was called with limited context.
+     * @param {Message} callingMessage - The message that initiates the agent call (the message that will contain the agent's response).
+     * @param {boolean} fullContext - Whether to provide the full conversation history to the agent.
+     * @returns {MessageValue[]} An array of message values to be used as the context for the API call.
      */
     getHistoryForAgentCall(callingMessage, fullContext) {
         if (!fullContext) {
@@ -312,9 +368,10 @@ export class ChatLog {
     }
 
     /**
-     * Gets the history of message instances leading up to a specific message.
-     * @param {Message} targetMessage - The message to get the history for.
-     * @returns {Message[] | null} An array of message instances, or null if the message isn't found.
+     * Gets the history of `Message` instances leading up to a specific message in the tree.
+     * It performs a depth-first search to find the path to the target message.
+     * @param {Message} targetMessage - The message whose preceding history is required.
+     * @returns {Message[] | null} An array of `Message` instances forming the path to the `targetMessage` (exclusive), or `null` if the message isn't found.
      */
     getMessagesBefore(targetMessage) {
         if (!this.rootAlternatives) {
@@ -342,9 +399,9 @@ export class ChatLog {
     }
 
     /**
-     * Gets the history of message values leading up to a specific message.
+     * Gets the history of message values (`MessageValue`) leading up to a specific message.
      * @param {Message} targetMessage - The message to get the history for.
-     * @returns {MessageValue[] | null} An array of message values, or null if the message isn't found.
+     * @returns {MessageValue[] | null} An array of `MessageValue` objects, or `null` if the message isn't found.
      */
     getMessageValuesBefore(targetMessage) {
         const messages = this.getMessagesBefore(targetMessage);
@@ -352,9 +409,10 @@ export class ChatLog {
     }
 
     /**
-     * Finds the Alternatives object that contains the given message.
-     * @param {Message} targetMessage The message to find.
-     * @returns {Alternatives | null}
+     * Finds the `Alternatives` object that directly contains the given message instance.
+     * This is useful for operations that need to modify the list of alternatives a message belongs to.
+     * @param {Message} targetMessage The message whose parent `Alternatives` object is to be found.
+     * @returns {Alternatives | null} The `Alternatives` instance containing the `targetMessage`, or `null` if not found.
      */
     findAlternatives(targetMessage) {
         if (!this.rootAlternatives) {
@@ -381,9 +439,10 @@ export class ChatLog {
 
     /**
      * Adds a new message as an alternative to an existing message.
+     * This creates a new branch in the conversation at the level of the `existingMessage`.
      * @param {Message} existingMessage - The message to add an alternative to.
      * @param {MessageValue} newContent - The content for the new alternative message.
-     * @returns {Message} The newly created message.
+     * @returns {Message | null} The newly created `Message` instance, or `null` if the `existingMessage` was not found.
      */
     addAlternative(existingMessage, newContent) {
         const alternatives = this.findAlternatives(existingMessage);
@@ -397,7 +456,7 @@ export class ChatLog {
     }
 
     /**
-     * Deletes a message or a message alternative and all its children.
+     * Deletes a message and its entire subtree of replies and alternatives.
      * @param {Message} messageToDelete - The message to delete.
      */
     deleteMessage(messageToDelete) {
@@ -418,10 +477,11 @@ export class ChatLog {
     }
 
     /**
-     * Deletes a message but preserves its children by re-parenting them to the deleted message's parent.
-     * This is achieved by replacing the message in its parent's `Alternatives.messages` array
-     * with its own children messages. This preserves sibling messages.
-     * @param {Message} messageToDelete - The message to delete.
+     * Deletes a message but preserves its children by "re-parenting" them.
+     * This is achieved by replacing the message in its parent `Alternatives` array
+     * with its own direct children messages. This is useful for "collapsing" a message
+     * in the conversation history without losing the subsequent replies.
+     * @param {Message} messageToDelete - The message to be deleted.
      */
     deleteMessageAndPreserveChildren(messageToDelete) {
         const alternatives = this.findAlternatives(messageToDelete);
@@ -456,9 +516,9 @@ export class ChatLog {
     }
 
     /**
-     * Cycles through the alternatives for a given message.
-     * @param {Message} message - The message to cycle alternatives for.
-     * @param {'next' | 'prev'} direction - The direction to cycle.
+     * Cycles through the alternatives for a given message, changing the active one.
+     * @param {Message} message - The message whose alternatives are to be cycled.
+     * @param {'next' | 'prev'} direction - The direction to cycle ('next' or 'prev').
      */
     cycleAlternatives(message, direction) {
         const alternatives = this.findAlternatives(message);
@@ -473,23 +533,23 @@ export class ChatLog {
     }
 
     /**
-     * Subscribes a callback function to be called on any change.
-     * @param {() => void} callback
+     * Subscribes a callback function to be invoked whenever the chat log changes.
+     * @param {() => void} callback - The function to call on changes.
      */
     subscribe(callback) {
         this.subscribers.push(callback);
     }
 
     /**
-     * Unsubscribes a callback function.
-     * @param {() => void} callback
+     * Unsubscribes a previously registered callback function.
+     * @param {() => void} callback - The function to remove from the subscribers list.
      */
     unsubscribe(callback) {
         this.subscribers = this.subscribers.filter(cb => cb !== callback);
     }
 
     /**
-     * Notifies all subscribers that the chat log has changed.
+     * Notifies all subscribed listeners that the chat log has changed by invoking their callbacks.
      */
     notify() {
         this.subscribers.forEach(cb => cb());
@@ -497,16 +557,18 @@ export class ChatLog {
 
     /**
      * Serializes the entire chat log to a JSON-compatible object.
-     * @returns {SerializedAlternatives | null} A serializable representation of the root alternatives, or null if the log is empty.
+     * This method is automatically called by `JSON.stringify`.
+     * @returns {SerializedAlternatives | null} A serializable representation of the root alternatives, or `null` if the log is empty.
      */
     toJSON() {
         return this.rootAlternatives ? this.rootAlternatives.toJSON() : null;
     }
 
     /**
-     * Creates a ChatLog instance from a serialized JSON object.
+     * Creates a `ChatLog` instance by deserializing a JSON object.
+     * This static method recursively reconstructs the entire message tree from its serialized form.
      * @param {SerializedAlternatives | null} jsonData - The serialized data to load from.
-     * @returns {ChatLog} A new ChatLog instance populated with the provided data.
+     * @returns {ChatLog} A new `ChatLog` instance populated with the provided data.
      */
     static fromJSON(jsonData) {
         const chatLog = new ChatLog();
