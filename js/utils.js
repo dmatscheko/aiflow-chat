@@ -246,7 +246,7 @@ export function makeEditable(containerEl, initialText, onSave, onCancel = null) 
     cancelButton.addEventListener('click', cancel);
 
     textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
             e.preventDefault();
             save();
         } else if (e.key === 'Escape') {

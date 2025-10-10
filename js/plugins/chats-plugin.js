@@ -194,7 +194,7 @@ class ChatManager {
                 return;
             }
 
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
                 this.handleFormSubmit();
             }
