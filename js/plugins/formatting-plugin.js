@@ -10,13 +10,17 @@ import { pluginManager } from '../plugin-manager.js';
  * @typedef {import('../chat-data.js').Message} Message
  */
 
-// --- Main Formatting Plugin ---
+// --- Main Formatting Plugin Class ---
 
-const formattingPlugin = {
+class FormattingPlugin {
+    constructor() {
+        // Bind the methods to ensure 'this' context is correct when they are called as hooks
+        this.onFormatMessageContent = this.onFormatMessageContent.bind(this);
+        this.onMessageRendered = this.onMessageRendered.bind(this);
+    }
+
     /**
      * Formats the raw text content of a message into HTML.
-     * This hook handles all transformations that convert the raw string content
-     * into the rich HTML that will be displayed to the user.
      * @param {HTMLElement} contentEl - The content element, initially containing raw text.
      * @param {Message} message - The message object.
      * @returns {HTMLElement} The modified content element.
@@ -24,24 +28,20 @@ const formattingPlugin = {
     onFormatMessageContent(contentEl, message) {
         let text = contentEl.textContent || '';
 
-        // Pipeline of text-to-text transformations
         text = this.formatSvg(text);
         text = this.prewrapDetails(text);
 
-        // Render Markdown to HTML
         let html = this.renderMarkdown(text);
         contentEl.innerHTML = html;
 
-        // Pipeline of DOM transformations on the newly created content
         this.wrapDetails(contentEl, message);
         this.renderKatex(contentEl);
 
         return contentEl;
-    },
+    }
 
     /**
      * Performs final processing on the message element after it's fully rendered.
-     * This hook is used for adding interactive UI elements like copy badges.
      * @param {HTMLElement} messageEl - The fully rendered message element.
      * @param {Message} message - The message object.
      * @returns {HTMLElement} The modified message element.
@@ -49,13 +49,8 @@ const formattingPlugin = {
     onMessageRendered(messageEl, message) {
         this.addClipBadges(messageEl, message);
         return messageEl;
-    },
+    }
 
-    /**
-     * Normalizes SVG content by wrapping it in ```svg blocks.
-     * @param {string} text - The text content to format.
-     * @returns {string} The formatted text.
-     */
     formatSvg(text) {
         text = text.replace(/((?:```\w*?\s*?)|(?:<render_component[^>]*?>\s*?)|)(<svg[^>]*?>)([\s\S]*?)(<\/svg>(?:\s*?```|\s*?<\/render_component>|)|$)/gi,
             (match, prefix, svgStart, content, closing) => {
@@ -69,14 +64,8 @@ const formattingPlugin = {
             }
         );
         return text;
-    },
+    }
 
-    /**
-     * Wraps tool calls and thoughts in special placeholder tags to protect them
-     * from the Markdown renderer.
-     * @param {string} text - The text content to format.
-     * @returns {string} The formatted text.
-     */
     prewrapDetails(text) {
         text = text.replace(/<dma:tool_call[^>]+?name="([^>]*?)"[^>]*?(?:\/>|>[\s\S]*?<\/dma:tool_call\s*>)/gi, (match, name) => {
             const title = name || '';
@@ -89,16 +78,11 @@ const formattingPlugin = {
         text = text.replace(/<think>([\s\S]*?)<\/think>/g, '<p>-#--#- THINK -#--#-</p><div>$1</div><p>-#--#- END THINK -#--#-</p>');
         text = text.replace(/<think>([\s\S]*)$/, '<p>-#--#- THINK -#--#-</p><div>$1</div>'); // Unmatched <think>
         return text;
-    },
+    }
 
-    /**
-     * Renders Markdown to HTML using markdown-it and highlight.js.
-     * @param {string} text - The text content to format.
-     * @returns {string} The formatted HTML string.
-     */
     renderMarkdown(text) {
         const md = window.markdownit({
-            html: true, // Allow HTML since we are injecting it for <details>
+            html: true,
             linkify: true,
             highlight: function (code, language) {
                 let value = '';
@@ -118,13 +102,8 @@ const formattingPlugin = {
         });
         md.validateLink = link => !['javascript:', 'dma:'].some(prefix => link.startsWith(prefix));
         return md.render(text);
-    },
+    }
 
-    /**
-     * Converts the placeholder tags into final <details> blocks.
-     * @param {HTMLElement} contentEl - The content element.
-     * @param {Message} message - The message object.
-     */
     wrapDetails(contentEl, message) {
         let html = contentEl.innerHTML;
         const open = message.id === 0 ? ' open' : '';
@@ -145,12 +124,8 @@ const formattingPlugin = {
         });
 
         contentEl.innerHTML = html;
-    },
+    }
 
-    /**
-     * Renders LaTeX math using KaTeX.
-     * @param {HTMLElement} wrapper - The element containing math to render.
-     */
     renderKatex(wrapper) {
         const origFormulas = [];
         renderMathInElement(wrapper, {
@@ -182,13 +157,8 @@ const formattingPlugin = {
                 div.appendChild(container);
             }
         });
-    },
+    }
 
-    /**
-     * Adds copy-to-clipboard badges to various elements.
-     * @param {HTMLElement} messageEl - The message element.
-     * @param {Message} message - The message object.
-     */
     addClipBadges(messageEl, message) {
         messageEl.classList.add('hljs-nobg', 'hljs-message');
         messageEl.dataset.plaintext = encodeURIComponent(message.value.content.trim());
@@ -214,9 +184,14 @@ const formattingPlugin = {
         const clipBadge = new ClipBadge({ autoRun: false });
         clipBadge.addTo(messageEl);
     }
-};
+}
 
-pluginManager.register(formattingPlugin);
+// Instantiate the plugin and register its hooks
+const formattingPluginInstance = new FormattingPlugin();
+pluginManager.register({
+    onFormatMessageContent: formattingPluginInstance.onFormatMessageContent,
+    onMessageRendered: formattingPluginInstance.onMessageRendered,
+});
 
 
 /**
