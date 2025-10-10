@@ -210,6 +210,7 @@ class ChatManager {
         const { isContinuation = false, agentId = null } = options;
         const activeChat = this.getActiveChat();
         if (!activeChat) return;
+
         if (!isContinuation) {
             const userInput = this.app.dom.messageInput.value.trim();
             if (!userInput) return;
@@ -218,7 +219,8 @@ class ChatManager {
             activeChat.draftMessage = '';
             this.saveChats();
         }
-        const finalAgentId = agentId || activeChat.agent || null;
+
+        const finalAgentId = agentId || activeChat.agent;
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId }, {});
         responseProcessor.scheduleProcessing(this.app);
     }
@@ -343,7 +345,6 @@ class ChatUI {
 
         const el = document.createElement('div');
         el.classList.add('message', `role-${message.value.role}`);
-        el.dataset.messageId = message.id;
 
         if (depth > 0) {
             // Indent the message bubble to make space for the depth lines
@@ -363,8 +364,8 @@ class ChatUI {
         if (message.value.role === 'assistant' || message.value.role === 'tool') {
             const details = [];
         
-            if (message.value.agent && this.agentManager) {
-                const agent = this.agentManager.getAgent(message.value.agent);
+            if (message.agent && this.agentManager) {
+                const agent = this.agentManager.getAgent(message.agent);
                 if (agent?.name) details.push(agent.name);
             }
             

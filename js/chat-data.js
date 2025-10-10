@@ -13,17 +13,16 @@
  * @typedef {object} MessageValue
  * @property {MessageRole} role - The role of the message author.
  * @property {string | null} content - The content of the message.
- * @property {string} [agent] - The ID of the agent used for this message.
  * @property {string} [model] - The model used for the message.
  * @property {object} [metadata] - Optional metadata, e.g., for sources.
- * @property {boolean} [is_full_context_call] - For agent calls, whether full context was provided.
  */
 
 /**
  * @typedef {object} SerializedMessage
- * @property {string} id - The unique ID of the message.
  * @property {MessageValue} value - The value of the message.
  * @property {number} depth - The stack depth of the message.
+ * @property {string} [agent] - The ID of the agent used for this message.
+ * @property {boolean} [is_full_context_call] - For agent calls, whether full context was provided.
  * @property {SerializedAlternatives | null} answerAlternatives - The serialized answer alternatives.
  */
 
@@ -43,13 +42,19 @@ class Message {
     /**
      * @param {MessageValue} value - The message value, e.g., `{ role: 'user', content: 'Hello' }`.
      * @param {number} depth - The stack depth of the message.
-     * @param {string|null} id - The unique ID of the message. If null, a new ID will be generated.
+     * @param {string} [agent]
+     * @param {boolean} [is_full_context_call]
      */
-    constructor(value, depth = 0, id = null) {
-        /** @type {string} */
-        this.id = id || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    constructor(value, depth = 0, agent = null, is_full_context_call = undefined) {
         /** @type {MessageValue} */
         this.value = value;
+        /**
+         * The ID of the agent used for this message.
+         * @type {string|null}
+         */
+        this.agent = agent;
+        /** @type {boolean|undefined} */
+        this.is_full_context_call = is_full_context_call;
         /**
          * The stack depth of the message.
          * @type {number}
@@ -76,9 +81,10 @@ class Message {
      */
     toJSON() {
         return {
-            id: this.id,
             value: this.value,
             depth: this.depth,
+            agent: this.agent,
+            is_full_context_call: this.is_full_context_call,
             answerAlternatives: this.answerAlternatives ? this.answerAlternatives.toJSON() : null,
         };
     }
@@ -101,10 +107,12 @@ class Alternatives {
      * Adds a new message to the list of alternatives and sets it as the active one.
      * @param {MessageValue} value - The value for the new message.
      * @param {number} depth - The stack depth of the message.
+     * @param {string} [agent]
+     * @param {boolean} [is_full_context_call]
      * @returns {Message} The newly created message instance.
      */
-    addMessage(value, depth) {
-        const newMessage = new Message(value, depth);
+    addMessage(value, depth, agent, is_full_context_call) {
+        const newMessage = new Message(value, depth, agent, is_full_context_call);
         this.activeMessageIndex = this.messages.push(newMessage) - 1;
         return newMessage;
     }
@@ -158,6 +166,7 @@ export class ChatLog {
      * @returns {Message} The newly added message instance.
      */
     addMessage(value, { depth = null } = {}) {
+        const { agent, is_full_context_call, ...messageValue } = value;
         const lastMessage = this.getLastMessage();
         let newMessage;
 
@@ -168,19 +177,19 @@ export class ChatLog {
         } else if (lastMessage) {
             // Otherwise, calculate based on the last message.
             // User messages always reset depth to 0.
-            finalDepth = (value.role === 'user') ? 0 : lastMessage.depth;
+            finalDepth = (messageValue.role === 'user') ? 0 : lastMessage.depth;
         }
 
         if (!lastMessage) {
             // This is the first message in the chat.
             this.rootAlternatives = new Alternatives();
-            newMessage = this.rootAlternatives.addMessage(value, finalDepth);
+            newMessage = this.rootAlternatives.addMessage(messageValue, finalDepth, agent, is_full_context_call);
         } else {
             // Add the new message as an answer to the last message.
             if (!lastMessage.answerAlternatives) {
                 lastMessage.answerAlternatives = new Alternatives();
             }
-            newMessage = lastMessage.answerAlternatives.addMessage(value, finalDepth);
+            newMessage = lastMessage.answerAlternatives.addMessage(messageValue, finalDepth, agent, is_full_context_call);
         }
         this.notify();
         return newMessage;
@@ -286,7 +295,7 @@ export class ChatLog {
             // Check if this message is the start of a new depth block.
             if (i === 0 || history[i-1].depth < msg.depth) {
                 // If this block was initiated by a partial-context agent call, it's a boundary.
-                if (msg.value.role === 'tool' && msg.value.is_full_context_call === false) {
+                if (msg.value.role === 'tool' && msg.is_full_context_call === false) {
                     boundaryIndex = i;
                     break;
                 }
@@ -379,7 +388,8 @@ export class ChatLog {
     addAlternative(existingMessage, newContent) {
         const alternatives = this.findAlternatives(existingMessage);
         if (alternatives) {
-            const newMessage = alternatives.addMessage(newContent, existingMessage.depth);
+            const { agent, is_full_context_call, ...messageValue } = newContent;
+            const newMessage = alternatives.addMessage(messageValue, existingMessage.depth, agent, is_full_context_call);
             this.notify();
             return newMessage;
         }
@@ -508,7 +518,7 @@ export class ChatLog {
             const alternatives = new Alternatives();
             alternatives.activeMessageIndex = altData.activeMessageIndex;
             alternatives.messages = altData.messages.map(msgData => {
-                const message = new Message(msgData.value, msgData.depth, msgData.id);
+                const message = new Message(msgData.value, msgData.depth, msgData.agent, msgData.is_full_context_call);
                 if (msgData.answerAlternatives) {
                     message.answerAlternatives = buildAlternatives(msgData.answerAlternatives);
                 }

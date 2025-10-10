@@ -165,7 +165,7 @@ class ResponseProcessor {
                 return;
             }
 
-            const agentId = assistantMsg.value.agent;
+            const agentId = assistantMsg.agent;
             const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
 
             // Use the centralized method to construct the system prompt.

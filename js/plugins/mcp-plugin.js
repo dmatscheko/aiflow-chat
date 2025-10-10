@@ -237,7 +237,7 @@ class McpPlugin {
      * @private
      */
     async #executeMcpCall(call, message, mcpUrl) {
-        const agentId = message.value.agent;
+        const agentId = message.agent;
         const agent = agentId ? this.#app.agentManager.getAgent(agentId) : null;
         const defaultAgent = this.#app.agentManager.getAgent('agent-default');
         let effectiveToolSettings = defaultAgent.toolSettings;
@@ -409,7 +409,7 @@ const mcpPluginDefinition = {
         }
 
         const app = mcpPluginSingleton.getApp();
-        const agentId = message.value.agent || null;
+        const agentId = message.agent || null;
         const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
         const mcpUrl = effectiveConfig.toolSettings.mcpServer;
         if (!mcpUrl) return false;

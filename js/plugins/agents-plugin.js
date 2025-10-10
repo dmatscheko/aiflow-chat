@@ -603,6 +603,31 @@ const agentsPlugin = {
             agentManager.initializeAgentEditor();
         }
         agentManager.updateActiveAgentInList();
+    },
+
+    onChatAreaRender(html, chat) {
+        // This hook is triggered by the chats-plugin to add controls to the chat area.
+        return html + agentManager.getAgentSelectorHtml(chat.agent);
+    },
+
+    onChatSwitched(chat) {
+        // This hook is also triggered by the chats-plugin after the view is rendered.
+        const agentSelector = document.getElementById('agent-selector');
+        if (agentSelector) {
+            agentSelector.addEventListener('change', (e) => {
+                // When the agent selection changes, update the active chat's agent property.
+                const activeChat = agentManager.app.chatManager.getActiveChat();
+                if (activeChat) {
+                    activeChat.agent = e.target.value;
+                    agentManager.app.chatManager.saveChats(); // Persist the change immediately.
+                }
+            });
+
+            if (!chat.agent) {
+                chat.agent = agentSelector.value;
+                agentManager.app.chatManager.saveChats();
+            }
+        }
     }
 };
 

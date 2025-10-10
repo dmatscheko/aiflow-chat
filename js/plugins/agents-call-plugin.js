@@ -115,7 +115,7 @@ class AgentsCallPlugin {
         }
 
         // After all agent calls are handled, and if no nested calls were queued, queue up the next step for the AI.
-        const callingAgentId = message.value.agent || 'agent-default';
+        const callingAgentId = message.agent || 'agent-default';
         activeChat.log.addMessage(
             { role: 'assistant', content: null, agent: callingAgentId },
             { depth: message.depth }
@@ -134,7 +134,7 @@ class AgentsCallPlugin {
      */
     async _handleAgentCall(call, message, activeChat) {
         const agentManager = this.app.agentManager;
-        const callingAgentId = message.value.agent || 'agent-default';
+        const callingAgentId = message.agent || 'agent-default';
         const callingAgent = agentManager.getAgent(callingAgentId);
         const targetAgent = agentManager.getAgent(call.name);
 
@@ -187,7 +187,7 @@ class AgentsCallPlugin {
 
             // 2. Now that validation is done, construct the payload and perform the call.
             const targetAgentConfig = agentManager.getEffectiveApiConfig(targetAgent.id);
-            toolResponseMessage.model = targetAgentConfig.model;
+            toolResponseAsMessage.value.model = targetAgentConfig.model;
 
             const systemPrompt = await agentManager.constructSystemPrompt(targetAgent.id);
 
@@ -225,15 +225,15 @@ class AgentsCallPlugin {
                     .filter(Boolean);
 
                 if (deltas.length > 0) {
-                    toolResponseMessage.content += deltas.join('');
+                    toolResponseAsMessage.value.content += deltas.join('');
                     activeChat.log.notify();
                 }
             }
         } catch (error) {
             if (error.name === 'AbortError') {
-                toolResponseMessage.content += '\n\n[Aborted by user]';
+                toolResponseAsMessage.value.content += '\n\n[Aborted by user]';
             } else {
-                toolResponseMessage.content = `<error>An error occurred while calling the agent: ${error.message}</error>`;
+                toolResponseAsMessage.value.content = `<error>An error occurred while calling the agent: ${error.message}</error>`;
             }
             activeChat.log.notify();
         } finally {
@@ -263,6 +263,7 @@ class AgentsCallPlugin {
             content: `<error>${errorMessage}</error>`,
             tool_call_id: call.id,
             name: call.name,
+            agent: call.name,
         };
         activeChat.log.addMessage(toolResponseMessage, { depth: originalMessage.depth + 1 });
     }
