@@ -199,11 +199,6 @@ class ChatManager {
                 this.handleFormSubmit();
             }
         });
-        const chatAreaControls = document.getElementById('chat-area-controls');
-        if (chatAreaControls) {
-            chatAreaControls.innerHTML = pluginManager.trigger('onChatAreaRender', '', chat);
-            pluginManager.trigger('onChatSwitched', chat);
-        }
     }
 
     async handleFormSubmit(options = {}) {
@@ -431,7 +426,6 @@ const chatPlugin = {
 
         pluginManager.registerView('chat', (chatId) => `
             <div id="chat-container"></div>
-            <div id="chat-area-controls"></div>
             <form id="message-form">
                 <textarea id="message-input" placeholder="Type your message..." rows="3"></textarea>
                 <button type="submit">Send</button>

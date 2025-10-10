@@ -605,11 +605,6 @@ const agentsPlugin = {
         agentManager.updateActiveAgentInList();
     },
 
-    onChatAreaRender(html, chat) {
-        // This hook is triggered by the chats-plugin to add controls to the chat area.
-        return html + agentManager.getAgentSelectorHtml(chat.agent);
-    },
-
     onChatSwitched(chat) {
         // This hook is also triggered by the chats-plugin after the view is rendered.
         const agentSelector = document.getElementById('agent-selector');
