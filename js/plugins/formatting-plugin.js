@@ -200,7 +200,7 @@ const clipBadgePlugin = {
             const rows = table.querySelectorAll('tr');
             return Array.from(rows).map(row =>
                 Array.from(row.querySelectorAll('td, th')).map(col =>
-                    `"${col.innerText.replace(/(\r\n|\n|\r)/gm, '').replace(/(\s\s)/gm, ' ').replace(/"/g, '""')}"`
+                    `"${col.innerHTML.replace(/(\r\n|\n|\r|<br>)/gm, '\n').replace(/(\s\s)/gm, ' ').replace(/"/g, '""')}"`
                 ).join(separator)
             ).join('\n');
         };
