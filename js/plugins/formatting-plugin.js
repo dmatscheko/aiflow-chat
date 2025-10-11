@@ -257,8 +257,8 @@ class ClipBadge {
      */
     defaults = {
         templateSelector: '#clip-badge-template',
-        copyIconContent: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-4H4a2 2 0 0 1-2-2V4zm8 12v4h10V10h-4v4a2 2 0 0 1-2 2h-4zm4-2V4H4v10h10z" fill="currentColor"/></svg>',
-        checkIconContent: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.664 5.253a1 1 0 0 1 .083 1.411l-10.666 12a1 1 0 0 1-1.495 0l-5.333-6a1 1 0 0 1 1.494-1.328l4.586 5.159 9.92-11.16a1 1 0 0 1 1.411-.082z" fill="currentColor"/></svg>&nbsp;Copied!',
+        copyIconContent: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4h4a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-4H4a2 2 0 0 1-2-2V4zm8 12v4h10V10h-4v4a2 2 0 0 1-2 2h-4zm4-2V4H4v10h10z" fill="currentColor"/></svg>',
+        checkIconContent: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.664 5.253a1 1 0 0 1 .083 1.411l-10.666 12a1 1 0 0 1-1.495 0l-5.333-6a1 1 0 0 1 1.494-1.328l4.586 5.159 9.92-11.16a1 1 0 0 1 1.411-.082z" fill="currentColor"/></svg>&nbsp;Copied!',
         codeButtonContent: 'Code',
         imageButtonContent: 'Image',
         autoRun: true,
@@ -293,16 +293,16 @@ class ClipBadge {
             node.innerHTML = `
                 <style>
                     .clip-badge-pre { position: relative; }
-                    .clip-badge { display: flex; flex-flow: row nowrap; align-items: flex-start; position: absolute; top: 0; right: 0; opacity: 0.3; transition: opacity 0.4s; z-index: 10; }
-                    .clip-badge:hover { opacity: .95; }
+                    .clip-badge { display: flex; flex-flow: row nowrap; align-items: flex-start; position: absolute; top: 0; right: 0; opacity: 0.4; transition: opacity 0.4s; z-index: 10; }
+                    .clip-badge:hover { opacity: .7; }
                     .clip-badge-language { margin-right: 8px; margin-top: 1px; font-weight: 600; color: goldenrod; font-size: 0.85em; }
-                    .clip-badge-copy-icon { cursor: pointer; padding: 3px 6px; user-select: none; background: #444; border-radius: 0 8px 0 8px; }
+                    .clip-badge-copy-icon { cursor: pointer; padding: 3px 6px; user-select: none; background: #444; border-radius: 0 8px 0 8px; color: #fff; }
                     .clip-badge-copy-icon * { vertical-align: top; }
-                    .text-success { color: limegreen !important; font-size: 0.85em; }
+                    .text-success { color: limegreen !important; font-size: 0.85em; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
                     .clip-badge-swap { cursor: pointer; background: #444; border-radius: 0 0 6px 6px; padding: 0 5px 2px; margin-right: 4px; display: none; font-size: 0.85em; }
                     .clip-badge-swap-enabled { display: block; }
                     .katex .clip-badge { opacity: 0; }
-                    .katex:hover .clip-badge { opacity: 1; }
+                    .katex:hover .clip-badge { opacity: .7; }
                     .katex .clip-badge-copy-icon { background: #777; }
                 </style>
                 <div class="clip-badge">
