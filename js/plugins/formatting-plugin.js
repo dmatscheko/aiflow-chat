@@ -23,7 +23,7 @@ import { pluginManager } from '../plugin-manager.js';
  */
 const svgNormalizationPlugin = {
     onFormatMessageContent(contentEl, message) {
-        let text = contentEl.innerHTML;
+        let text = contentEl.textContent || '';
         text = text.replace(/((?:```\w*?\s*?)|(?:<render_component[^>]*?>\s*?)|)(<svg[^>]*?>)([\s\S]*?)(<\/svg>(?:\s*?```|\s*?<\/render_component>|)|$)/gi,
             (match, prefix, svgStart, content, closing) => {
                 let output = '```svg\n' + svgStart;
@@ -40,7 +40,7 @@ const svgNormalizationPlugin = {
             data = data.replace(/<svg\s/gmi, '<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" ');
             return `(data:image/svg+xml,${encodeURIComponent(data)})`;
         });
-        contentEl.innerHTML = text;
+        contentEl.textContent = text;
         return contentEl;
     }
 };
@@ -53,7 +53,7 @@ const svgNormalizationPlugin = {
  */
 const preDetailsWrapperPlugin = {
     onFormatMessageContent(contentEl, message) {
-        let text = contentEl.innerHTML;
+        let text = contentEl.textContent || '';
         text = text.replace(/<dma:tool_call[^>]+?name="([^>]*?)"[^>]*?(?:\/>|>[\s\S]*?<\/dma:tool_call\s*>)/gi, (match, name) => {
             const title = name || '';
             return `\n-#--#- TOOL CALL -#--#- ${title.trim()} -#--#-\n\`\`\`html\n${match.trim()}\n\`\`\`\n-#--#- END TOOL CALL -#--#-\n`;
@@ -65,7 +65,7 @@ const preDetailsWrapperPlugin = {
         text = text.replace(/<think>([\s\S]*?)(?:<\/think>|$)/g, (match, content) => {
             return `\n-#--#- THINK -#--#-\n${content.trim()}\n-#--#- END THINK -#--#-\n`;
         });
-        contentEl.innerHTML = text;
+        contentEl.textContent = text;
         return contentEl;
     }
 };
@@ -79,24 +79,28 @@ const preDetailsWrapperPlugin = {
  */
 const markdownPlugin = {
     onFormatMessageContent(contentEl, message) {
-        const text = contentEl.textContent || '';
+        let text = contentEl.textContent || '';
         const md = window.markdownit({
-            html: false,
+            html: true,             // TODO: If possible set html to false to avoid XSS. At the moment, this would break <br> in tables.
             linkify: true,
-            highlight: function (str, lang) {
-                if (lang && hljs.getLanguage(lang)) {
-                    try {
-                        return `<pre class="hljs language-${lang}" data-plaintext="${encodeURIComponent(str.trim())}"><code>` +
-                        hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
-                        '</code></pre>';
-                    } catch (e) {
-                        console.error('Highlighting error:', e);
+            highlight: function (code, language) {
+                let value = '';
+                try {
+                    if (language && hljs.getLanguage(language)) {
+                        value = hljs.highlight(code, { language, ignoreIllegals: true }).value;
+                    } else {
+                        const highlighted = hljs.highlightAuto(code);
+                        language = highlighted.language || 'unknown';
+                        value = highlighted.value;
                     }
+                } catch (error) {
+                    console.error('Highlight error:', error, code);
                 }
-                const escaped = md.utils.escapeHtml(str);
-                return `<pre class="hljs" data-plaintext="${encodeURIComponent(str.trim())}"><code>${escaped}</code></pre>`;
+                return `<pre class="hljs language-${language}" data-plaintext="${encodeURIComponent(code.trim())}"><code>${value}</code></pre>`;
             }
         });
+        md.validateLink = link => !['javascript:', 'dma:'].some(prefix => link.startsWith(prefix));
+        // text = text.replaceAll(/<br>/g,"\n");
         contentEl.innerHTML = md.render(text);
         return contentEl;
     }
@@ -113,15 +117,18 @@ const detailsWrapperPlugin = {
         const open = message.id === 0 ? ' open' : '';
 
         html = html.replace(/-#--#- TOOL CALL -#--#- (.*?) -#--#-<\/p>([\s\S]*?)<p>-#--#- END TOOL CALL -#--#-/g, (match, name, content) => {
-            const title = name ? `: ${name}` : '';
+            const title = name ? ': ' + name : '';
             return `<details${open} class="tool-call"><summary>Tool Call${title}</summary>${content}</details>`;
         });
         html = html.replace(/-#--#- TOOL RESPONSE -#--#- (.*?) -#--#-<\/p>([\s\S]*?)<p>-#--#- END TOOL RESPONSE -#--#-/g, (match, name, content) => {
-            const title = name ? `: ${name}` : '';
+            const title = name ? ': ' + name : '';
             return `<details${open} class="tool-response"><summary>Tool Response${title}</summary>${content}</details>`;
         });
         html = html.replace(/-#--#- THINK -#--#-<\/p>([\s\S]*?)<p>-#--#- END THINK -#--#-/g, (match, content) => {
             return `<details class="think"><summary>Thinking</summary><div class="think-content">${content}</div></details>`;
+        });
+        html = html.replace(/-#--#- THINK -#--#-<\/p><div>([\s\S]*)/g, (match, content) => {
+            return `<details open class="think"><summary>Thinking</summary><div class="think-content">${content}</div></details>`;
         });
 
         contentEl.innerHTML = html;
@@ -146,11 +153,10 @@ const katexPlugin = {
                 { left: '\\(', right: '\\)', display: false },
                 { left: '\\[', right: '\\]', display: true },
                 { left: '\\begin{equation}', right: '\\end{equation}', display: true },
-                // { left: '\\begin{align}', right: '\\end{align}', display: true },
-                // { left: '\\begin{alignat}', right: '\\end{alignat}', display: true },
-                // { left: '\\begin{gather}', right: '\\end{gather}', display: true },
-                // { left: '\\begin{CD}', right: '\\end{CD}', display: true },
-                // { left: '\\[', right: '\\]', display: true }
+                { left: '\\begin{align}', right: '\\end{align}', display: true },
+                { left: '\\begin{alignat}', right: '\\end{alignat}', display: true },
+                { left: '\\begin{gather}', right: '\\end{gather}', display: true },
+                { left: '\\begin{CD}', right: '\\end{CD}', display: true }
             ],
             ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'option', 'table', 'svg'],
             throwOnError: false,
@@ -159,24 +165,19 @@ const katexPlugin = {
                 return math;
             }
         });
-
-        contentEl.querySelectorAll('.katex').forEach((el, i) => {
+        contentEl.querySelectorAll('.katex').forEach((elem, i) => {
             if (i >= origFormulas.length) return;
-            const formula = el.parentElement;
-            if (formula.classList.contains('katex-display')) {
+            const originalFormula = origFormulas[i].trim();
+            elem.dataset.plaintext = encodeURIComponent(originalFormula);
+
+            if (elem.parentElement.classList.contains('katex-display')) {
                 const div = document.createElement('div');
                 div.classList.add('hljs', 'language-latex');
-                div.dataset.plaintext = encodeURIComponent(origFormulas[i].trim());
+                div.dataset.plaintext = encodeURIComponent(originalFormula);
 
-                const pe = formula.parentElement;
-                pe.insertBefore(div, formula);
-                div.appendChild(formula);
-
-                // const pe = formula.parentElement;
-                // const ppe = pe.parentElement;
-                // ppe.insertBefore(div, pe);
-                // ppe.removeChild(pe);
-                // div.appendChild(pe);
+                const container = elem.parentElement;
+                container.parentElement.insertBefore(div, container);
+                div.appendChild(container);
             }
         });
         return contentEl;
@@ -190,7 +191,7 @@ const katexPlugin = {
  */
 const clipBadgePlugin = {
     onMessageRendered(messageEl, message) {
-        messageEl.classList.add('hljs-message');
+        messageEl.classList.add('hljs-nobg', 'hljs-message');
         const contentToCopy = message.value.content || '';
         messageEl.dataset.plaintext = encodeURIComponent(contentToCopy.trim());
 
@@ -206,20 +207,14 @@ const clipBadgePlugin = {
 
         messageEl.querySelectorAll('table').forEach(table => {
             const div = document.createElement('div');
-            div.classList.add('hljs-nobg', 'language-table');
+            div.classList.add('hljs-nobg', 'hljs-table', 'language-table');
             div.dataset.plaintext = encodeURIComponent(tableToCSV(table));
-            const pe = table.parentElement;
-            pe.insertBefore(div, table);
+            table.parentElement.insertBefore(div, table);
             div.appendChild(table);
         });
 
         const clipBadge = new ClipBadge({ autoRun: false });
         clipBadge.addTo(messageEl);
-
-        const titleRow = messageEl.querySelector('.message-title');
-        if (titleRow) {
-            titleRow.style.paddingRight = '40px';
-        }
     }
 };
 
@@ -298,7 +293,7 @@ class ClipBadge {
             node.innerHTML = `
                 <style>
                     .clip-badge-pre { position: relative; }
-                    .clip-badge { display: flex; flex-flow: row nowrap; align-items: flex-start; position: absolute; top: 0; right: 0; opacity: 0.3; transition: opacity 0.4s; }
+                    .clip-badge { display: flex; flex-flow: row nowrap; align-items: flex-start; position: absolute; top: 0; right: 0; opacity: 0.3; transition: opacity 0.4s; z-index: 10; }
                     .clip-badge:hover { opacity: .95; }
                     .clip-badge-language { margin-right: 10px; margin-top: 2px; font-weight: 600; color: goldenrod; }
                     .clip-badge-copy-icon { cursor: pointer; padding: 5px 8px; user-select: none; background: #444; border-radius: 0 5px 0 7px; }
@@ -306,6 +301,9 @@ class ClipBadge {
                     .text-success { color: limegreen !important; }
                     .clip-badge-swap { cursor: pointer; background: #444; border-radius: 0 0 7px 7px; padding: 0 7px 3px; margin-right: 5px; display: none; }
                     .clip-badge-swap-enabled { display: block; }
+                    .katex .clip-badge { opacity: 0; }
+                    .katex:hover .clip-badge { opacity: 1; }
+                    .katex .clip-badge-copy-icon { background: #777; }
                 </style>
                 <div class="clip-badge">
                     <div class="clip-badge-language"></div>
@@ -322,7 +320,7 @@ class ClipBadge {
      * (Not used in the current implementation, but kept for completeness).
      */
     addAll() {
-        document.querySelectorAll('pre.hljs, .hljs-nobg, .hljs-message').forEach(el => this.addBadge(el));
+        document.querySelectorAll('.hljs, .hljs-nobg, .hljs-table, .katex').forEach(el => this.addBadge(el));
     }
 
     /**
@@ -330,8 +328,8 @@ class ClipBadge {
      * @param {HTMLElement} container - The container element to search within.
      */
     addTo(container) {
-        container.querySelectorAll('pre.hljs, .hljs-nobg, .language-table').forEach(el => this.addBadge(el));
-        if (container.classList.contains('hljs-message')) {
+        container.querySelectorAll('.hljs, .hljs-nobg, .hljs-table, .katex').forEach(el => this.addBadge(el));
+        if (container.matches('.hljs, .hljs-nobg, .hljs-table, .katex')) {
             this.addBadge(container);
         }
     }
@@ -341,11 +339,11 @@ class ClipBadge {
      * @param {HTMLElement} highlightEl - The element to add the badge to.
      * @private
      */
-    addBadge(highlightEl) {
-        if (highlightEl.classList.contains('clip-badge-pre')) return;
-        highlightEl.classList.add('clip-badge-pre');
-        const badge = this.createBadgeElement(highlightEl);
-        highlightEl.insertAdjacentElement('afterbegin', badge);
+    addBadge(el) {
+        if (el.classList.contains('clip-badge-pre')) return;
+        el.classList.add('clip-badge-pre');
+        const badge = this.createBadgeElement(el);
+        el.insertAdjacentElement('afterbegin', badge);
     }
 
     /**
@@ -354,50 +352,62 @@ class ClipBadge {
      * @returns {HTMLElement} The created badge element.
      * @private
      */
-    createBadgeElement(highlightEl) {
-        const codeBlock = highlightEl.querySelector('code');
-        const plainText = highlightEl.dataset.plaintext ? decodeURIComponent(highlightEl.dataset.plaintext) : (codeBlock ? codeBlock.textContent : highlightEl.textContent);
+    createBadgeElement(el) {
+        const plainText = decodeURIComponent(el.dataset.plaintext || '') || el.textContent;
+        let language = el.className.match(/\blanguage-(?<lang>[a-z0-9_-]+)\b/i)?.groups?.lang || 'unknown';
         let htmlText = '';
-        if (highlightEl.classList.contains('language-table')) {
-            htmlText = highlightEl.innerHTML;
+        let isSvg = false;
+
+        if (el.classList.contains('katex')) {
+            language = 'latex';
+        } else if (language === 'table') {
+            language = '';
+            htmlText = el.innerHTML;
+        } else if (language === 'svg') {
+            isSvg = true;
         }
-        const language = highlightEl.className.match(/\blanguage-(?<lang>[a-z0-9_-]+)\b/i)?.groups?.lang || 'unknown';
 
         const badge = this.settings.template.cloneNode(true);
-        badge.querySelector('.clip-badge-language').textContent = (language !== 'unknown' && language !== 'table') ? language : '';
+        const langEl = badge.querySelector('.clip-badge-language');
+        langEl.textContent = (language !== 'unknown' && language !== 'svg') ? language : '';
+        if (el.classList.contains('hljs-message')) langEl.textContent = '';
 
-        if (language.toLowerCase() === 'svg') {
-            this.handleSvg(badge, highlightEl, plainText);
+
+        if (isSvg) {
+            this.handleSvg(badge, el, plainText);
         }
+        this.handleCopy(badge, el, plainText, htmlText);
 
-        this.handleCopy(badge, highlightEl, plainText, htmlText);
         return badge;
     }
 
-    handleSvg(badge, highlightEl, plainText) {
+    handleSvg(badge, el, plainText) {
         const swapBtn = badge.querySelector('.clip-badge-swap');
         swapBtn.classList.add('clip-badge-swap-enabled');
-        swapBtn.dataset.showing = 'text'; // Start by showing the code
-        swapBtn.innerHTML = this.settings.imageButtonContent;
+        swapBtn.dataset.showing = 'image';
+        swapBtn.innerHTML = this.settings.codeButtonContent;
 
-        const codeEl = highlightEl.querySelector('code');
-        const originalHtml = codeEl.innerHTML; // The highlighted code
+        const codeBlock = el.querySelector('code');
+        const highlightedCode = codeBlock.innerHTML;
+        codeBlock.innerHTML = plainText; // Start by showing the rendered image
 
         swapBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (swapBtn.dataset.showing === 'text') {
+            if (swapBtn.dataset.showing === 'image') {
+                swapBtn.dataset.showing = 'code';
+                swapBtn.innerHTML = this.settings.imageButtonContent;
+                codeBlock.innerHTML = highlightedCode;
+            } else {
                 swapBtn.dataset.showing = 'image';
                 swapBtn.innerHTML = this.settings.codeButtonContent;
-                codeEl.innerHTML = plainText; // Show the raw SVG as an image
-            } else {
-                swapBtn.dataset.showing = 'text';
-                swapBtn.innerHTML = this.settings.imageButtonContent;
-                codeEl.innerHTML = originalHtml; // Show the highlighted code
+                codeBlock.innerHTML = plainText;
             }
+            // Re-insert the badge because innerHTML wipes it
+            el.insertAdjacentElement('afterbegin', badge);
         });
     }
 
-    handleCopy(badge, highlightEl, plainText, htmlText) {
+    handleCopy(badge, el, plainText, htmlText) {
         const copyIcon = badge.querySelector('.clip-badge-copy-icon');
         copyIcon.innerHTML = this.settings.copyIconContent;
 
@@ -405,12 +415,6 @@ class ClipBadge {
             event.preventDefault();
             event.stopPropagation();
             if (copyIcon.classList.contains('text-success')) return;
-
-            // const plainText = highlightEl.dataset.plaintext ? decodeURIComponent(highlightEl.dataset.plaintext) : plainText;
-            // let htmlText = '';
-            // if (highlightEl.classList.contains('language-table')) {
-            //     htmlText = highlightEl.innerHTML;
-            // }
 
             const setCopied = () => {
                 copyIcon.innerHTML = this.settings.checkIconContent;
@@ -431,7 +435,7 @@ class ClipBadge {
                 });
             } else {
                 navigator.clipboard.writeText(plainText).then(setCopied).catch(err => {
-                    console.error('Clipboard API failed', err);
+                    console.error('Clipboard fallback failed', err);
                 });
             }
         });
