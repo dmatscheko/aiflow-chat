@@ -116,6 +116,12 @@ class ChatManager {
         }
     }
 
+    renderChatList() {
+        if (this.listPane) {
+            this.listPane.renderList();
+        }
+    }
+
     /**
      * Retrieves the currently active chat object.
      * @returns {Chat | undefined} The active chat object, or undefined if not found.
@@ -435,19 +441,35 @@ const chatPlugin = {
                     onAddNew: () => chatManager.createNewChat(),
                     getItemName: (item) => item.title,
                     onDelete: (itemId, itemName) => {
-                         if (confirm(`Are you sure you want to delete chat "${itemName}"?`)) {
-                            if (chatManager.activeChatId === itemId) {
+                        if (confirm(`Are you sure you want to delete chat "${itemName}"?`)) {
+                            const wasActive = chatManager.activeChatId === itemId;
+
+                            // The actual deletion is handled by the list pane's generic logic.
+                            // We just need to handle the case where the *active* chat is deleted.
+                            if (wasActive) {
+                                // Important: Get the list of chats *before* deletion.
                                 const chats = chatManager.dataManager.getAll();
-                                const newActiveChat = chats.length > 0 ? chats[0] : null;
-                                if (newActiveChat) {
-                                    appInstance.setView('chat', newActiveChat.id);
-                                } else {
-                                    chatManager.createNewChat();
-                                }
+                                const itemIndex = chats.findIndex(c => c.id === itemId);
+
+                                // Determine the next chat to activate.
+                                // Default to the one before, or the new first one if the deleted one was first.
+                                const nextIndex = (itemIndex > 0) ? itemIndex - 1 : 0;
+
+                                // Wait a tick for the deletion to process before setting the new view.
+                                setTimeout(() => {
+                                    const remainingChats = chatManager.dataManager.getAll();
+                                    if (remainingChats.length > 0) {
+                                        const newActiveId = remainingChats[nextIndex] ? remainingChats[nextIndex].id : remainingChats[0].id;
+                                        appInstance.setView('chat', newActiveId);
+                                    } else {
+                                        // If no chats are left, create a new one.
+                                        chatManager.createNewChat();
+                                    }
+                                }, 0);
                             }
-                            return true;
+                            return true; // Allow deletion.
                         }
-                        return false;
+                        return false; // Disallow deletion.
                     }
                 });
             }
