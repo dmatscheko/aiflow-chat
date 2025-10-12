@@ -9,9 +9,11 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId } from '../utils.js';
+import { debounce, importJson, exportJson } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 import { createTitleBar } from './title-bar-plugin.js';
+import { DataManager } from '../data-manager.js';
+import { createListPane } from '../ui/list-pane.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -63,55 +65,18 @@ let agentManager = null;
  * @class
  */
 class AgentManager {
-    /**
-     * Initializes the AgentManager, loads agents from local storage, and sets up debounced saving.
-     * @param {App} app - The main application instance.
-     */
     constructor(app) {
-        /**
-         * The main application instance.
-         * @type {App}
-         */
         this.app = app;
-        /**
-         * An array holding all loaded agent objects.
-         * @type {Agent[]}
-         */
-        this.agents = [];
-        /**
-         * A cache to store the list of models available for each unique API URL,
-         * preventing redundant API calls.
-         * @type {Map<string, {id: string}[]>}
-         */
+        this.dataManager = new DataManager('core_agents_v2', 'agent');
+        this.agents = this.dataManager.getAll();
         this.modelCache = new Map();
-
-        /**
-         * A debounced version of the `_saveAgents` method to prevent rapid, successive
-         * writes to local storage during bulk updates or continuous input changes.
-         * @type {() => void}
-         */
-        this.debouncedSave = debounce(() => this._saveAgents(), 500);
-        this._loadAgents();
+        this.debouncedSave = debounce(() => this.dataManager.save(), 500);
+        this._ensureDefaultAgent();
     }
 
-    /**
-     * Loads agents from local storage. If no agents are found, it creates a
-     * 'Default Agent', potentially migrating settings from an older version of the app.
-     * It ensures the Default Agent is always present and listed first.
-     * @private
-     */
-    _loadAgents() {
-        let userAgents = [];
-        try {
-            const agentsJson = localStorage.getItem('core_agents_v2');
-            if (agentsJson) userAgents = JSON.parse(agentsJson);
-        } catch (e) {
-            console.error('Failed to load user agents:', e);
-        }
+    _ensureDefaultAgent() {
+        let defaultAgent = this.dataManager.get(DEFAULT_AGENT_ID);
 
-        let defaultAgent = userAgents.find(a => a.id === DEFAULT_AGENT_ID);
-
-        // If no Default Agent, create one.
         if (!defaultAgent) {
             const newDefaultAgent = {
                 id: DEFAULT_AGENT_ID,
@@ -130,47 +95,25 @@ class AgentManager {
                 useCustomAgentCallSettings: false,
                 agentCallSettings: { allowAll: true, allowed: [] }
             };
-            userAgents.unshift(newDefaultAgent);
-            this._saveAgents(userAgents);
-            defaultAgent = newDefaultAgent;
+            // Add the default agent at the beginning of the list.
+            this.agents.unshift(newDefaultAgent);
+            this.dataManager.save();
+        } else {
+            // Ensure the default agent is always first.
+            const defaultIdx = this.agents.findIndex(a => a.id === DEFAULT_AGENT_ID);
+            if (defaultIdx > 0) {
+                this.agents.unshift(this.agents.splice(defaultIdx, 1)[0]);
+                this.dataManager.save();
+            }
         }
-
-        const finalAgents = [...userAgents];
-        const defaultIdx = finalAgents.findIndex(a => a.id === DEFAULT_AGENT_ID);
-        if (defaultIdx > 0) {
-            // Ensure Default Agent is always the first in the list.
-            finalAgents.unshift(finalAgents.splice(defaultIdx, 1)[0]);
-        }
-        this.agents = finalAgents;
     }
 
-    /**
-     * Saves the provided list of agents to local storage.
-     * @param {Agent[]} [agents=this.agents] - The array of agents to save. Defaults to the current list.
-     * @private
-     */
-    _saveAgents(agents = this.agents) {
-        localStorage.setItem('core_agents_v2', JSON.stringify(agents));
-    }
-
-    /**
-     * Retrieves an agent by its unique ID.
-     * @param {string} id - The ID of the agent to retrieve.
-     * @returns {Agent | undefined} The found agent object, or `undefined` if not found.
-     */
     getAgent(id) {
-        return this.agents.find(a => a.id === id);
+        return this.dataManager.get(id);
     }
 
-    /**
-     * Creates a new agent with default values, adds it to the list, and saves it.
-     * @param {Partial<Omit<Agent, 'id'>>} agentData - Optional data to override the default new agent properties.
-     * @returns {Agent} The newly created agent object.
-     */
     addAgent(agentData) {
-        const existingIds = new Set(this.agents.map(a => a.id));
-        const newAgent = {
-            id: generateUniqueId('agent', existingIds),
+        const newAgentDefaults = {
             name: 'New Agent',
             description: 'A new, unconfigured agent.',
             systemPrompt: 'You are a helpful assistant.',
@@ -180,83 +123,45 @@ class AgentManager {
             toolSettings: { allowAll: true, allowed: [] },
             useCustomAgentCallSettings: false,
             agentCallSettings: { allowAll: true, allowed: [] },
-            ...agentData
         };
-        this.agents.push(newAgent);
-        this._saveAgents();
-        return newAgent;
+        return this.dataManager.add({ ...newAgentDefaults, ...agentData });
     }
 
-    /**
-     * Adds an agent from imported data, ensuring its ID is unique.
-     * If the agent's ID conflicts with an existing ID or is missing, a new unique
-     * ID will be generated. Otherwise, the original ID is preserved.
-     * @param {Agent} agentData - The agent data object to import.
-     * @returns {Agent | undefined} The newly added agent, or `undefined` if the data was invalid.
-     */
     addAgentFromData(agentData) {
-        if (!agentData || typeof agentData !== 'object') {
-            console.warn('Skipping invalid agent data during import:', agentData);
-            return;
-        }
-
-        const existingIds = new Set(this.agents.map(a => a.id));
-        const finalId = ensureUniqueId(agentData.id, 'agent', existingIds);
-
-        const newAgent = { ...agentData, id: finalId };
-
-        this.agents.push(newAgent);
-        this._saveAgents();
-        this.renderAgentList();
-        return newAgent;
+        return this.dataManager.addFromData(agentData);
     }
 
-    /**
-     * Updates an existing agent with new data.
-     * @param {Agent} agentData - The agent data to update. The `id` property is used for matching.
-     */
     updateAgent(agentData) {
-        const index = this.agents.findIndex(a => a.id === agentData.id);
-        if (index !== -1) {
-            this.agents[index] = { ...this.agents[index], ...agentData };
-            this.debouncedSave();
-        }
+        this.dataManager.update(agentData);
     }
 
-    /**
-     * Updates a single, potentially nested property of a specific agent.
-     * Uses a dot-notation path to specify the property to update.
-     * @param {string} agentId - The ID of the agent to update.
-     * @param {string} path - The dot-notation path to the property (e.g., 'modelSettings.temperature').
-     * @param {any} value - The new value for the property.
-     */
     updateAgentProperty(agentId, path, value) {
         const agent = this.getAgent(agentId);
         if (agent) {
             setPropertyByPath(agent, path, value);
             this.debouncedSave();
-            // If the name changed, update it in the agent list UI immediately.
             if (path === 'name') {
+                // The list pane will re-render on its own if needed,
+                // but for instant feedback, we can update the DOM directly.
                 const agentListItem = document.querySelector(`.list-item[data-id="${agentId}"] span`);
                 if (agentListItem) agentListItem.textContent = value;
             }
         }
     }
 
-    /**
-     * Deletes an agent by its ID. The Default Agent cannot be deleted.
-     * It also updates any chats that were using the deleted agent to use the default instead.
-     * @param {string} id - The ID of the agent to delete.
-     */
     deleteAgent(id) {
-        if (id === DEFAULT_AGENT_ID) return console.error("Cannot delete the Default Agent.");
-        this.agents = this.agents.filter(a => a.id !== id);
-        this._saveAgents();
+        if (id === DEFAULT_AGENT_ID) {
+            console.error("Cannot delete the Default Agent.");
+            return;
+        }
+        this.dataManager.delete(id);
         if (this.app.chatManager) {
             this.app.chatManager.chats.forEach(chat => {
-                if (chat.agent === id) chat.agent = null; // Reverts to default
+                if (chat.agent === id) {
+                    chat.agent = null; // Reverts to default
+                }
             });
-            this.app.chatManager.saveChats();
+            this.app.chatManager.dataManager.save();
         }
     }
 
@@ -377,35 +282,6 @@ class AgentManager {
         }
     }
 
-    /**
-     * Updates the visual state of the agent list to highlight the currently active agent.
-     */
-    updateActiveAgentInList() {
-        const agentListEl = document.getElementById('agent-list');
-        if (!agentListEl || !this.app) return;
-        const activeAgentId = this.app.activeView.type === 'agent-editor' ? this.app.activeView.id : null;
-        agentListEl.querySelectorAll('li').forEach(item => {
-            item.classList.toggle('active', item.dataset.id === activeAgentId);
-        });
-    }
-
-    /**
-     * Renders the list of agents in the sidebar pane.
-     */
-    renderAgentList() {
-        const agentListEl = document.getElementById('agent-list');
-        if (!agentListEl) return;
-        agentListEl.innerHTML = '';
-        this.agents.forEach(agent => {
-            const li = document.createElement('li');
-            li.className = 'list-item';
-            li.dataset.id = agent.id;
-            const deleteButtonHtml = agent.id === DEFAULT_AGENT_ID ? '' : '<button class="delete-button">X</button>';
-            li.innerHTML = `<span>${agent.name}</span>${deleteButtonHtml}`;
-            agentListEl.appendChild(li);
-        });
-        this.updateActiveAgentInList();
-    }
 
     /**
      * Renders the placeholder container for the agent editor view.
@@ -452,13 +328,10 @@ class AgentManager {
                 className: 'btn-gray',
                 onClick: () => {
                     importJson('.agents', (data) => {
-                        if (Array.isArray(data)) {
-                            data.forEach(agentData => this.addAgentFromData(agentData));
-                            alert(`${data.length} agent(s) imported successfully.`);
-                        } else {
-                            this.addAgentFromData(data);
-                            alert(`Agent imported successfully.`);
-                        }
+                        const agents = Array.isArray(data) ? data : [data];
+                        agents.forEach(agentData => this.addAgentFromData(agentData));
+                        this.listPane.renderList();
+                        alert(`${agents.length} agent(s) imported successfully.`);
                     });
                 }
             },
@@ -639,53 +512,27 @@ const agentsPlugin = {
         });
     },
 
-    /**
-     * The `onTabsRegistered` hook, which adds the 'Agents' tab to the sidebar.
-     * @param {Tab[]} tabs - The current array of tab definitions.
-     * @returns {Tab[]} The modified array of tab definitions.
-     */
     onTabsRegistered(tabs) {
         tabs.push({
             id: 'agents',
             label: 'Agents',
             viewType: 'agent-editor',
             onActivate: () => {
-                const contentEl = document.getElementById('agents-pane');
-                contentEl.innerHTML = `
-                    <div class="list-pane">
-                        <ul id="agent-list" class="item-list"></ul>
-                        <button id="add-agent-btn" class="add-new-button">Add New Agent</button>
-                    </div>
-                `;
-                agentManager.renderAgentList();
-
-                document.getElementById('add-agent-btn').addEventListener('click', () => {
-                    const newAgent = agentManager.addAgent({});
-                    agentManager.renderAgentList();
-                    agentManager.app.setView('agent-editor', newAgent.id);
-                });
-
-                document.getElementById('agent-list').addEventListener('click', (e) => {
-                    const agentItem = e.target.closest('.list-item');
-                    if (!agentItem) return;
-                    const agentId = agentItem.dataset.id;
-
-                    if (e.target.classList.contains('delete-button')) {
-                        e.stopPropagation();
-                        if (confirm(`Are you sure you want to delete agent "${agentManager.getAgent(agentId)?.name}"?`)) {
-                            agentManager.deleteAgent(agentId);
-                            agentManager.renderAgentList();
-                            if (agentManager.app.activeView.id === agentId) {
-                                // If the deleted agent was active, show the default agent view.
-                                agentManager.app.setView('agent-editor', DEFAULT_AGENT_ID);
-                            }
-                        }
-                    } else {
-                        agentManager.app.setView('agent-editor', agentId);
+                const pane = createListPane({
+                    container: document.getElementById('agents-pane'),
+                    dataManager: agentManager.dataManager,
+                    app: agentManager.app,
+                    viewType: 'agent-editor',
+                    addNewButtonLabel: 'Add New Agent',
+                    onAddNew: () => agentManager.addAgent({}),
+                    getItemName: (item) => item.name,
+                    onDelete: (itemId, itemName) => {
+                        if (itemId === DEFAULT_AGENT_ID) return false;
+                        return confirm(`Are you sure you want to delete agent "${itemName}"?`);
                     }
                 });
+                agentManager.listPane = pane;
 
-                // If no agent is active or the active one is invalid, show the default agent.
                 const lastActiveId = agentManager.app.lastActiveIds['agent-editor'];
                 const lastAgent = agentManager.getAgent(lastActiveId);
                 if (!lastAgent) {
@@ -696,23 +543,17 @@ const agentsPlugin = {
         return tabs;
     },
 
-    /**
-     * The `onViewRendered` hook, which ensures the agent editor is correctly initialized
-     * whenever its view is rendered.
-     * @param {View} view - The view that was just rendered.
-     * @param {Chat} chat - The active chat instance (can be null).
-     */
     onViewRendered(view, chat) {
         if (view.type === 'agent-editor') {
-            // Re-initialize the editor content, including the title bar.
             const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
             if (existingTitleBar) {
                 existingTitleBar.remove();
             }
             agentManager.initializeAgentEditor();
+            if (agentManager.listPane) {
+                agentManager.listPane.updateActiveItem();
+            }
         }
-        // Always update the active agent highlight in the list.
-        agentManager.updateActiveAgentInList();
     },
 
     /**
