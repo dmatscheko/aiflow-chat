@@ -198,8 +198,8 @@ const titleBarPlugin = {
                     text: chat.title,
                     onSave: (newTitle) => {
                         chat.title = newTitle;
-                        appInstance.chatManager.saveChats();
-                        appInstance.chatManager.renderChatList();
+                        appInstance.chatManager.dataManager.save();
+                        appInstance.chatManager.listPane.renderList();
                         appInstance.renderMainView(); // Re-render to update title bar
                     }
                 }
