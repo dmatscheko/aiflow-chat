@@ -103,4 +103,70 @@ export class ApiService {
             throw error;
         }
     }
+
+    /**
+     * A unified method to handle the entire lifecycle of a streaming API call.
+     * It initiates the request, processes the stream, updates the message object
+     * in real-time, and handles errors and finalization.
+     * @param {object} payload - The request payload for the API.
+     * @param {object} config - The API configuration { apiUrl, apiKey }.
+     * @param {object} message - The message object to be updated with the streamed content.
+     * @param {function} notifyUpdate - A callback function to signal that the message has been updated.
+     * @param {AbortSignal} abortSignal - The signal to abort the fetch request.
+     * @returns {Promise<void>} A promise that resolves when the stream is fully processed.
+     */
+    async streamAndProcessResponse(payload, config, message, notifyUpdate, abortSignal) {
+        try {
+            const reader = await this.streamChat(
+                payload,
+                config.apiUrl,
+                config.apiKey,
+                abortSignal
+            );
+
+            message.value.content = ''; // Initialize content
+            notifyUpdate();
+
+            const decoder = new TextDecoder();
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value);
+                const lines = chunk.split('\n');
+                const deltas = lines
+                    .map(line => line.replace(/^data: /, '').trim())
+                    .filter(line => line !== '' && line !== '[DONE]')
+                    .map(line => {
+                        try {
+                            return JSON.parse(line);
+                        } catch (e) {
+                            console.error("Failed to parse stream chunk:", line, e);
+                            return null;
+                        }
+                    })
+                    .filter(Boolean)
+                    .map(json => json.choices[0].delta.content)
+                    .filter(content => content);
+
+                if (deltas.length > 0) {
+                    message.value.content += deltas.join('');
+                    notifyUpdate();
+                }
+            }
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                message.value.content += '\n\n[Aborted by user]';
+            } else {
+                // Prepend error for tool calls, otherwise set as content
+                const errorMessage = `<error>An error occurred: ${error.message}</error>`;
+                if (message.value.role === 'tool') {
+                    message.value.content = errorMessage + message.value.content;
+                } else {
+                    message.value.content = `Error: ${error.message}`;
+                }
+            }
+            notifyUpdate(); // Notify one last time for error/abort messages
+        }
+    }
 }
