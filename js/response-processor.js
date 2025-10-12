@@ -190,15 +190,13 @@ class ResponseProcessor {
 
             const agentId = assistantMsg.agent;
             const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
-
-            // Use the centralized method to construct the system prompt.
             const finalSystemPrompt = await app.agentManager.constructSystemPrompt(agentId);
 
             if (finalSystemPrompt) {
                 messages.unshift({ role: 'system', content: finalSystemPrompt });
             }
 
-            let payload = {
+            const payload = {
                 model: effectiveConfig.model,
                 messages: messages,
                 stream: true,
@@ -208,47 +206,20 @@ class ResponseProcessor {
 
             assistantMsg.value.model = payload.model;
 
-            const reader = await app.apiService.streamChat(
+            // Delegate the entire streaming and processing logic to the ApiService
+            await app.apiService.streamAndProcessResponse(
                 payload,
-                effectiveConfig.apiUrl,
-                effectiveConfig.apiKey,
+                effectiveConfig,
+                assistantMsg,
+                () => chat.log.notify(),
                 app.abortController.signal
             );
 
-            assistantMsg.value.content = ''; // Start filling content
-            chat.log.notify();
-
-            const decoder = new TextDecoder();
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n');
-                const deltas = lines
-                    .map(line => line.replace(/^data: /, '').trim())
-                    .filter(line => line !== '' && line !== '[DONE]')
-                    .map(line => {
-                        try {
-                            return JSON.parse(line);
-                        } catch (e) {
-                            console.error("Failed to parse stream chunk:", line, e);
-                            return null;
-                        }
-                    })
-                    .filter(Boolean)
-                    .map(json => json.choices[0].delta.content)
-                    .filter(content => content);
-
-                if (deltas.length > 0) {
-                    assistantMsg.value.content += deltas.join('');
-                    chat.log.notify();
-                }
-            }
         } catch (error) {
+            // The unified method handles its own errors, but we catch any potential
+            // configuration errors that occur before the call.
             if (error.name !== 'AbortError') {
                 assistantMsg.value.content = `Error: ${error.message}`;
-            } else {
-                assistantMsg.value.content += '\n\n[Aborted by user]';
             }
             chat.log.notify();
         } finally {

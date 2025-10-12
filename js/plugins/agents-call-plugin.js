@@ -220,51 +220,35 @@ class AgentsCallPlugin {
             toolResponseAsMessage.value.model = targetAgentConfig.model;
 
             const systemPrompt = await agentManager.constructSystemPrompt(targetAgent.id);
-
             const history = activeChat.log.getHistoryForAgentCall(message, fullContext);
-            const messagesForPayload = [
-                ...history,
-                { role: 'user', content: prompt }
-            ];
+            const messagesForPayload = [...history, { role: 'user', content: prompt }];
+
+            if (systemPrompt) {
+                messagesForPayload.unshift({ role: 'system', content: systemPrompt });
+            }
 
             const payload = {
                 model: targetAgentConfig.model,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    ...messagesForPayload
-                ],
+                messages: messagesForPayload,
                 stream: true,
                 temperature: targetAgentConfig.temperature,
                 top_p: targetAgentConfig.top_p,
             };
 
-            const reader = await this.app.apiService.streamChat(
-                payload, targetAgentConfig.apiUrl, targetAgentConfig.apiKey, abortController.signal
+            // Delegate the entire streaming and processing logic to the ApiService
+            await this.app.apiService.streamAndProcessResponse(
+                payload,
+                targetAgentConfig,
+                toolResponseAsMessage,
+                () => activeChat.log.notify(),
+                abortController.signal
             );
 
-            const decoder = new TextDecoder();
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                const chunk = decoder.decode(value);
-                const lines = chunk.split('\n');
-                const deltas = lines
-                    .map(line => line.replace(/^data: /, '').trim())
-                    .filter(line => line !== '' && line !== '[DONE]')
-                    .map(line => JSON.parse(line).choices[0].delta.content)
-                    .filter(Boolean);
-
-                if (deltas.length > 0) {
-                    toolResponseAsMessage.value.content += deltas.join('');
-                    activeChat.log.notify();
-                }
-            }
         } catch (error) {
-            if (error.name === 'AbortError') {
-                toolResponseAsMessage.value.content += '\n\n[Aborted by user]';
-            } else {
-                toolResponseAsMessage.value.content = `<error>An error occurred while calling the agent: ${error.message}</error>`;
-            }
+            // The unified method handles its own errors, but we catch any potential
+            // configuration errors that occur before the call.
+            const errorMessage = `<error>An error occurred while calling the agent: ${error.message}</error>`;
+            toolResponseAsMessage.value.content = errorMessage;
             activeChat.log.notify();
         } finally {
             this.app.abortController = null;
