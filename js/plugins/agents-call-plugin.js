@@ -83,7 +83,7 @@ class AgentsCallPlugin {
         const allAgents = agentManager.agents;
         const callableAgents = effectiveAgentCallSettings.allowAll
             ? allAgents.filter(a => a.id !== agent.id) // An agent cannot call itself.
-            : allAgents.filter(a => effectiveAgentCallSettings.allowed?.includes(a.id));
+            : allAgents.filter(a => a.id !== agent.id && effectiveAgentCallSettings.allowed?.includes(a.id));
 
         if (callableAgents.length === 0) {
             return systemPrompt;

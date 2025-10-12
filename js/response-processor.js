@@ -202,7 +202,9 @@ class ResponseProcessor {
                 }
             }
         }
-        app.chatManager.renderChatList();
+        if (app.chatManager.listPane) {
+            app.chatManager.listPane.renderList();
+        }
     }
 }
 

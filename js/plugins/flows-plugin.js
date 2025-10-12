@@ -8,9 +8,11 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { debounce, importJson, exportJson, generateUniqueId, ensureUniqueId, generateUniqueName } from '../utils.js';
+import { debounce, importJson, exportJson, generateUniqueName } from '../utils.js';
 import { createTitleBar } from './title-bar-plugin.js';
 import { registerFlowStepDefinitions } from './flows-plugin-step-definitions.js';
+import { DataManager } from '../data-manager.js';
+import { createListPane } from '../ui/list-pane.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -76,120 +78,39 @@ let flowsManager = null;
  * @class
  */
 export class FlowsManager {
-    /**
-     * Initializes the FlowsManager.
-     * @param {App} app - The main application instance.
-     */
     constructor(app) {
-        /**
-         * The main application instance.
-         * @type {App}
-         */
         this.app = app;
-        /**
-         * An array holding all loaded flow objects.
-         * @type {Flow[]}
-         */
-        this.flows = this._loadFlows();
-        /**
-         * A map of registered step type definitions.
-         * @type {Object.<string, FlowStepDefinition & {type: string}>}
-         */
+        this.listPane = null;
+        this.dataManager = new DataManager('core_flows_v2', 'flow');
+        this.flows = this.dataManager.getAll();
         this.stepTypes = {};
-        /**
-         * The currently active `FlowRunner` instance, or `null` if no flow is running.
-         * @type {FlowRunner | null}
-         */
         this.activeFlowRunner = null;
-        /**
-         * State object for managing node dragging on the canvas.
-         * @type {object}
-         * @private
-         */
         this.dragInfo = {};
-        /**
-         * State object for managing canvas panning.
-         * @type {object}
-         * @private
-         */
         this.panInfo = {};
-        /**
-         * State object for managing the creation of new connections.
-         * @type {object}
-         * @private
-         */
         this.connectionInfo = {};
-
         this._defineSteps();
     }
 
-    // --- Core Flow Management ---
-    /**
-     * Loads flows from local storage.
-     * @returns {Flow[]} The loaded flows.
-     * @private
-     */
-    _loadFlows() { try { return JSON.parse(localStorage.getItem('core_flows_v2')) || []; } catch (e) { console.error('Failed to load flows:', e); return []; } }
+    getFlow(id) { return this.dataManager.get(id); }
 
-    /**
-     * Saves all flows to local storage.
-     * @private
-     */
-    _saveFlows() { localStorage.setItem('core_flows_v2', JSON.stringify(this.flows)); }
-
-    /**
-     * Retrieves a flow by its ID.
-     * @param {string} id - The ID of the flow to retrieve.
-     * @returns {Flow | undefined} The found flow, or `undefined`.
-     */
-    getFlow(id) { return this.flows.find(f => f.id === id); }
-
-    /**
-     * Creates a new flow, adds it to the list, and saves it.
-     * @param {Omit<Flow, 'id'>} flowData - The data for the new flow, without an ID.
-     * @returns {Flow} The newly created flow object.
-     */
     addFlow(flowData) {
-        const existingIds = new Set(this.flows.map(f => f.id));
-        const newFlow = { ...flowData, id: generateUniqueId('flow', existingIds) };
-        this.flows.push(newFlow);
-        this._saveFlows();
-        return newFlow;
+        const existingNames = this.flows.map(f => f.name);
+        const name = generateUniqueName(flowData.name || 'New Flow', existingNames);
+        return this.dataManager.add({ ...flowData, name });
     }
 
-    /**
-     * Updates an existing flow with new data.
-     * @param {Flow} flowData - The full flow object to update.
-     */
-    updateFlow(flowData) { const i = this.flows.findIndex(f => f.id === flowData.id); if (i !== -1) { this.flows[i] = flowData; this._saveFlows(); } }
+    updateFlow(flowData) { this.dataManager.update(flowData); }
 
-    /**
-     * Deletes a flow by its ID.
-     * @param {string} id - The ID of the flow to delete.
-     */
-    deleteFlow(id) { this.flows = this.flows.filter(f => f.id !== id); this._saveFlows(); }
+    deleteFlow(id) { this.dataManager.delete(id); }
 
-    /**
-     * Adds a flow from imported data, ensuring its ID is unique.
-     * @param {Flow} flowData - The flow data to import.
-     * @returns {Flow} The newly added flow object.
-     */
     addFlowFromData(flowData) {
-        const existingIds = new Set(this.flows.map(f => f.id));
-        const finalId = ensureUniqueId(flowData.id, 'flow', existingIds);
-
-        const newFlow = { ...flowData, id: finalId };
-        this.flows.push(newFlow);
-        this._saveFlows();
-        const flowListEl = document.getElementById('flow-list');
-        if (flowListEl) this.renderFlowList();
+        const newFlow = this.dataManager.addFromData(flowData);
+        if (this.listPane) {
+            this.listPane.renderList();
+        }
         return newFlow;
     }
 
-    /**
-     * Starts the execution of a flow by creating and starting a `FlowRunner`.
-     * @param {string} flowId - The ID of the flow to start.
-     */
     startFlow(flowId) {
         const flow = this.getFlow(flowId);
         if (flow) {
@@ -198,49 +119,16 @@ export class FlowsManager {
         }
     }
 
-    // --- Step Definition ---
-    /**
-     * Defines a new type of flow step.
-     * @param {string} type - The unique identifier for the step type.
-     * @param {FlowStepDefinition} definition - The definition object for the step.
-     * @private
-     */
     _defineStep(type, definition) { this.stepTypes[type] = { ...definition, type }; }
 
-    /**
-     * Registers all built-in step type definitions.
-     * @private
-     */
     _defineSteps() {
         registerFlowStepDefinitions(this);
     }
 
-    // --- UI Rendering ---
-    /**
-     * Updates the visual state of the flow list to highlight the currently active flow.
-     */
     updateActiveFlowInList() {
-        const flowListEl = document.getElementById('flow-list');
-        if (!flowListEl || !this.app) return;
-        const activeFlowId = this.app.activeView.type === 'flow-editor' ? this.app.activeView.id : null;
-        flowListEl.querySelectorAll('li').forEach(item => item.classList.toggle('active', item.dataset.id === activeFlowId));
-    }
-
-    /**
-     * Renders the list of flows in the sidebar pane.
-     */
-    renderFlowList() {
-        const listEl = document.getElementById('flow-list');
-        if (!listEl) return;
-        listEl.innerHTML = '';
-        this.flows.forEach(flow => {
-            const li = document.createElement('li');
-            li.className = 'list-item';
-            li.dataset.id = flow.id;
-            li.innerHTML = `<span>${flow.name}</span><button class="delete-button">X</button>`;
-            listEl.appendChild(li);
-        });
-        this.updateActiveFlowInList();
+        if (this.listPane) {
+            this.listPane.updateActiveItem();
+        }
     }
 
     /**
@@ -618,56 +506,35 @@ const flowsPlugin = {
         pluginManager.registerView('flow-editor', (id) => flowsManager.renderFlowEditor(id));
     },
 
-    /**
-     * Adds the 'Flows' tab to the sidebar.
-     * @param {Tab[]} tabs - The current array of tabs.
-     * @returns {Tab[]} The updated array of tabs.
-     */
     onTabsRegistered(tabs) {
         tabs.push({
             id: 'flows',
             label: 'Flows',
             viewType: 'flow-editor',
             onActivate: () => {
-                const contentEl = document.getElementById('flows-pane');
-                contentEl.innerHTML = `<div class="list-pane"><ul id="flow-list" class="item-list"></ul><button id="add-flow-btn" class="add-new-button">Add New Flow</button></div>`;
-                flowsManager.renderFlowList();
-
-                document.getElementById('add-flow-btn').addEventListener('click', () => {
-                    const existingNames = flowsManager.flows.map(f => f.name);
-                    const name = generateUniqueName('New Flow', existingNames);
-                    const newFlow = flowsManager.addFlow({ name, steps: [], connections: [] });
-                    flowsManager.renderFlowList();
-                    flowsManager.app.setView('flow-editor', newFlow.id);
-                });
-
-                document.getElementById('flow-list').addEventListener('click', (e) => {
-                    const item = e.target.closest('.list-item');
-                    if (!item) return;
-                    const id = item.dataset.id;
-                    if (e.target.classList.contains('delete-button')) {
-                        e.stopPropagation();
-                        const flow = flowsManager.getFlow(id);
-                        const doDelete = () => {
-                            flowsManager.deleteFlow(id);
-                            flowsManager.renderFlowList();
-                            // If the deleted flow was active, show the default view.
-                            if (flowsManager.app.activeView.id === id) {
-                                flowsManager.app.setView('flow-editor', null);
+                flowsManager.listPane = createListPane({
+                    container: document.getElementById('flows-pane'),
+                    dataManager: flowsManager.dataManager,
+                    app: flowsManager.app,
+                    viewType: 'flow-editor',
+                    addNewButtonLabel: 'Add New Flow',
+                    onAddNew: () => flowsManager.addFlow({ name: 'New Flow', steps: [], connections: [] }),
+                    getItemName: (item) => item.name,
+                    onDelete: (itemId, itemName) => {
+                        const flow = flowsManager.getFlow(itemId);
+                        if (flow && flow.steps.length > 0) {
+                            if (!confirm('This flow is not empty. Are you sure you want to delete it?')) {
+                                return false;
                             }
-                        };
-
-                        if (flow && flow.steps.length === 0) {
-                            doDelete();
-                        } else if (confirm('Delete this flow?')) {
-                            doDelete();
                         }
-                    } else {
-                        flowsManager.app.setView('flow-editor', id);
+
+                        if (flowsManager.app.activeView.id === itemId) {
+                            flowsManager.app.setView('flow-editor', null);
+                        }
+                        return true;
                     }
                 });
 
-                // If no flow is active when the tab is shown, set the view to the default.
                 if (!flowsManager.app.lastActiveIds['flow-editor']) {
                     flowsManager.app.setView('flow-editor', null);
                 }
@@ -676,11 +543,6 @@ const flowsPlugin = {
         return tabs;
     },
 
-    /**
-     * Initializes the flow editor UI when its view is rendered.
-     * @param {View} view - The view that was rendered.
-     * @param {Chat} chat - The active chat instance.
-     */
     onViewRendered(view, chat) {
         if (view.type === 'flow-editor') {
             const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
@@ -692,6 +554,16 @@ const flowsPlugin = {
             const flow = flowsManager.getFlow(view.id);
             let title;
             let buttons = [];
+
+            const renderAndConnect = () => {
+                flowsManager.renderFlow(flow);
+                setTimeout(() => flowsManager.updateConnections(flow), 0);
+            };
+
+            const handleImport = (data) => {
+                const newFlow = flowsManager.addFlowFromData(data);
+                flowsManager.app.setView('flow-editor', newFlow.id);
+            };
 
             if (flow) {
                 title = flow.name;
@@ -726,29 +598,17 @@ const flowsPlugin = {
                         id: 'load-flow-btn',
                         label: 'Load Flow',
                         className: 'btn-gray',
-                        onClick: () => {
-                            importJson('.flow', (data) => {
-                                const newFlow = flowsManager.addFlowFromData(data);
-                                flowsManager.app.setView('flow-editor', newFlow.id);
-                            });
-                        }
+                        onClick: () => importJson('.flow', handleImport)
                     },
                     {
                         id: 'save-flow-btn',
                         label: 'Save Flow',
                         className: 'btn-gray',
-                        onClick: () => {
-                            exportJson(flow, flow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow');
-                        }
+                        onClick: () => exportJson(flow, flow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow')
                     }
                 ];
 
                 const debouncedUpdate = debounce(() => flowsManager.updateFlow(flow), 500);
-
-                const renderAndConnect = () => {
-                    flowsManager.renderFlow(flow);
-                    setTimeout(() => flowsManager.updateConnections(flow), 0);
-                };
 
                 renderAndConnect(); // Initial render
 
@@ -796,12 +656,7 @@ const flowsPlugin = {
                         id: 'load-flow-btn',
                         label: 'Load Flow',
                         className: 'btn-gray',
-                        onClick: () => {
-                            importJson('.flow', (data) => {
-                                const newFlow = flowsManager.addFlowFromData(data);
-                                flowsManager.app.setView('flow-editor', newFlow.id);
-                            });
-                        }
+                        onClick: () => importJson('.flow', handleImport)
                     }
                 ];
             }
@@ -813,7 +668,7 @@ const flowsPlugin = {
                     onSave: (newName) => {
                         flow.name = newName;
                         flowsManager.updateFlow(flow);
-                        flowsManager.renderFlowList();
+                        flowsManager.listPane.renderList();
                         flowsManager.app.setView('flow-editor', flow.id);
                     }
                 });
