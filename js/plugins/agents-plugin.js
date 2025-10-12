@@ -67,6 +67,7 @@ let agentManager = null;
 class AgentManager {
     constructor(app) {
         this.app = app;
+        this.listPane = null;
         this.dataManager = new DataManager('core_agents_v2', 'agent');
         this.agents = this.dataManager.getAll();
         this.modelCache = new Map();
@@ -128,7 +129,11 @@ class AgentManager {
     }
 
     addAgentFromData(agentData) {
-        return this.dataManager.addFromData(agentData);
+        const newAgent = this.dataManager.addFromData(agentData);
+        if (this.listPane) {
+            this.listPane.renderList();
+        }
+        return newAgent;
     }
 
     updateAgent(agentData) {
@@ -140,11 +145,8 @@ class AgentManager {
         if (agent) {
             setPropertyByPath(agent, path, value);
             this.debouncedSave();
-            if (path === 'name') {
-                // The list pane will re-render on its own if needed,
-                // but for instant feedback, we can update the DOM directly.
-                const agentListItem = document.querySelector(`.list-item[data-id="${agentId}"] span`);
-                if (agentListItem) agentListItem.textContent = value;
+            if (path === 'name' && this.listPane) {
+                this.listPane.renderList();
             }
         }
     }
@@ -165,12 +167,6 @@ class AgentManager {
         }
     }
 
-    /**
-     * Calculates the effective API configuration for a given agent by layering its
-     * custom settings over the Default Agent's settings.
-     * @param {string|null} [agentId=null] - The ID of the agent. If null, it uses the active chat's agent.
-     * @returns {object} The final, combined configuration object to be used for an API call.
-     */
     getEffectiveApiConfig(agentId = null) {
         const activeChat = this.app.chatManager ? this.app.chatManager.getActiveChat() : null;
         const finalAgentId = agentId || activeChat?.agent || DEFAULT_AGENT_ID;
@@ -182,7 +178,6 @@ class AgentManager {
             return {};
         }
 
-        // Start with a deep copy of the complete default agent configuration.
         const effectiveConfig = {
             systemPrompt: defaultAgent.systemPrompt,
             ...(defaultAgent.modelSettings || {}),
@@ -190,13 +185,11 @@ class AgentManager {
             agentCallSettings: { ...(defaultAgent.agentCallSettings || {}) },
         };
 
-        // If a specific agent is active (and it's not the default), layer its settings on top.
         if (agent && agent.id !== DEFAULT_AGENT_ID) {
             effectiveConfig.systemPrompt = agent.systemPrompt;
 
             if (agent.useCustomModelSettings) {
                 Object.assign(effectiveConfig, agent.modelSettings);
-                // If the custom agent doesn't specify a URL, it inherits the default's URL and key.
                 if (!agent.modelSettings?.apiUrl) {
                     effectiveConfig.apiUrl = defaultAgent.modelSettings.apiUrl;
                     effectiveConfig.apiKey = defaultAgent.modelSettings.apiKey;
@@ -205,7 +198,6 @@ class AgentManager {
 
             if (agent.useCustomToolSettings) {
                 Object.assign(effectiveConfig.toolSettings, agent.toolSettings);
-                 // If the custom agent doesn't specify an MCP server, it inherits the default's.
                 if (!agent.toolSettings?.mcpServer) {
                     effectiveConfig.toolSettings.mcpServer = defaultAgent.toolSettings?.mcpServer;
                 }
@@ -219,13 +211,6 @@ class AgentManager {
         return effectiveConfig;
     }
 
-    /**
-     * Constructs the full system prompt for a given agent by starting with its base
-     * prompt and then allowing other plugins (like tools and agent-calling plugins)
-     * to append their own instructional text via the `onSystemPromptConstruct` hook.
-     * @param {string | null} [agentId=null] - The ID of the agent. If null, uses the active chat's agent.
-     * @returns {Promise<string>} A promise that resolves to the fully constructed system prompt.
-     */
     async constructSystemPrompt(agentId = null) {
         const activeChat = this.app.chatManager ? this.app.chatManager.getActiveChat() : null;
         const finalAgentId = agentId || activeChat?.agent || DEFAULT_AGENT_ID;
@@ -233,24 +218,16 @@ class AgentManager {
         const agent = this.getAgent(finalAgentId);
         const effectiveConfig = this.getEffectiveApiConfig(finalAgentId);
 
-        // Trigger the hook to allow plugins to contribute to the system prompt.
         const finalSystemPrompt = await pluginManager.triggerAsync(
             'onSystemPromptConstruct',
-            effectiveConfig.systemPrompt, // Initial value
-            effectiveConfig,              // All settings for context
-            agent                         // The specific agent instance
+            effectiveConfig.systemPrompt,
+            effectiveConfig,
+            agent
         );
 
         return finalSystemPrompt;
     }
 
-    /**
-     * Fetches the list of available models for a given agent's API configuration.
-     * It uses a cache to avoid re-fetching for the same API URL.
-     * @param {string|null} [agentId=null] - The agent whose API config should be used.
-     * @param {HTMLSelectElement|null} [targetSelectElement=null] - The dropdown element to populate with the models.
-     * @async
-     */
     async fetchModels(agentId = null, targetSelectElement = null) {
         const effectiveConfig = this.getEffectiveApiConfig(agentId);
         const { apiUrl, apiKey, model: currentModelValue } = effectiveConfig;
@@ -282,6 +259,11 @@ class AgentManager {
         }
     }
 
+    updateActiveAgentInList() {
+        if (this.listPane) {
+            this.listPane.updateActiveItem();
+        }
+    }
 
     /**
      * Renders the placeholder container for the agent editor view.
@@ -328,10 +310,13 @@ class AgentManager {
                 className: 'btn-gray',
                 onClick: () => {
                     importJson('.agents', (data) => {
-                        const agents = Array.isArray(data) ? data : [data];
-                        agents.forEach(agentData => this.addAgentFromData(agentData));
-                        this.listPane.renderList();
-                        alert(`${agents.length} agent(s) imported successfully.`);
+                        if (Array.isArray(data)) {
+                            data.forEach(agentData => this.addAgentFromData(agentData));
+                            alert(`${data.length} agent(s) imported successfully.`);
+                        } else {
+                            this.addAgentFromData(data);
+                            alert(`Agent imported successfully.`);
+                        }
                     });
                 }
             },
@@ -518,7 +503,7 @@ const agentsPlugin = {
             label: 'Agents',
             viewType: 'agent-editor',
             onActivate: () => {
-                const pane = createListPane({
+                agentManager.listPane = createListPane({
                     container: document.getElementById('agents-pane'),
                     dataManager: agentManager.dataManager,
                     app: agentManager.app,
@@ -531,7 +516,6 @@ const agentsPlugin = {
                         return confirm(`Are you sure you want to delete agent "${itemName}"?`);
                     }
                 });
-                agentManager.listPane = pane;
 
                 const lastActiveId = agentManager.app.lastActiveIds['agent-editor'];
                 const lastAgent = agentManager.getAgent(lastActiveId);
@@ -550,9 +534,7 @@ const agentsPlugin = {
                 existingTitleBar.remove();
             }
             agentManager.initializeAgentEditor();
-            if (agentManager.listPane) {
-                agentManager.listPane.updateActiveItem();
-            }
+            agentManager.updateActiveAgentInList();
         }
     },
 

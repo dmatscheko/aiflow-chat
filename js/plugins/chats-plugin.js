@@ -42,7 +42,7 @@ let appInstance = null;
 class ChatManager {
     constructor(app) {
         this.app = app;
-
+        this.listPane = null;
         this.dataManager = new DataManager('core_chat_logs', 'chat', (loadedData) => {
             return loadedData.map(chatData => this._hydrateChat(chatData));
         });
@@ -50,13 +50,6 @@ class ChatManager {
         this.chats = this.dataManager.getAll();
         this.activeChatId = null;
         this.chatUI = null;
-        this.debouncedSave = debounce(() => {
-            const activeChat = this.getActiveChat();
-            if (activeChat && this.app.dom.messageInput) {
-                activeChat.draftMessage = this.app.dom.messageInput.value;
-            }
-            this.dataManager.save();
-        }, 500);
     }
 
     _hydrateChat(chatData) {
@@ -68,7 +61,7 @@ class ChatManager {
             agent: chatData.agent || null,
             flow: chatData.flow || null,
         };
-        chat.log.subscribe(this.debouncedSave);
+        chat.log.subscribe(() => this.dataManager.save());
         return chat;
     }
 
@@ -110,10 +103,24 @@ class ChatManager {
         this.app.setView('chat', addedItem.id);
     }
 
+    updateActiveChatInList() {
+        if (this.listPane) {
+            this.listPane.updateActiveItem();
+        }
+    }
+
+    /**
+     * Retrieves the currently active chat object.
+     * @returns {Chat | undefined} The active chat object, or undefined if not found.
+     */
     getActiveChat() {
         return this.chats.find(c => c.id === this.activeChatId);
     }
 
+    /**
+     * Initializes the chat view, including the message display area and input form listeners.
+     * @param {string} chatId - The ID of the chat to initialize the view for.
+     */
     initChatView(chatId) {
         const chat = this.chats.find(c => c.id === chatId);
         if (!chat) return;
@@ -129,7 +136,7 @@ class ChatManager {
             const activeChat = this.getActiveChat();
             if (activeChat) {
                 activeChat.draftMessage = this.app.dom.messageInput.value;
-                this.debouncedSave(); // This will now call dataManager.save()
+                this.debouncedSave();
             }
         });
 
@@ -140,6 +147,8 @@ class ChatManager {
         this.app.dom.stopButton.addEventListener('click', () => this.stopChatFlow());
 
         this.app.dom.messageInput.addEventListener('keydown', (e) => {
+            // If an edit-in-place textarea is active, don't do anything.
+            // This prevents conflicts with the edit-in-place keyboard shortcuts.
             if (document.querySelector('.edit-in-place')) {
                 return;
             }
@@ -151,6 +160,15 @@ class ChatManager {
         });
     }
 
+    /**
+     * Handles the submission of the message form. It adds the user's message to the
+     * log (unless it's a continuation), then queues a pending assistant message
+     * to trigger the response generation process.
+     * @param {object} [options={}] - Options for the submission.
+     * @param {boolean} [options.isContinuation=false] - If true, a user message is not added, and the assistant just continues.
+     * @param {string|null} [options.agentId=null] - The ID of an agent to use for this specific turn.
+     * @async
+     */
     async handleFormSubmit(options = {}) {
         const { isContinuation = false, agentId = null } = options;
         const activeChat = this.getActiveChat();
@@ -162,7 +180,7 @@ class ChatManager {
             activeChat.log.addMessage({ role: 'user', content: userInput }, {});
             this.app.dom.messageInput.value = '';
             activeChat.draftMessage = '';
-            this.dataManager.save();
+            this.saveChats();
         }
 
         const finalAgentId = agentId || activeChat.agent;
@@ -170,6 +188,9 @@ class ChatManager {
         responseProcessor.scheduleProcessing(this.app);
     }
 
+    /**
+     * Stops any ongoing chat response generation or flow execution.
+     */
     stopChatFlow() {
         if (this.app.flowsManager && this.app.flowsManager.activeFlowRunner) {
             this.app.flowsManager.activeFlowRunner.stop('Flow stopped by user.');
@@ -398,7 +419,7 @@ const chatPlugin = {
             label: 'Chats',
             viewType: 'chat',
             onActivate: () => {
-                createListPane({
+                chatManager.listPane = createListPane({
                     container: document.getElementById('chats-pane'),
                     dataManager: chatManager.dataManager,
                     app: appInstance,
@@ -407,25 +428,19 @@ const chatPlugin = {
                     onAddNew: () => chatManager.createNewChat(),
                     getItemName: (item) => item.title,
                     onDelete: (itemId, itemName) => {
-                        const doDelete = () => {
-                            // If the deleted chat was active, switch to another one
+                         if (confirm(`Are you sure you want to delete chat "${itemName}"?`)) {
                             if (chatManager.activeChatId === itemId) {
                                 const chats = chatManager.dataManager.getAll();
                                 const newActiveChat = chats.length > 0 ? chats[0] : null;
                                 if (newActiveChat) {
                                     appInstance.setView('chat', newActiveChat.id);
                                 } else {
-                                    // This case is handled by createListPane, but as a fallback:
                                     chatManager.createNewChat();
                                 }
                             }
-                        };
-
-                        if (confirm(`Are you sure you want to delete chat "${itemName}"?`)) {
-                            doDelete();
-                            return true; // Proceed with deletion
+                            return true;
                         }
-                        return false; // Cancel deletion
+                        return false;
                     }
                 });
             }
@@ -438,16 +453,7 @@ const chatPlugin = {
             appInstance.chatManager.activeChatId = view.id;
             appInstance.chatManager.saveActiveChatId();
             appInstance.chatManager.initChatView(view.id);
-            // This is a bit of a hack to update the list pane.
-            // A more robust solution might involve a global event bus.
-            const listPaneContainer = document.getElementById('chats-pane');
-            if (listPaneContainer.querySelector('.list-pane')) {
-                 const listPane = listPaneContainer.querySelector('.list-pane');
-                 const activeItem = listPane.querySelector('.active');
-                 if (activeItem) activeItem.classList.remove('active');
-                 const newItem = listPane.querySelector(`[data-id="${view.id}"]`);
-                 if (newItem) newItem.classList.add('active');
-            }
+            appInstance.chatManager.updateActiveChatInList();
         }
     }
 };

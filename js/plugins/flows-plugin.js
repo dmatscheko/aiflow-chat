@@ -80,6 +80,7 @@ let flowsManager = null;
 export class FlowsManager {
     constructor(app) {
         this.app = app;
+        this.listPane = null;
         this.dataManager = new DataManager('core_flows_v2', 'flow');
         this.flows = this.dataManager.getAll();
         this.stepTypes = {};
@@ -90,7 +91,6 @@ export class FlowsManager {
         this._defineSteps();
     }
 
-    // --- Core Flow Management ---
     getFlow(id) { return this.dataManager.get(id); }
 
     addFlow(flowData) {
@@ -104,13 +104,13 @@ export class FlowsManager {
     deleteFlow(id) { this.dataManager.delete(id); }
 
     addFlowFromData(flowData) {
-        return this.dataManager.addFromData(flowData);
+        const newFlow = this.dataManager.addFromData(flowData);
+        if (this.listPane) {
+            this.listPane.renderList();
+        }
+        return newFlow;
     }
 
-    /**
-     * Starts the execution of a flow by creating and starting a `FlowRunner`.
-     * @param {string} flowId - The ID of the flow to start.
-     */
     startFlow(flowId) {
         const flow = this.getFlow(flowId);
         if (flow) {
@@ -119,24 +119,17 @@ export class FlowsManager {
         }
     }
 
-    // --- Step Definition ---
-    /**
-     * Defines a new type of flow step.
-     * @param {string} type - The unique identifier for the step type.
-     * @param {FlowStepDefinition} definition - The definition object for the step.
-     * @private
-     */
     _defineStep(type, definition) { this.stepTypes[type] = { ...definition, type }; }
 
-    /**
-     * Registers all built-in step type definitions.
-     * @private
-     */
     _defineSteps() {
         registerFlowStepDefinitions(this);
     }
 
-    // --- UI Rendering ---
+    updateActiveFlowInList() {
+        if (this.listPane) {
+            this.listPane.updateActiveItem();
+        }
+    }
 
     /**
      * Renders the placeholder container for the flow editor view.
@@ -519,7 +512,7 @@ const flowsPlugin = {
             label: 'Flows',
             viewType: 'flow-editor',
             onActivate: () => {
-                const pane = createListPane({
+                flowsManager.listPane = createListPane({
                     container: document.getElementById('flows-pane'),
                     dataManager: flowsManager.dataManager,
                     app: flowsManager.app,
@@ -535,7 +528,6 @@ const flowsPlugin = {
                         return true; // Auto-confirm for empty flows
                     }
                 });
-                flowsManager.listPane = pane;
 
                 if (!flowsManager.app.lastActiveIds['flow-editor']) {
                     flowsManager.app.setView('flow-editor', null);
@@ -564,7 +556,6 @@ const flowsPlugin = {
 
             const handleImport = (data) => {
                 const newFlow = flowsManager.addFlowFromData(data);
-                flowsManager.listPane.renderList();
                 flowsManager.app.setView('flow-editor', newFlow.id);
             };
 
@@ -682,9 +673,7 @@ const flowsPlugin = {
             const titleBar = createTitleBar(titleParts, [], buttons);
             mainPanel.prepend(titleBar);
         }
-        if (flowsManager.listPane) {
-            flowsManager.listPane.updateActiveItem();
-        }
+        flowsManager.updateActiveFlowInList();
     },
 
     /**
