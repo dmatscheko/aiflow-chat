@@ -178,4 +178,50 @@ export class ApiService {
             notifyUpdate(); // Notify one last time for error/abort messages
         }
     }
+
+    /**
+     * Prepares and executes a streaming agent call, handling the entire lifecycle.
+     * @param {object} app - The main application instance.
+     * @param {object} chat - The chat context.
+     * @param {object} messageToUpdate - The message object to be populated with the response.
+     * @param {Array<object>} messages - The message history to be sent to the API.
+     * @param {string} agentId - The ID of the agent to be called.
+     * @returns {Promise<void>}
+     */
+    async executeStreamingAgentCall(app, chat, messageToUpdate, messages, agentId) {
+        app.dom.stopButton.style.display = 'block';
+        app.abortController = new AbortController();
+
+        try {
+            const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
+            const finalSystemPrompt = await app.agentManager.constructSystemPrompt(agentId);
+
+            if (finalSystemPrompt) {
+                messages.unshift({ role: 'system', content: finalSystemPrompt });
+            }
+
+            const payload = { messages };
+            messageToUpdate.value.model = effectiveConfig.model;
+
+            await this.streamAndProcessResponse(
+                payload,
+                effectiveConfig,
+                messageToUpdate,
+                () => chat.log.notify(),
+                app.abortController.signal
+            );
+
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                const errorMessage = messageToUpdate.value.role === 'tool'
+                    ? `<error>An error occurred while calling the agent: ${error.message}</error>`
+                    : `Error: ${error.message}`;
+                messageToUpdate.value.content = errorMessage;
+            }
+            chat.log.notify();
+        } finally {
+            app.abortController = null;
+            app.dom.stopButton.style.display = 'none';
+        }
+    }
 }
