@@ -50,6 +50,13 @@ class ChatManager {
         this.chats = this.dataManager.getAll();
         this.activeChatId = null;
         this.chatUI = null;
+        this.debouncedSave = debounce(() => {
+            const activeChat = this.getActiveChat();
+            if (activeChat && this.app.dom.messageInput) {
+                activeChat.draftMessage = this.app.dom.messageInput.value;
+            }
+            this.dataManager.save();
+        }, 500);
     }
 
     _hydrateChat(chatData) {
@@ -180,7 +187,7 @@ class ChatManager {
             activeChat.log.addMessage({ role: 'user', content: userInput }, {});
             this.app.dom.messageInput.value = '';
             activeChat.draftMessage = '';
-            this.saveChats();
+            this.dataManager.save();
         }
 
         const finalAgentId = agentId || activeChat.agent;
