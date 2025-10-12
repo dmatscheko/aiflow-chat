@@ -171,68 +171,38 @@ class ResponseProcessor {
         const app = this.app;
         if (!app) return;
 
-        if ((assistantMsg.value.role !== 'assistant' && assistantMsg.value.role !== 'tool') || assistantMsg.value.content !== null) {
+        const role = assistantMsg.value.role;
+        if ((role !== 'assistant' && role !== 'tool') || assistantMsg.value.content !== null) {
             console.warn('Response processor asked to process an invalid message.', assistantMsg);
             return;
         }
 
-        app.dom.stopButton.style.display = 'block';
-        app.abortController = new AbortController();
-
-        try {
-            const messages = chat.log.getMessageValuesBefore(assistantMsg);
-            if (!messages) {
-                console.error("Could not find message history for processing.", assistantMsg);
-                assistantMsg.value.content = "Error: Could not reconstruct message history.";
-                chat.log.notify();
-                return;
-            }
-
-            const agentId = assistantMsg.agent;
-            const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
-            const finalSystemPrompt = await app.agentManager.constructSystemPrompt(agentId);
-
-            if (finalSystemPrompt) {
-                messages.unshift({ role: 'system', content: finalSystemPrompt });
-            }
-
-            const payload = {
-                messages: messages,
-            };
-
-            assistantMsg.value.model = payload.model;
-
-            // Delegate the entire streaming and processing logic to the ApiService
-            await app.apiService.streamAndProcessResponse(
-                payload,
-                effectiveConfig,
-                assistantMsg,
-                () => chat.log.notify(),
-                app.abortController.signal
-            );
-
-        } catch (error) {
-            // The unified method handles its own errors, but we catch any potential
-            // configuration errors that occur before the call.
-            if (error.name !== 'AbortError') {
-                assistantMsg.value.content = `Error: ${error.message}`;
-            }
+        const messages = chat.log.getMessageValuesBefore(assistantMsg);
+        if (!messages) {
+            assistantMsg.value.content = 'Error: Could not reconstruct message history.';
             chat.log.notify();
-        } finally {
-            app.abortController = null;
-            app.dom.stopButton.style.display = 'none';
-            if (chat.title === 'New Chat') {
-                const firstUserMessage = chat.log.getActiveMessageValues().find(m => m.role === 'user');
-                if (firstUserMessage) {
-                    chat.title = firstUserMessage.content.substring(0, 20) + '...';
-                    this.app.chatManager.saveChats();
-                    if (this.app.activeView.id === chat.id) {
-                        this.app.renderMainView();
-                    }
+            return;
+        }
+
+        await app.apiService.executeStreamingAgentCall(
+            app,
+            chat,
+            assistantMsg,
+            messages,
+            assistantMsg.agent
+        );
+
+        if (chat.title === 'New Chat') {
+            const firstUserMessage = chat.log.getActiveMessageValues().find(m => m.role === 'user');
+            if (firstUserMessage) {
+                chat.title = firstUserMessage.content.substring(0, 20) + '...';
+                app.chatManager.saveChats();
+                if (app.activeView.id === chat.id) {
+                    app.renderMainView();
                 }
             }
-            this.app.chatManager.renderChatList();
         }
+        app.chatManager.renderChatList();
     }
 }
 

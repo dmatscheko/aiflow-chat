@@ -163,12 +163,12 @@ class AgentsCallPlugin {
      * @private
      */
     async _handleAgentCall(call, message, activeChat) {
-        const agentManager = this.app.agentManager;
+        const app = this.app;
+        const agentManager = app.agentManager;
         const callingAgentId = message.agent || 'agent-default';
         const callingAgent = agentManager.getAgent(callingAgentId);
         const targetAgent = agentManager.getAgent(call.name);
 
-        // 1. Validate the call and check permissions first.
         if (!callingAgent || !targetAgent) {
             this._addErrorToolResponse(activeChat, message, call, 'Invalid agent specified.');
             return false;
@@ -190,72 +190,37 @@ class AgentsCallPlugin {
         const fullContext = call.params.full_context === true;
         const newDepth = fullContext ? message.depth : message.depth + 1;
 
-        // Push the calling agent's context onto the stack.
-        this.app.responseProcessor.agentCallStack.push({
+        app.responseProcessor.agentCallStack.push({
             agentId: callingAgentId,
             depth: message.depth,
         });
 
-        const abortController = new AbortController();
-        this.app.abortController = abortController;
-
-        // The tool response message will be updated as the agent streams its response.
-        const toolResponseMessage = {
+        const toolResponseAsMessage = activeChat.log.addMessage({
             role: 'tool',
             content: '',
             tool_call_id: call.id,
             agent: targetAgent.id,
             model: null,
             is_full_context_call: fullContext,
-        };
+        }, { depth: newDepth });
 
-        // Add the placeholder message with the correct depth.
-        const toolResponseAsMessage = activeChat.log.addMessage(toolResponseMessage, { depth: newDepth });
-
-        try {
-            this.app.dom.stopButton.style.display = 'block';
-
-            // 2. Now that validation is done, construct the payload and perform the call.
-            const targetAgentConfig = agentManager.getEffectiveApiConfig(targetAgent.id);
-            toolResponseAsMessage.value.model = targetAgentConfig.model;
-
-            const systemPrompt = await agentManager.constructSystemPrompt(targetAgent.id);
-            const history = activeChat.log.getHistoryForAgentCall(message, fullContext);
-            const messagesForPayload = [...history, { role: 'user', content: prompt }];
-
-            if (systemPrompt) {
-                messagesForPayload.unshift({ role: 'system', content: systemPrompt });
-            }
-
-            const payload = {
-                messages: messagesForPayload,
-            };
-
-            // Delegate the entire streaming and processing logic to the ApiService
-            await this.app.apiService.streamAndProcessResponse(
-                payload,
-                targetAgentConfig,
-                toolResponseAsMessage,
-                () => activeChat.log.notify(),
-                abortController.signal
-            );
-
-        } catch (error) {
-            // The unified method handles its own errors, but we catch any potential
-            // configuration errors that occur before the call.
-            const errorMessage = `<error>An error occurred while calling the agent: ${error.message}</error>`;
-            toolResponseAsMessage.value.content = errorMessage;
+        const messages = activeChat.log.getHistoryForAgentCall(message, fullContext);
+        if (!messages) {
+            toolResponseAsMessage.value.content = '<error>Could not reconstruct message history for agent call.</error>';
             activeChat.log.notify();
-        } finally {
-            this.app.abortController = null;
-            this.app.dom.stopButton.style.display = 'none';
+            return false;
         }
+        messages.push({ role: 'user', content: prompt });
 
-        // After the sub-agent has responded, check its response for tool calls.
+        await app.apiService.executeStreamingAgentCall(
+            app,
+            activeChat,
+            toolResponseAsMessage,
+            messages,
+            targetAgent.id
+        );
+
         const nestedCallHandled = await pluginManager.triggerSequentially('onResponseComplete', toolResponseAsMessage, activeChat);
-
-        // If a nested call was handled, it will queue new messages and return true.
-        // We propagate this signal up to the main onResponseComplete loop.
         return nestedCallHandled;
     }
 
