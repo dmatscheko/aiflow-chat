@@ -111,27 +111,25 @@ class AgentManager {
 
         let defaultAgent = userAgents.find(a => a.id === DEFAULT_AGENT_ID);
 
-        // Migration logic: If no Default Agent, create one from old global settings if they exist.
+        // If no Default Agent, create one.
         if (!defaultAgent) {
-            const oldGlobalSettings = JSON.parse(localStorage.getItem('core_chat_settings')) || {};
             const newDefaultAgent = {
                 id: DEFAULT_AGENT_ID,
                 name: 'Default Agent',
                 description: 'The default agent for general tasks. It is used when no specific agent is selected for a chat.',
-                systemPrompt: oldGlobalSettings.systemPrompt || 'You are a helpful assistant.',
+                systemPrompt: 'You are a helpful assistant.',
                 useCustomModelSettings: true,
                 modelSettings: {
-                    apiUrl: oldGlobalSettings.apiUrl || '',
-                    apiKey: oldGlobalSettings.apiKey || '',
-                    model: oldGlobalSettings.model || '',
-                    temperature: oldGlobalSettings.temperature ?? 1,
+                    apiUrl: 'http://127.0.0.1:1234',
+                    apiKey: 'none',
+                    model: '',
+                    temperature: 1,
                 },
                 useCustomToolSettings: true,
                 toolSettings: { allowAll: true, allowed: [] },
                 useCustomAgentCallSettings: false,
                 agentCallSettings: { allowAll: true, allowed: [] }
             };
-            if (Object.keys(oldGlobalSettings).length > 0) localStorage.removeItem('core_chat_settings');
             userAgents.unshift(newDefaultAgent);
             this._saveAgents(userAgents);
             defaultAgent = newDefaultAgent;

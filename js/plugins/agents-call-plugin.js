@@ -228,11 +228,7 @@ class AgentsCallPlugin {
             }
 
             const payload = {
-                model: targetAgentConfig.model,
                 messages: messagesForPayload,
-                stream: true,
-                temperature: targetAgentConfig.temperature,
-                top_p: targetAgentConfig.top_p,
             };
 
             // Delegate the entire streaming and processing logic to the ApiService

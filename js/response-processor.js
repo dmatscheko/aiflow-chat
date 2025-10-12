@@ -197,11 +197,7 @@ class ResponseProcessor {
             }
 
             const payload = {
-                model: effectiveConfig.model,
                 messages: messages,
-                stream: true,
-                temperature: parseFloat(effectiveConfig.temperature),
-                top_p: effectiveConfig.top_p ? parseFloat(effectiveConfig.top_p) : undefined,
             };
 
             assistantMsg.value.model = payload.model;

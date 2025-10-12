@@ -117,8 +117,17 @@ export class ApiService {
      */
     async streamAndProcessResponse(payload, config, message, notifyUpdate, abortSignal) {
         try {
+            const defaults = {
+                stream: true,
+                model: config.model ? config.model : undefined,
+                temperature: config.temperature ? parseFloat(config.temperature) : undefined,
+                top_p: config.top_p ? parseFloat(config.top_p) : undefined,
+            };
+
+            const combinedPayload = { ...defaults, ...payload };
+
             const reader = await this.streamChat(
-                payload,
+                combinedPayload,
                 config.apiUrl,
                 config.apiKey,
                 abortSignal
