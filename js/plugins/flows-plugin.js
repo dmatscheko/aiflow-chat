@@ -523,9 +523,15 @@ const flowsPlugin = {
                     onDelete: (itemId, itemName) => {
                         const flow = flowsManager.getFlow(itemId);
                         if (flow && flow.steps.length > 0) {
-                            return confirm('This flow is not empty. Are you sure you want to delete it?');
+                            if (!confirm('This flow is not empty. Are you sure you want to delete it?')) {
+                                return false;
+                            }
                         }
-                        return true; // Auto-confirm for empty flows
+
+                        if (flowsManager.app.activeView.id === itemId) {
+                            flowsManager.app.setView('flow-editor', null);
+                        }
+                        return true;
                     }
                 });
 

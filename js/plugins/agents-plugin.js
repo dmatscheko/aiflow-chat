@@ -513,7 +513,19 @@ const agentsPlugin = {
                     getItemName: (item) => item.name,
                     onDelete: (itemId, itemName) => {
                         if (itemId === DEFAULT_AGENT_ID) return false;
-                        return confirm(`Are you sure you want to delete agent "${itemName}"?`);
+                        if (confirm(`Are you sure you want to delete agent "${itemName}"?`)) {
+                            // Revert any chats using this agent to the default
+                            if (agentManager.app.chatManager) {
+                                agentManager.app.chatManager.chats.forEach(chat => {
+                                    if (chat.agent === itemId) {
+                                        chat.agent = null; // Reverts to default
+                                    }
+                                });
+                                agentManager.app.chatManager.dataManager.save();
+                            }
+                            return true;
+                        }
+                        return false;
                     }
                 });
 

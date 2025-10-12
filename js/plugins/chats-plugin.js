@@ -442,34 +442,22 @@ const chatPlugin = {
                     getItemName: (item) => item.title,
                     onDelete: (itemId, itemName) => {
                         if (confirm(`Are you sure you want to delete chat "${itemName}"?`)) {
-                            const wasActive = chatManager.activeChatId === itemId;
-
-                            // The actual deletion is handled by the list pane's generic logic.
-                            // We just need to handle the case where the *active* chat is deleted.
-                            if (wasActive) {
-                                // Important: Get the list of chats *before* deletion.
-                                const chats = chatManager.dataManager.getAll();
-                                const itemIndex = chats.findIndex(c => c.id === itemId);
-
-                                // Determine the next chat to activate.
-                                // Default to the one before, or the new first one if the deleted one was first.
-                                const nextIndex = (itemIndex > 0) ? itemIndex - 1 : 0;
-
-                                // Wait a tick for the deletion to process before setting the new view.
+                            if (appInstance.chatManager.activeChatId === itemId) {
+                                // The active chat is being deleted.
+                                // The list pane will handle the deletion from the data manager.
+                                // We just need to switch the view.
                                 setTimeout(() => {
-                                    const remainingChats = chatManager.dataManager.getAll();
+                                    const remainingChats = appInstance.chatManager.dataManager.getAll();
                                     if (remainingChats.length > 0) {
-                                        const newActiveId = remainingChats[nextIndex] ? remainingChats[nextIndex].id : remainingChats[0].id;
-                                        appInstance.setView('chat', newActiveId);
+                                        appInstance.setView('chat', remainingChats[0].id);
                                     } else {
-                                        // If no chats are left, create a new one.
-                                        chatManager.createNewChat();
+                                        appInstance.chatManager.createNewChat();
                                     }
                                 }, 0);
                             }
-                            return true; // Allow deletion.
+                            return true;
                         }
-                        return false; // Disallow deletion.
+                        return false;
                     }
                 });
             }
