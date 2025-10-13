@@ -85,20 +85,19 @@ class ChatManager {
     }
 
     createNewChat() {
-        const newChatData = {
+        const newChat = this._hydrateChat({
+            id: this.dataManager.generateId(),
             title: 'New Chat',
-            log: new ChatLog(),
+            log: null, // Start with a null log, _hydrateChat will create a new ChatLog
             draftMessage: '',
             agent: null,
             flow: null,
-        };
+        });
 
-        const addedItem = this.dataManager.add(newChatData);
-        const index = this.chats.findIndex(c => c.id === addedItem.id);
-        if (index !== -1) {
-            this.chats[index] = this._hydrateChat(this.chats[index]);
-        }
-        return this.chats[index];
+        this.chats.push(newChat);
+        this.dataManager.save();
+        this.app.setView('chat', newChat.id);
+        return newChat;
     }
 
     createChatFromData(chatData) {
