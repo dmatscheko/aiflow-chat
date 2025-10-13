@@ -118,13 +118,31 @@ export class ApiService {
     async streamAndProcessResponse(payload, config, message, notifyUpdate, abortSignal) {
         try {
             const defaults = {
-                stream: true,
-                model: config.model ? config.model : undefined,
-                temperature: config.temperature ? parseFloat(config.temperature) : undefined,
-                top_p: config.top_p ? parseFloat(config.top_p) : undefined,
+                stream: config.use_stream && config.stream !== undefined ? config.stream : true,
+                model: config.use_model && config.model ? config.model : undefined,
+                temperature: config.use_temperature && config.temperature !== undefined ? parseFloat(config.temperature) : undefined,
+                top_p: config.use_top_p && config.top_p !== undefined ? parseFloat(config.top_p) : undefined,
+                top_k: config.use_top_k && config.top_k !== undefined ? parseInt(config.top_k, 10) : undefined,
+                max_tokens: config.use_max_tokens && config.max_tokens !== undefined ? parseInt(config.max_tokens, 10) : undefined,
+                stop: config.use_stop && config.stop ? config.stop.split(',').map(s => s.trim()) : undefined,
+                presence_penalty: config.use_presence_penalty && config.presence_penalty !== undefined ? parseFloat(config.presence_penalty) : undefined,
+                frequency_penalty: config.use_frequency_penalty && config.frequency_penalty !== undefined ? parseFloat(config.frequency_penalty) : undefined,
+                repeat_penalty: config.use_repeat_penalty && config.repeat_penalty !== undefined ? parseFloat(config.repeat_penalty) : undefined,
+                seed: config.use_seed && config.seed !== undefined ? parseInt(config.seed, 10) : undefined,
             };
 
-            const combinedPayload = { ...defaults, ...payload };
+            if (config.use_logit_bias && config.logit_bias) {
+                try {
+                    defaults.logit_bias = JSON.parse(config.logit_bias);
+                } catch (e) {
+                    console.error("Invalid JSON in logit_bias:", e);
+                }
+            }
+
+            // Filter out any undefined values to keep the payload clean
+            const cleanedDefaults = Object.fromEntries(Object.entries(defaults).filter(([_, v]) => v !== undefined));
+
+            const combinedPayload = { ...cleanedDefaults, ...payload };
 
             const reader = await this.streamChat(
                 combinedPayload,
