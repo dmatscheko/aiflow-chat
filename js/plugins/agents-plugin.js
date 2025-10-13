@@ -28,9 +28,30 @@ import { createListPane } from '../ui/list-pane.js';
  * @typedef {object} AgentModelSettings
  * @property {string} [apiKey] - The API key for the model.
  * @property {string} [apiUrl] - The base URL for the API.
+ * @property {boolean} [use_model] - Whether to use a custom model.
  * @property {string} [model] - The specific model identifier.
+ * @property {boolean} [use_temperature] - Whether to use a custom temperature.
  * @property {number} [temperature] - The sampling temperature.
+ * @property {boolean} [use_top_p] - Whether to use a custom top_p.
  * @property {number} [top_p] - The top-p value for nucleus sampling.
+ * @property {boolean} [use_top_k] - Whether to use a custom top_k.
+ * @property {number} [top_k] - The top-k value for sampling.
+ * @property {boolean} [use_max_tokens] - Whether to use a custom max_tokens.
+ * @property {number} [max_tokens] - The maximum number of tokens to generate.
+ * @property {boolean} [use_stream] - Whether to use streaming.
+ * @property {boolean} [stream] - Whether to stream the response.
+ * @property {boolean} [use_stop] - Whether to use custom stop sequences.
+ * @property {string} [stop] - A comma-separated list of stop sequences.
+ * @property {boolean} [use_presence_penalty] - Whether to use a custom presence penalty.
+ * @property {number} [presence_penalty] - The penalty for new tokens based on their presence.
+ * @property {boolean} [use_frequency_penalty] - Whether to use a custom frequency penalty.
+ * @property {number} [frequency_penalty] - The penalty for new tokens based on their frequency.
+ * @property {boolean} [use_logit_bias] - Whether to use a custom logit bias.
+ * @property {string} [logit_bias] - A JSON string for the logit bias.
+ * @property {boolean} [use_repeat_penalty] - Whether to use a custom repeat penalty.
+ * @property {number} [repeat_penalty] - The penalty for repeating tokens.
+ * @property {boolean} [use_seed] - Whether to use a custom seed.
+ * @property {number} [seed] - The seed for reproducible outputs.
  */
 
 /**
@@ -351,13 +372,35 @@ class AgentManager {
         const modelSettingDefs = [
             { id: 'apiUrl', label: 'API URL', type: 'text', placeholder: 'e.g. https://api.someai.com/' },
             { id: 'apiKey', label: 'API Key', type: 'password' },
+            { id: 'use_model', type: 'checkbox', label: 'Model', className: 'settings-inline-checkbox' },
             {
-                id: 'model', label: 'Model', type: 'select', options: [], actions: [{
+                id: 'model', label: '', type: 'select', options: [], dependsOn: 'use_model', dependsOnValue: true, actions: [{
                     id: 'agent-refresh-models', label: 'Refresh',
                     onClick: (e, modelInput) => this.fetchModels(agentId, modelInput)
                 }]
             },
-            { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1 },
+            { id: 'use_temperature', type: 'checkbox', label: 'Temperature', className: 'settings-inline-checkbox' },
+            { id: 'temperature', label: '', type: 'range', default: 1, min: 0, max: 2, step: 0.1, dependsOn: 'use_temperature', dependsOnValue: true },
+            { id: 'use_top_p', type: 'checkbox', label: 'Top P', className: 'settings-inline-checkbox' },
+            { id: 'top_p', label: '', type: 'range', default: 1, min: 0, max: 1, step: 0.01, dependsOn: 'use_top_p', dependsOnValue: true },
+            { id: 'use_top_k', type: 'checkbox', label: 'Top K', className: 'settings-inline-checkbox' },
+            { id: 'top_k', label: '', type: 'number', default: 0, min: 0, step: 1, dependsOn: 'use_top_k', dependsOnValue: true },
+            { id: 'use_max_tokens', type: 'checkbox', label: 'Max Tokens', className: 'settings-inline-checkbox' },
+            { id: 'max_tokens', label: '', type: 'number', placeholder: 'e.g. 4096', min: 1, step: 1, dependsOn: 'use_max_tokens', dependsOnValue: true },
+            { id: 'use_stream', type: 'checkbox', label: 'Stream', className: 'settings-inline-checkbox' },
+            { id: 'stream', label: '> Enable streaming', type: 'checkbox', dependsOn: 'use_stream', dependsOnValue: true },
+            { id: 'use_stop', type: 'checkbox', label: 'Stop Sequences', className: 'settings-inline-checkbox' },
+            { id: 'stop', label: '', type: 'text', placeholder: 'e.g. "Human:","AI:"', dependsOn: 'use_stop', dependsOnValue: true },
+            { id: 'use_presence_penalty', type: 'checkbox', label: 'Presence Penalty', className: 'settings-inline-checkbox' },
+            { id: 'presence_penalty', label: '', type: 'range', default: 0, min: -2, max: 2, step: 0.1, dependsOn: 'use_presence_penalty', dependsOnValue: true },
+            { id: 'use_frequency_penalty', type: 'checkbox', label: 'Frequency Penalty', className: 'settings-inline-checkbox' },
+            { id: 'frequency_penalty', label: '', type: 'range', default: 0, min: -2, max: 2, step: 0.1, dependsOn: 'use_frequency_penalty', dependsOnValue: true },
+            { id: 'use_logit_bias', type: 'checkbox', label: 'Logit Bias', className: 'settings-inline-checkbox' },
+            { id: 'logit_bias', label: '', type: 'textarea', placeholder: 'e.g. {"123": -1, "456": 1}', rows: 3, dependsOn: 'use_logit_bias', dependsOnValue: true },
+            { id: 'use_repeat_penalty', type: 'checkbox', label: 'Repeat Penalty', className: 'settings-inline-checkbox' },
+            { id: 'repeat_penalty', label: '', type: 'range', default: 1, min: 0, max: 2, step: 0.01, dependsOn: 'use_repeat_penalty', dependsOnValue: true },
+            { id: 'use_seed', type: 'checkbox', label: 'Seed', className: 'settings-inline-checkbox' },
+            { id: 'seed', label: '', type: 'number', placeholder: 'e.g. 12345', dependsOn: 'use_seed', dependsOnValue: true },
         ];
 
         const effectiveConfig = this.getEffectiveApiConfig(agent.id);
