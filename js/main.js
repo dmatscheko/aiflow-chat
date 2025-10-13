@@ -16,7 +16,6 @@ import { responseProcessor } from './response-processor.js';
 // The application's functionality is extended through plugins. Each imported plugin
 // file registers its hooks, views, and components with the PluginManager.
 import './plugins/chats-plugin.js';
-import './plugins/example-plugin.js';
 import './plugins/agents-plugin.js';
 import './plugins/agents-call-plugin.js';
 import './plugins/flows-plugin.js';
