@@ -60,14 +60,18 @@ class ChatManager {
     }
 
     _hydrateChat(chatData) {
+        // If the log is already a ChatLog instance, don't re-hydrate.
+        const log = chatData.log instanceof ChatLog ? chatData.log : ChatLog.fromJSON(chatData.log);
         const chat = {
             id: chatData.id,
             title: chatData.title,
-            log: ChatLog.fromJSON(chatData.log),
+            log: log,
             draftMessage: chatData.draftMessage || '',
             agent: chatData.agent || null,
             flow: chatData.flow || null,
         };
+        // Avoid duplicate subscriptions
+        chat.log.unsubscribe(() => this.dataManager.save());
         chat.log.subscribe(() => this.dataManager.save());
         return chat;
     }
@@ -75,6 +79,9 @@ class ChatManager {
     init() {
         if (this.chats.length === 0) {
             this.createNewChat();
+            // This is deferred with a timeout to ensure the list pane has been created
+            // by the tab activation logic before we try to render the list.
+            setTimeout(() => this.renderChatList(), 0);
         }
         this.activeChatId = localStorage.getItem('core_active_chat_id') || this.chats[0].id;
         this.app.activeView.id = this.activeChatId;
@@ -438,7 +445,11 @@ const chatPlugin = {
                     app: appInstance,
                     viewType: 'chat',
                     addNewButtonLabel: 'New Chat',
-                    onAddNew: () => chatManager.createNewChat(),
+                    onAddNew: () => {
+                        const newChat = chatManager.createNewChat();
+                        chatManager.renderChatList();
+                        appInstance.setView('chat', newChat.id);
+                    },
                     getItemName: (item) => item.title,
                     onDelete: (itemId, itemName) => {
                         if (confirm(`Are you sure you want to delete chat "${itemName}"?`)) {
