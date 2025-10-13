@@ -118,13 +118,24 @@ export class ApiService {
     async streamAndProcessResponse(payload, config, message, notifyUpdate, abortSignal) {
         try {
             const defaults = {
-                stream: true,
-                model: config.model ? config.model : undefined,
-                temperature: config.temperature ? parseFloat(config.temperature) : undefined,
-                top_p: config.top_p ? parseFloat(config.top_p) : undefined,
+                stream: config.stream_enabled ? config.stream : true,
+                model: config.model_enabled ? config.model : undefined,
+                temperature: config.temperature_enabled ? parseFloat(config.temperature) : undefined,
+                top_p: config.top_p_enabled ? parseFloat(config.top_p) : undefined,
+                top_k: config.top_k_enabled ? parseInt(config.top_k) : undefined,
+                max_tokens: config.max_tokens_enabled ? parseInt(config.max_tokens) : undefined,
+                stop: config.stop_enabled ? config.stop : undefined,
+                presence_penalty: config.presence_penalty_enabled ? parseFloat(config.presence_penalty) : undefined,
+                frequency_penalty: config.frequency_penalty_enabled ? parseFloat(config.frequency_penalty) : undefined,
+                logit_bias: config.logit_bias_enabled ? JSON.parse(config.logit_bias) : undefined,
+                repeat_penalty: config.repeat_penalty_enabled ? parseFloat(config.repeat_penalty) : undefined,
+                seed: config.seed_enabled ? parseInt(config.seed) : undefined,
             };
 
             const combinedPayload = { ...defaults, ...payload };
+
+            // Cleanup undefined keys
+            Object.keys(combinedPayload).forEach(key => combinedPayload[key] === undefined && delete combinedPayload[key]);
 
             const reader = await this.streamChat(
                 combinedPayload,

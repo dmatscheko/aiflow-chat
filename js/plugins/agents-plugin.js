@@ -29,8 +29,29 @@ import { createListPane } from '../ui/list-pane.js';
  * @property {string} [apiKey] - The API key for the model.
  * @property {string} [apiUrl] - The base URL for the API.
  * @property {string} [model] - The specific model identifier.
+ * @property {boolean} [model_enabled] - Whether the model is enabled.
  * @property {number} [temperature] - The sampling temperature.
+ * @property {boolean} [temperature_enabled] - Whether the temperature is enabled.
  * @property {number} [top_p] - The top-p value for nucleus sampling.
+ * @property {boolean} [top_p_enabled] - Whether top_p is enabled.
+ * @property {number} [top_k] - The top-k value for sampling.
+ * @property {boolean} [top_k_enabled] - Whether top_k is enabled.
+ * @property {number} [max_tokens] - The maximum number of tokens to generate.
+ * @property {boolean} [max_tokens_enabled] - Whether max_tokens is enabled.
+ * @property {boolean} [stream] - Whether to use streaming.
+ * @property {boolean} [stream_enabled] - Whether stream is enabled.
+ * @property {string} [stop] - A stop sequence.
+ * @property {boolean} [stop_enabled] - Whether the stop sequence is enabled.
+ * @property {number} [presence_penalty] - The presence penalty.
+ * @property {boolean} [presence_penalty_enabled] - Whether the presence penalty is enabled.
+ * @property {number} [frequency_penalty] - The frequency penalty.
+ * @property {boolean} [frequency_penalty_enabled] - Whether the frequency penalty is enabled.
+ * @property {object} [logit_bias] - The logit bias.
+ * @property {boolean} [logit_bias_enabled] - Whether the logit bias is enabled.
+ * @property {number} [repeat_penalty] - The repeat penalty.
+ * @property {boolean} [repeat_penalty_enabled] - Whether the repeat penalty is enabled.
+ * @property {number} [seed] - The seed for random sampling.
+ * @property {boolean} [seed_enabled] - Whether the seed is enabled.
  */
 
 /**
@@ -351,13 +372,47 @@ class AgentManager {
         const modelSettingDefs = [
             { id: 'apiUrl', label: 'API URL', type: 'text', placeholder: 'e.g. https://api.someai.com/' },
             { id: 'apiKey', label: 'API Key', type: 'password' },
+            { id: 'model_enabled', label: 'Model', type: 'checkbox' },
             {
                 id: 'model', label: 'Model', type: 'select', options: [], actions: [{
                     id: 'agent-refresh-models', label: 'Refresh',
                     onClick: (e, modelInput) => this.fetchModels(agentId, modelInput)
-                }]
+                }],
+                dependsOn: 'model_enabled', dependsOnValue: true
             },
-            { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1 },
+            { id: 'temperature_enabled', label: 'Temperature', type: 'checkbox' },
+            { id: 'temperature', label: 'Temperature', type: 'range', default: 1, min: 0, max: 2, step: 0.1,
+              dependsOn: 'temperature_enabled', dependsOnValue: true },
+            { id: 'top_p_enabled', label: 'Top P', type: 'checkbox' },
+            { id: 'top_p', label: 'Top P', type: 'range', default: 1, min: 0, max: 1, step: 0.01,
+              dependsOn: 'top_p_enabled', dependsOnValue: true },
+            { id: 'top_k_enabled', label: 'Top K', type: 'checkbox' },
+            { id: 'top_k', label: 'Top K', type: 'number', default: 0,
+              dependsOn: 'top_k_enabled', dependsOnValue: true },
+            { id: 'max_tokens_enabled', label: 'Max Tokens', type: 'checkbox' },
+            { id: 'max_tokens', label: 'Max Tokens', type: 'number', placeholder: 'e.g. 2048',
+              dependsOn: 'max_tokens_enabled', dependsOnValue: true },
+            { id: 'stream_enabled', label: 'Stream', type: 'checkbox' },
+            { id: 'stream', label: 'Stream', type: 'checkbox',
+              dependsOn: 'stream_enabled', dependsOnValue: true },
+            { id: 'stop_enabled', label: 'Stop Sequence', type: 'checkbox' },
+            { id: 'stop', label: 'Stop Sequence', type: 'text', placeholder: 'e.g. \\n',
+              dependsOn: 'stop_enabled', dependsOnValue: true },
+            { id: 'presence_penalty_enabled', label: 'Presence Penalty', type: 'checkbox' },
+            { id: 'presence_penalty', label: 'Presence Penalty', type: 'range', default: 0, min: -2, max: 2, step: 0.1,
+              dependsOn: 'presence_penalty_enabled', dependsOnValue: true },
+            { id: 'frequency_penalty_enabled', label: 'Frequency Penalty', type: 'checkbox' },
+            { id: 'frequency_penalty', label: 'Frequency Penalty', type: 'range', default: 0, min: -2, max: 2, step: 0.1,
+              dependsOn: 'frequency_penalty_enabled', dependsOnValue: true },
+            { id: 'logit_bias_enabled', label: 'Logit Bias', type: 'checkbox' },
+            { id: 'logit_bias', label: 'Logit Bias', type: 'textarea', placeholder: 'e.g. {"123": -1.0}',
+              dependsOn: 'logit_bias_enabled', dependsOnValue: true },
+            { id: 'repeat_penalty_enabled', label: 'Repeat Penalty', type: 'checkbox' },
+            { id: 'repeat_penalty', label: 'Repeat Penalty', type: 'range', default: 1, min: 0, max: 2, step: 0.1,
+              dependsOn: 'repeat_penalty_enabled', dependsOnValue: true },
+            { id: 'seed_enabled', label: 'Seed', type: 'checkbox' },
+            { id: 'seed', label: 'Seed', type: 'number', placeholder: 'e.g. 12345',
+              dependsOn: 'seed_enabled', dependsOnValue: true },
         ];
 
         const effectiveConfig = this.getEffectiveApiConfig(agent.id);
@@ -432,7 +487,21 @@ class AgentManager {
             });
         }
 
-        const onSettingChanged = (path, value) => this.updateAgentProperty(agentId, path, value);
+        const onSettingChanged = (path, value) => {
+            // For enabled/disabled checkboxes, we might need special logic
+            if (path.endsWith('_enabled')) {
+                const settingKey = path.replace('_enabled', '');
+                // If a setting is disabled, we remove its value to avoid sending it
+                if (!value) {
+                    const agent = this.getAgent(agentId);
+                    if (agent && agent.modelSettings) {
+                        delete agent.modelSettings[settingKey];
+                        this.debouncedSave();
+                    }
+                }
+            }
+            this.updateAgentProperty(agentId, path, value);
+        };
         const settingsFragment = createSettingsUI(settingsDefinition, agent, onSettingChanged, `agent-${agent.id}-`, 'agent-editor');
 
         editorView.innerHTML = ''; // Clear potential old content
