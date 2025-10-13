@@ -196,7 +196,7 @@ class ResponseProcessor {
             const firstUserMessage = chat.log.getActiveMessageValues().find(m => m.role === 'user');
             if (firstUserMessage) {
                 chat.title = firstUserMessage.content.substring(0, 20) + '...';
-                app.chatManager.saveChats();
+                app.chatManager.dataManager.save();
                 if (app.activeView.id === chat.id) {
                     app.renderMainView();
                 }

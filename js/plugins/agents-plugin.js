@@ -605,7 +605,7 @@ const agentsPlugin = {
                 const activeChat = agentManager.app.chatManager.getActiveChat();
                 if (activeChat) {
                     activeChat.agent = e.target.value;
-                    agentManager.app.chatManager.saveChats(); // Persist the change immediately.
+                    agentManager.app.chatManager.dataManager.save(); // Persist the change immediately.
                 }
             });
 
@@ -613,7 +613,7 @@ const agentsPlugin = {
             // Assign it the one currently selected in the UI.
             if (!chat.agent) {
                 chat.agent = agentSelector.value;
-                agentManager.app.chatManager.saveChats();
+                agentManager.app.chatManager.dataManager.save();
             }
         }
     }
