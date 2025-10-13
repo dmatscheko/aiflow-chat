@@ -134,14 +134,15 @@ class App {
             // Allow plugins to initialize and attach managers to the app instance.
             await pluginManager.triggerAsync('onAppInit', this);
 
-            this.defineTabs();
-            this.renderTabs();
-            this._loadLastActiveIds();
-
             // Initialize managers that require post-plugin setup.
+            // This needs to run before any UI is rendered that might depend on this data.
             if (this.chatManager) {
                 this.chatManager.init();
             }
+
+            this.defineTabs();
+            this.renderTabs();
+            this._loadLastActiveIds();
 
             await this.renderMainView();
             this.initEventListeners();

@@ -60,14 +60,18 @@ class ChatManager {
     }
 
     _hydrateChat(chatData) {
+        // If the log is already a ChatLog instance, don't re-hydrate.
+        const log = chatData.log instanceof ChatLog ? chatData.log : ChatLog.fromJSON(chatData.log);
         const chat = {
             id: chatData.id,
             title: chatData.title,
-            log: ChatLog.fromJSON(chatData.log),
+            log: log,
             draftMessage: chatData.draftMessage || '',
             agent: chatData.agent || null,
             flow: chatData.flow || null,
         };
+        // Avoid duplicate subscriptions
+        chat.log.unsubscribe(() => this.dataManager.save());
         chat.log.subscribe(() => this.dataManager.save());
         return chat;
     }
@@ -98,6 +102,8 @@ class ChatManager {
         if (index !== -1) {
             this.chats[index] = this._hydrateChat(this.chats[index]);
         }
+        this.renderChatList();
+        appInstance.setView('chat', addedItem.id);
         return this.chats[index];
     }
 

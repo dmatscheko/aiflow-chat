@@ -126,7 +126,10 @@ export class DataManager {
      * @param {string} id The ID of the item to delete.
      */
     delete(id) {
-        this.items = this.items.filter(item => item.id !== id);
-        this.save();
+        const index = this.items.findIndex(item => item.id === id);
+        if (index > -1) {
+            this.items.splice(index, 1);
+            this.save();
+        }
     }
 }
