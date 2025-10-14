@@ -414,7 +414,7 @@ pluginManager.register({
     name: 'ChatManagerInitializer',
     onAppInit(app) {
         appInstance = app;
-        app.chatsManager = new ChatManager(app); // Note: using 'chatsManager' to match the factory convention
+        app.chatManager = new ChatManager(app);
         pluginManager.registerView('chat', (chatId) => `
             <div id="chat-container"></div>
             <form id="message-form">
@@ -432,20 +432,20 @@ createManagedEntityPlugin({
     id: 'chats',
     viewType: 'chat',
     addAtStart: true,
-    onAddNew: () => appInstance.chatsManager.createNewChat(),
+    onAddNew: () => appInstance.chatManager.createNewChat(),
     getItemName: (item) => item.title,
     onDelete: (itemId, itemName) => {
         if (confirm(`Are you sure you want to delete chat "${itemName}"?`)) {
-            if (appInstance.chatsManager.activeChatId === itemId) {
+            if (appInstance.chatManager.activeChatId === itemId) {
                 // The active chat is being deleted. The list pane handles the data model.
                 // We just need to switch the view to a safe place.
                 setTimeout(() => {
-                    const remainingChats = appInstance.chatsManager.dataManager.getAll();
+                    const remainingChats = appInstance.chatManager.dataManager.getAll();
                     if (remainingChats.length > 0) {
                         appInstance.setView('chat', remainingChats[0].id);
                     } else {
                         // If no chats are left, create a new one.
-                        appInstance.chatsManager.createNewChat();
+                        appInstance.chatManager.createNewChat();
                     }
                 }, 0);
             }
@@ -456,10 +456,10 @@ createManagedEntityPlugin({
     pluginHooks: {
         onViewRendered(view, chat) {
             if (view.type === 'chat') {
-                appInstance.chatsManager.activeChatId = view.id;
-                appInstance.chatsManager.saveActiveChatId();
-                appInstance.chatsManager.initChatView(view.id);
-                appInstance.chatsManager.updateActiveChatInList();
+                appInstance.chatManager.activeChatId = view.id;
+                appInstance.chatManager.saveActiveChatId();
+                appInstance.chatManager.initChatView(view.id);
+                appInstance.chatManager.updateActiveChatInList();
             }
         }
     }

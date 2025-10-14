@@ -42,9 +42,10 @@ export function createManagedEntityPlugin(config) {
                 label: config.name,
                 viewType: config.viewType,
                 onActivate: () => {
-                    const manager = pluginManager.app[`${config.id}Manager`];
+                    const managerName = `${config.id.replace(/s$/, '')}Manager`;
+                    const manager = pluginManager.app[managerName];
                     if (!manager) {
-                        console.error(`${config.name}Manager not found on app instance.`);
+                        console.error(`${managerName} not found on app instance.`);
                         return;
                     }
 

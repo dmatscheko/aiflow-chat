@@ -494,7 +494,7 @@ pluginManager.register({
     name: 'FlowsManagerInitializer',
     onAppInit(app) {
         flowsManager = new FlowsManager(app);
-        app.flowsManager = flowsManager;
+        app.flowManager = flowsManager;
         pluginManager.registerView('flow-editor', (id) => flowsManager.renderFlowEditor(id));
     }
 });

@@ -509,7 +509,7 @@ pluginManager.register({
     name: 'AgentManagerInitializer',
     onAppInit(app) {
         agentManager = new AgentManager(app);
-        app.agentsManager = agentManager; // Use 'agentsManager' to match factory convention
+        app.agentManager = agentManager;
         pluginManager.registerView('agent-editor', (id) => agentManager.renderAgentEditor(id));
         agentManager.fetchModels(DEFAULT_AGENT_ID);
 
@@ -568,16 +568,16 @@ createManagedEntityPlugin({
             const agentSelector = document.getElementById('agent-selector');
             if (agentSelector) {
                 agentSelector.addEventListener('change', (e) => {
-                    const activeChat = agentManager.app.chatsManager.getActiveChat();
+                    const activeChat = agentManager.app.chatManager.getActiveChat();
                     if (activeChat) {
                         activeChat.agent = e.target.value;
-                        agentManager.app.chatsManager.dataManager.save();
+                        agentManager.app.chatManager.dataManager.save();
                     }
                 });
 
                 if (!chat.agent) {
                     chat.agent = agentSelector.value;
-                    agentManager.app.chatsManager.dataManager.save();
+                    agentManager.app.chatManager.dataManager.save();
                 }
             }
         }

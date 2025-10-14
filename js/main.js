@@ -116,6 +116,8 @@ class App {
          */
         this.responseProcessor = responseProcessor;
 
+        pluginManager.app = this; // Make app instance globally available to plugins
+
         this.initDOM();
 
         // --- Managers will be attached by plugins ---
@@ -125,6 +127,8 @@ class App {
         this.chatManager = null;
         /** @type {import('./plugins/agents-plugin.js').AgentManager | null} */
         this.agentManager = null;
+        /** @type {import('./plugins/flows-plugin.js').FlowsManager | null} */
+        this.flowManager = null;
         // --- End of Managers ---
 
         // The constructor kicks off an async IIFE (Immediately Invoked Function Expression)
