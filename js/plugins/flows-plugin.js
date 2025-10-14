@@ -69,7 +69,7 @@ import { createManagedEntityPlugin } from '../managed-entity-plugin-factory.js';
  * @property {(step: FlowStep, context: FlowExecutionContext) => void} execute - The function that contains the step's execution logic.
  */
 
-let flowsManager = null;
+let flowManager = null;
 
 /**
  * Manages the entire lifecycle, execution, and UI of flows. It handles loading,
@@ -77,7 +77,7 @@ let flowsManager = null;
  * and delegating execution to the `FlowRunner`.
  * @class
  */
-export class FlowsManager {
+export class FlowManager {
     constructor(app) {
         this.app = app;
         this.listPane = null;
@@ -493,9 +493,9 @@ class FlowRunner {
 pluginManager.register({
     name: 'FlowsManagerInitializer',
     onAppInit(app) {
-        flowsManager = new FlowsManager(app);
-        app.flowManager = flowsManager;
-        pluginManager.registerView('flow-editor', (id) => flowsManager.renderFlowEditor(id));
+        flowManager = new FlowsManager(app);
+        app.flowManager = flowManager;
+        pluginManager.registerView('flow-editor', (id) => flowManager.renderFlowEditor(id));
     }
 });
 
@@ -504,17 +504,17 @@ createManagedEntityPlugin({
     name: 'Flows',
     id: 'flows',
     viewType: 'flow-editor',
-    onAddNew: () => flowsManager.addFlow({ name: 'New Flow', steps: [], connections: [] }),
+    onAddNew: () => flowManager.addFlow({ name: 'New Flow', steps: [], connections: [] }),
     getItemName: (item) => item.name,
     onDelete: (itemId, itemName) => {
-        const flow = flowsManager.getFlow(itemId);
+        const flow = flowManager.getFlow(itemId);
         if (flow && flow.steps.length > 0) {
             if (!confirm('This flow is not empty. Are you sure you want to delete it?')) {
                 return false;
             }
         }
-        if (flowsManager.app.activeView.id === itemId) {
-            flowsManager.app.setView('flow-editor', null);
+        if (flowManager.app.activeView.id === itemId) {
+            flowManager.app.setView('flow-editor', null);
         }
         return true;
     },
@@ -532,23 +532,23 @@ createManagedEntityPlugin({
                 }
 
                 const mainPanel = document.getElementById('main-panel');
-                const flow = flowsManager.getFlow(view.id);
+                const flow = flowManager.getFlow(view.id);
                 let title;
                 let buttons = [];
 
                 const renderAndConnect = () => {
-                    flowsManager.renderFlow(flow);
-                    setTimeout(() => flowsManager.updateConnections(flow), 0);
+                    flowManager.renderFlow(flow);
+                    setTimeout(() => flowManager.updateConnections(flow), 0);
                 };
 
                 const handleImport = (data) => {
-                    const newFlow = flowsManager.addFlowFromData(data);
-                    flowsManager.app.setView('flow-editor', newFlow.id);
+                    const newFlow = flowManager.addFlowFromData(data);
+                    flowManager.app.setView('flow-editor', newFlow.id);
                 };
 
                 if (flow) {
                     title = flow.name;
-                    const dropdownContent = Object.entries(flowsManager.stepTypes)
+                    const dropdownContent = Object.entries(flowManager.stepTypes)
                         .map(([type, { label }]) => `<a href="#" data-step-type="${type}">${label}</a>`)
                         .join('');
 
@@ -560,8 +560,8 @@ createManagedEntityPlugin({
                             dropdownContent: dropdownContent,
                             onClick: (e) => {
                                 const type = e.target.dataset.stepType;
-                                if (type && flowsManager.stepTypes[type]) {
-                                    const stepData = flowsManager.stepTypes[type].getDefaults();
+                                if (type && flowManager.stepTypes[type]) {
+                                    const stepData = flowManager.stepTypes[type].getDefaults();
                                     flow.steps.push({
                                         id: `step-${Date.now()}`,
                                         type,
@@ -570,7 +570,7 @@ createManagedEntityPlugin({
                                         isMinimized: false,
                                         data: stepData
                                     });
-                                    flowsManager.updateFlow(flow);
+                                    flowManager.updateFlow(flow);
                                     renderAndConnect();
                                 }
                             }
@@ -589,18 +589,18 @@ createManagedEntityPlugin({
                         }
                     ];
 
-                    const debouncedUpdate = debounce(() => flowsManager.updateFlow(flow), 500);
+                    const debouncedUpdate = debounce(() => flowManager.updateFlow(flow), 500);
 
                     renderAndConnect(); // Initial render
 
                     const canvas = document.getElementById('flow-canvas');
-                    canvas.addEventListener('mousedown', (e) => flowsManager._handleCanvasMouseDown(e, flow, debouncedUpdate));
-                    canvas.addEventListener('mousemove', (e) => flowsManager._handleCanvasMouseMove(e, flow));
-                    canvas.addEventListener('mouseup', (e) => flowsManager._handleCanvasMouseUp(e, flow, debouncedUpdate));
+                    canvas.addEventListener('mousedown', (e) => flowManager._handleCanvasMouseDown(e, flow, debouncedUpdate));
+                    canvas.addEventListener('mousemove', (e) => flowManager._handleCanvasMouseMove(e, flow));
+                    canvas.addEventListener('mouseup', (e) => flowManager._handleCanvasMouseUp(e, flow, debouncedUpdate));
                     canvas.addEventListener('change', (e) => {
                         const step = flow.steps.find(s => s.id === e.target.dataset.id);
-                        if (step && flowsManager.stepTypes[step.type]?.onUpdate) {
-                            flowsManager.stepTypes[step.type].onUpdate(step, e.target, renderAndConnect);
+                        if (step && flowManager.stepTypes[step.type]?.onUpdate) {
+                            flowManager.stepTypes[step.type].onUpdate(step, e.target, renderAndConnect);
                             debouncedUpdate();
                         }
                     });
@@ -610,21 +610,21 @@ createManagedEntityPlugin({
                             const stepId = target.dataset.id;
                             flow.steps = flow.steps.filter(s => s.id !== stepId);
                             flow.connections = flow.connections.filter(c => c.from !== stepId && c.to !== stepId);
-                            flowsManager.updateFlow(flow);
+                            flowManager.updateFlow(flow);
                             renderAndConnect();
                         } else if (target.classList.contains('delete-connection-btn')) {
                             const { from, to, outputName } = target.dataset;
                             flow.connections = flow.connections.filter(c =>
                                 !(c.from === from && c.to === to && (c.outputName || 'default') === outputName)
                             );
-                            flowsManager.updateFlow(flow);
+                            flowManager.updateFlow(flow);
                             renderAndConnect();
                         } else if (target.classList.contains('minimize-flow-step-btn')) {
                             const stepId = target.dataset.id;
                             const step = flow.steps.find(s => s.id === stepId);
                             if (step) {
                                 step.isMinimized = !step.isMinimized;
-                                flowsManager.updateFlow(flow);
+                                flowManager.updateFlow(flow);
                                 renderAndConnect();
                             }
                         }
@@ -648,9 +648,9 @@ createManagedEntityPlugin({
                         text: title,
                         onSave: (newName) => {
                             flow.name = newName;
-                            flowsManager.updateFlow(flow);
-                            flowsManager.listPane.renderList();
-                            flowsManager.app.setView('flow-editor', flow.id);
+                            flowManager.updateFlow(flow);
+                            flowManager.listPane.renderList();
+                            flowManager.app.setView('flow-editor', flow.id);
                         }
                     });
                 } else {
@@ -660,13 +660,13 @@ createManagedEntityPlugin({
                 const titleBar = createTitleBar(titleParts, [], buttons);
                 mainPanel.prepend(titleBar);
             }
-            flowsManager.updateActiveFlowInList();
+            flowManager.updateActiveFlowInList();
         },
         onResponseComplete(message, chat) {
-            if (!flowsManager.activeFlowRunner) {
+            if (!flowManager.activeFlowRunner) {
                 return false;
             }
-            return flowsManager.activeFlowRunner.continue(message, chat);
+            return flowManager.activeFlowRunner.continue(message, chat);
         }
     }
 });

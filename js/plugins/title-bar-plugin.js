@@ -223,7 +223,7 @@ const titleBarPlugin = {
                 },
                 {
                     id: 'flow-runner-container',
-                    html: appInstance.flowsManager.getFlowSelectorHtml(chat.flow),
+                    html: appInstance.flowManager.getFlowSelectorHtml(chat.flow),
                     onMount: (container) => {
                         const flowSelector = container.querySelector('#flow-selector');
                         if (flowSelector) {
@@ -238,7 +238,7 @@ const titleBarPlugin = {
                         if (runFlowBtn) {
                             runFlowBtn.addEventListener('click', () => {
                                 if (flowSelector.value) {
-                                    appInstance.flowsManager.startFlow(flowSelector.value);
+                                    appInstance.flowManager.startFlow(flowSelector.value);
                                 }
                             });
                         }

@@ -127,7 +127,7 @@ class App {
         this.chatManager = null;
         /** @type {import('./plugins/agents-plugin.js').AgentManager | null} */
         this.agentManager = null;
-        /** @type {import('./plugins/flows-plugin.js').FlowsManager | null} */
+        /** @type {import('./plugins/flows-plugin.js').FlowManager | null} */
         this.flowManager = null;
         // --- End of Managers ---
 

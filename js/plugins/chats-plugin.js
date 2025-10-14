@@ -211,8 +211,8 @@ class ChatManager {
      * Stops any ongoing chat response generation or flow execution.
      */
     stopChatFlow() {
-        if (this.app.flowsManager && this.app.flowsManager.activeFlowRunner) {
-            this.app.flowsManager.activeFlowRunner.stop('Flow stopped by user.');
+        if (this.app.flowManager && this.app.flowManager.activeFlowRunner) {
+            this.app.flowManager.activeFlowRunner.stop('Flow stopped by user.');
         }
         if (this.app.abortController) {
             this.app.abortController.abort();
