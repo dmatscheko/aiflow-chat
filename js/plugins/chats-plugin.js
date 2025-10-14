@@ -10,7 +10,7 @@ import { ChatLog } from '../chat-data.js';
 import { debounce } from '../utils.js';
 import { responseProcessor } from '../response-processor.js';
 import { DataManager } from '../data-manager.js';
-import { createListPane } from '../ui/list-pane.js';
+import { createManagedEntityPlugin } from '../managed-entity-plugin-factory.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -409,17 +409,12 @@ class ChatUI {
     }
 }
 
-/**
- * The plugin object for core chat functionality.
- * @type {object}
- */
-const chatPlugin = {
-    name: 'Chat',
-
+// Initialize ChatManager and register the view on app init
+pluginManager.register({
+    name: 'ChatManagerInitializer',
     onAppInit(app) {
         appInstance = app;
-        app.chatManager = new ChatManager(app);
-
+        app.chatsManager = new ChatManager(app); // Note: using 'chatsManager' to match the factory convention
         pluginManager.registerView('chat', (chatId) => `
             <div id="chat-container"></div>
             <form id="message-form">
@@ -428,60 +423,44 @@ const chatPlugin = {
                 <button type="button" id="stop-button" style="display: none;">Stop</button>
             </form>
         `);
-    },
+    }
+});
 
-    onTabsRegistered(tabs) {
-        const chatManager = appInstance.chatManager;
-        const newTabs = [...tabs];
-        newTabs.unshift({
-            id: 'chats',
-            label: 'Chats',
-            viewType: 'chat',
-            onActivate: () => {
-                chatManager.listPane = createListPane({
-                    container: document.getElementById('chats-pane'),
-                    dataManager: chatManager.dataManager,
-                    app: appInstance,
-                    viewType: 'chat',
-                    addNewButtonLabel: 'New Chat',
-                    onAddNew: () => chatManager.createNewChat(),
-                    getItemName: (item) => item.title,
-                    onDelete: (itemId, itemName) => {
-                        if (confirm(`Are you sure you want to delete chat "${itemName}"?`)) {
-                            if (appInstance.chatManager.activeChatId === itemId) {
-                                // The active chat is being deleted.
-                                // The list pane will handle the deletion from the data manager.
-                                // We just need to switch the view.
-                                setTimeout(() => {
-                                    const remainingChats = appInstance.chatManager.dataManager.getAll();
-                                    if (remainingChats.length > 0) {
-                                        appInstance.setView('chat', remainingChats[0].id);
-                                    } else {
-                                        appInstance.chatManager.createNewChat();
-                                    }
-                                }, 0);
-                            }
-                            return true;
-                        }
-                        return false;
+// Use the factory to create the main chat plugin UI and hooks
+createManagedEntityPlugin({
+    name: 'Chats',
+    id: 'chats',
+    viewType: 'chat',
+    addAtStart: true,
+    onAddNew: () => appInstance.chatsManager.createNewChat(),
+    getItemName: (item) => item.title,
+    onDelete: (itemId, itemName) => {
+        if (confirm(`Are you sure you want to delete chat "${itemName}"?`)) {
+            if (appInstance.chatsManager.activeChatId === itemId) {
+                // The active chat is being deleted. The list pane handles the data model.
+                // We just need to switch the view to a safe place.
+                setTimeout(() => {
+                    const remainingChats = appInstance.chatsManager.dataManager.getAll();
+                    if (remainingChats.length > 0) {
+                        appInstance.setView('chat', remainingChats[0].id);
+                    } else {
+                        // If no chats are left, create a new one.
+                        appInstance.chatsManager.createNewChat();
                     }
-                });
+                }, 0);
             }
-        });
-        return newTabs;
+            return true;
+        }
+        return false;
     },
-
-    onViewRendered(view, chat) {
-        if (view.type === 'chat') {
-            appInstance.chatManager.activeChatId = view.id;
-            appInstance.chatManager.saveActiveChatId();
-            appInstance.chatManager.initChatView(view.id);
-            appInstance.chatManager.updateActiveChatInList();
+    pluginHooks: {
+        onViewRendered(view, chat) {
+            if (view.type === 'chat') {
+                appInstance.chatsManager.activeChatId = view.id;
+                appInstance.chatsManager.saveActiveChatId();
+                appInstance.chatsManager.initChatView(view.id);
+                appInstance.chatsManager.updateActiveChatInList();
+            }
         }
     }
-};
-
-/**
- * Registers the Chat Plugin with the application's plugin manager.
- */
-pluginManager.register(chatPlugin);
+});

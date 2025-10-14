@@ -13,7 +13,7 @@ import { debounce, importJson, exportJson } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 import { createTitleBar } from './title-bar-plugin.js';
 import { DataManager } from '../data-manager.js';
-import { createListPane } from '../ui/list-pane.js';
+import { createManagedEntityPlugin } from '../managed-entity-plugin-factory.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -504,122 +504,82 @@ class AgentManager {
     }
 }
 
-/**
- * The plugin object that encapsulates all hooks and metadata for the Agents plugin.
- * @type {object}
- */
-const agentsPlugin = {
-    name: 'Agents',
-
-    /**
-     * The `onAppInit` hook, called when the application starts.
-     * It initializes the `AgentManager` and registers the agent editor view.
-     * @param {App} app - The main application instance.
-     */
+// Initialize AgentManager and register views on app init
+pluginManager.register({
+    name: 'AgentManagerInitializer',
     onAppInit(app) {
         agentManager = new AgentManager(app);
-        app.agentManager = agentManager;
-
+        app.agentsManager = agentManager; // Use 'agentsManager' to match factory convention
         pluginManager.registerView('agent-editor', (id) => agentManager.renderAgentEditor(id));
         agentManager.fetchModels(DEFAULT_AGENT_ID);
 
-        // Listen for an event that indicates tools have been updated (e.g., from an MCP server).
         document.body.addEventListener('mcp-tools-updated', (e) => {
-            // Check if the currently active view is an agent editor.
             if (app.activeView.type === 'agent-editor' && app.activeView.id) {
                 const agent = agentManager.getAgent(app.activeView.id);
                 if (agent) {
-                    // Get the effective config for the agent being edited.
                     const effectiveConfig = agentManager.getEffectiveApiConfig(agent.id);
-                    // If the updated tools belong to the agent we are viewing, refresh the editor.
                     if (effectiveConfig.toolSettings.mcpServer === e.detail.url) {
                         agentManager.initializeAgentEditor();
                     }
                 }
             }
         });
-    },
+    }
+});
 
-    onTabsRegistered(tabs) {
-        tabs.push({
-            id: 'agents',
-            label: 'Agents',
-            viewType: 'agent-editor',
-            onActivate: () => {
-                agentManager.listPane = createListPane({
-                    container: document.getElementById('agents-pane'),
-                    dataManager: agentManager.dataManager,
-                    app: agentManager.app,
-                    viewType: 'agent-editor',
-                    addNewButtonLabel: 'Add New Agent',
-                    onAddNew: () => agentManager.addAgent({}),
-                    getItemName: (item) => item.name,
-                    onDelete: (itemId, itemName) => {
-                        if (itemId === DEFAULT_AGENT_ID) return false;
-                        if (confirm(`Are you sure you want to delete agent "${itemName}"?`)) {
-                            // Revert any chats using this agent to the default
-                            if (agentManager.app.chatManager) {
-                                agentManager.app.chatManager.chats.forEach(chat => {
-                                    if (chat.agent === itemId) {
-                                        chat.agent = null; // Reverts to default
-                                    }
-                                });
-                                agentManager.app.chatManager.dataManager.save();
-                            }
-                            return true;
-                        }
-                        return false;
+// Use the factory to create the main agents plugin UI and hooks
+createManagedEntityPlugin({
+    name: 'Agents',
+    id: 'agents',
+    viewType: 'agent-editor',
+    onAddNew: () => agentManager.addAgent({}),
+    getItemName: (item) => item.name,
+    onDelete: (itemId, itemName) => {
+        if (itemId === DEFAULT_AGENT_ID) {
+            alert("The Default Agent cannot be deleted.");
+            return false;
+        }
+        if (confirm(`Are you sure you want to delete agent "${itemName}"?`)) {
+            // The manager's delete method already handles reverting chats.
+            return true;
+        }
+        return false;
+    },
+    onActivate: (manager) => {
+        // When the tab is activated, ensure a valid agent is being viewed.
+        const lastActiveId = manager.app.lastActiveIds['agent-editor'];
+        const lastAgent = manager.getAgent(lastActiveId);
+        if (!lastAgent) {
+            manager.app.setView('agent-editor', DEFAULT_AGENT_ID);
+        }
+    },
+    pluginHooks: {
+        onViewRendered(view, chat) {
+            if (view.type === 'agent-editor') {
+                const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
+                if (existingTitleBar) {
+                    existingTitleBar.remove();
+                }
+                agentManager.initializeAgentEditor();
+                agentManager.updateActiveAgentInList();
+            }
+        },
+        onChatSwitched(chat) {
+            const agentSelector = document.getElementById('agent-selector');
+            if (agentSelector) {
+                agentSelector.addEventListener('change', (e) => {
+                    const activeChat = agentManager.app.chatsManager.getActiveChat();
+                    if (activeChat) {
+                        activeChat.agent = e.target.value;
+                        agentManager.app.chatsManager.dataManager.save();
                     }
                 });
 
-                const lastActiveId = agentManager.app.lastActiveIds['agent-editor'];
-                const lastAgent = agentManager.getAgent(lastActiveId);
-                if (!lastAgent) {
-                    agentManager.app.setView('agent-editor', DEFAULT_AGENT_ID);
+                if (!chat.agent) {
+                    chat.agent = agentSelector.value;
+                    agentManager.app.chatsManager.dataManager.save();
                 }
-            }
-        });
-        return tabs;
-    },
-
-    onViewRendered(view, chat) {
-        if (view.type === 'agent-editor') {
-            const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
-            if (existingTitleBar) {
-                existingTitleBar.remove();
-            }
-            agentManager.initializeAgentEditor();
-            agentManager.updateActiveAgentInList();
-        }
-    },
-
-    /**
-     * The `onChatSwitched` hook, which synchronizes the agent selector dropdown with the active chat's agent.
-     * @param {Chat} chat - The chat that was just switched to.
-     */
-    onChatSwitched(chat) {
-        const agentSelector = document.getElementById('agent-selector');
-        if (agentSelector) {
-            agentSelector.addEventListener('change', (e) => {
-                // When the agent selection changes, update the active chat's agent property.
-                const activeChat = agentManager.app.chatManager.getActiveChat();
-                if (activeChat) {
-                    activeChat.agent = e.target.value;
-                    agentManager.app.chatManager.dataManager.save(); // Persist the change immediately.
-                }
-            });
-
-            // If a new chat is created, it won't have an agent assigned.
-            // Assign it the one currently selected in the UI.
-            if (!chat.agent) {
-                chat.agent = agentSelector.value;
-                agentManager.app.chatManager.dataManager.save();
             }
         }
     }
-};
-
-/**
- * Registers the Agents Plugin with the application's plugin manager.
- */
-pluginManager.register(agentsPlugin);
+});
