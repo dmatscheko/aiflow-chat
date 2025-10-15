@@ -89,7 +89,7 @@ class AgentManager {
     constructor(app) {
         this.app = app;
         this.listPane = null;
-        this.dataManager = new DataManager('core_agents_v2', 'agent');
+        this.dataManager = new DataManager('core_agents', 'agent');
         this.agents = this.dataManager.getAll();
         this.modelCache = new Map();
         this.debouncedSave = debounce(() => this.dataManager.save(), 500);

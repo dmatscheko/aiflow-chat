@@ -81,7 +81,7 @@ export class FlowManager {
     constructor(app) {
         this.app = app;
         this.listPane = null;
-        this.dataManager = new DataManager('core_flows_v2', 'flow');
+        this.dataManager = new DataManager('core_flows', 'flow');
         this.flows = this.dataManager.getAll();
         this.stepTypes = {};
         this.activeFlowRunner = null;
