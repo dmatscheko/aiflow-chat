@@ -8,6 +8,8 @@
 
 'use strict';
 
+import { pluginManager } from './plugin-manager.js';
+
 /**
  * Represents a single AI model available from the API.
  * @typedef {object} ApiModel
@@ -154,12 +156,17 @@ export class ApiService {
             message.value.content = ''; // Initialize content
             notifyUpdate();
 
+            pluginManager.trigger('onStreamingStart', { message });
+
             const decoder = new TextDecoder();
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
                 const chunk = decoder.decode(value);
+
+                pluginManager.trigger('onStreamingData', { message, chunk });
+
                 const lines = chunk.split('\n');
                 const deltas = lines
                     .map(line => line.replace(/^data: /, '').trim())
@@ -181,6 +188,7 @@ export class ApiService {
                     notifyUpdate();
                 }
             }
+            pluginManager.trigger('onStreamingEnd', { message });
         } catch (error) {
             if (error.name === 'AbortError') {
                 message.value.content += '\n\n[Aborted by user]';

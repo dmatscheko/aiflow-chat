@@ -205,7 +205,7 @@ const titleBarPlugin = {
                 }
             ];
 
-            const controls = [
+            let controls = [
                 {
                     id: 'agent-selector-container',
                     html: appInstance.agentManager.getAgentSelectorHtml(chat.agent),
@@ -245,6 +245,9 @@ const titleBarPlugin = {
                     }
                 }
             ];
+
+            // Allow plugins to add their own controls
+            controls = pluginManager.trigger('onTitleBarControlsRegistered', controls);
 
             const buttons = [
                 {
