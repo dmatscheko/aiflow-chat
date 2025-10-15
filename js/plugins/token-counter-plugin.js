@@ -22,14 +22,12 @@ const tokenCounterPlugin = {
             id: 'token-counter-container',
             html: '<div id="token-counter" class="title-bar-control">Tokens: 0</div>',
             onMount: (container) => {
-                console.log('TokenCounter: onMount triggered');
                 const messageInput = document.getElementById('message-input');
                 const tokenCounter = container.querySelector('#token-counter');
 
                 if (messageInput && tokenCounter) {
-                    console.log('TokenCounter: Found message input and token counter elements.');
                     const updateTokenCount = () => {
-                        console.log('TokenCounter: updateTokenCount triggered');
+                        if (typeof cl100k_base === 'undefined') return;
                         const text = messageInput.value;
                         if (text) {
                             const tokens = cl100k_base.encode(text);
@@ -41,8 +39,6 @@ const tokenCounterPlugin = {
 
                     messageInput.addEventListener('input', updateTokenCount);
                     updateTokenCount(); // Initial count
-                } else {
-                    console.error('TokenCounter: Could not find message input or token counter elements.');
                 }
             }
         });
@@ -61,16 +57,17 @@ const tokenCounterPlugin = {
 
     /**
      * Adds a placeholder for the token speed display in AI message bubbles.
+     * @param {HTMLElement} el - The message bubble element.
      * @param {object} message - The message object being rendered.
      */
-    onMessageRendered(message) {
+    onMessageRendered(el, message) {
         if (message.value.role === 'assistant') {
-            const messageBubble = document.querySelector(`.message-bubble[data-message-id="${message.id}"] .message-title-text`);
-            if (messageBubble) {
+            const titleText = el.querySelector('.message-title-text');
+            if (titleText) {
                 const speedSpan = document.createElement('span');
                 speedSpan.id = `token-speed-${message.id}`;
                 speedSpan.className = 'token-speed-display';
-                messageBubble.appendChild(speedSpan);
+                titleText.appendChild(speedSpan);
             }
         }
     },
@@ -89,6 +86,7 @@ const tokenCounterPlugin = {
      * @param {object} data - The streaming data.
      */
     onStreamingData({ message, chunk }) {
+        if (typeof cl100k_base === 'undefined') return;
         if (message.totalTokens !== undefined) {
             const tokens = cl100k_base.encode(chunk);
             message.totalTokens += tokens.length;

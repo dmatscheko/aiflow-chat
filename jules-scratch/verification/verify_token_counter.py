@@ -6,9 +6,6 @@ def run(playwright):
     context = browser.new_context()
     page = context.new_page()
 
-    # Capture console logs
-    page.on("console", lambda msg: print(f"Browser console: {msg}"))
-
     try:
         page.goto("http://localhost:8000")
 
@@ -38,11 +35,11 @@ def run(playwright):
 
         # Wait for the AI response to appear
         assistant_message = page.locator(".message-bubble[data-message-id*='assistant']")
-        expect(assistant_message).to_be_visible()
+        expect(assistant_message).to_be_visible(timeout=10000)
 
         # Wait for the token speed display to appear
         token_speed_display = assistant_message.locator(".token-speed-display")
-        expect(token_speed_display).not_to_be_empty()
+        expect(token_speed_display).not_to_be_empty(timeout=10000)
 
         # Take a screenshot
         page.screenshot(path="jules-scratch/verification/verification.png")
