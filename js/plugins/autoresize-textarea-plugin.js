@@ -1,6 +1,6 @@
 /**
  * @fileoverview A plugin to automatically resize the message input textarea
- * based on its content.
+ * based on its content, ensuring it starts at a minimal single-line height.
  */
 
 'use strict';
@@ -18,14 +18,18 @@ import { pluginManager } from '../plugin-manager.js';
 let appInstance = null;
 
 /**
- * Resizes the textarea to fit its content, up to a maximum height.
+ * Resets the textarea height to a minimal value, then resizes it to fit its
+ * content, up to a maximum height. This ensures the initial height is as
+ * small as possible.
  * @param {HTMLTextAreaElement} textarea - The textarea element to resize.
  */
 function autoResizeTextarea(textarea) {
     if (!textarea) return;
 
-    // Reset height to auto to get the correct scrollHeight
-    textarea.style.height = 'auto';
+    // Set height to 0 to force the browser to calculate the minimum required
+    // scrollHeight, which includes padding and line-height. This is the key
+    // to getting a correct initial one-line height.
+    textarea.style.height = '0';
 
     const maxHeight = window.innerHeight / 3;
     const scrollHeight = textarea.scrollHeight;
@@ -55,19 +59,31 @@ const autoResizeTextareaPlugin = {
     },
 
     /**
-     * Called when a view is rendered. Attaches the resize logic to the chat view's textarea.
+     * Called when a view is rendered. Attaches the resize logic to the chat
+     * view's textarea. This is done only once per textarea element to ensure
+     * the plugin is self-contained and efficient.
      * @param {import('../main.js').View} view - The view being rendered.
-     * @param {import('../chat-data.js').ChatLog} entity - The entity associated with the view.
      */
-    onViewRendered(view, entity) {
+    onViewRendered(view) {
         if (view.type === 'chat') {
             const textarea = appInstance.dom.messageInput;
-            if (textarea) {
-                // Initial resize
+
+            // Only initialize once per element to avoid duplicate listeners.
+            if (textarea && !textarea.dataset.autoresizeInitialized) {
+                // Apply styles directly via JS to make the plugin self-contained.
+                // This overrides the default CSS to ensure a correct initial height.
+                textarea.style.paddingTop = '0.25rem';
+                textarea.style.paddingBottom = '0.25rem';
+                textarea.style.boxSizing = 'border-box';
+
+                // Attach the event listener for user input.
+                textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+
+                // Perform the initial resize for draft messages or initial load.
                 autoResizeTextarea(textarea);
 
-                // Resize on input
-                textarea.addEventListener('input', () => autoResizeTextarea(textarea));
+                // Set a flag to prevent re-initialization.
+                textarea.dataset.autoresizeInitialized = 'true';
             }
         }
     }
