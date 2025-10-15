@@ -26,6 +26,7 @@ import './plugins/mobile-style-plugin.js';
 import './plugins/custom-dropdown-plugin.js';
 import './plugins/ui-controls-plugin.js';
 import './plugins/autoresize-textarea-plugin.js';
+import './plugins/token-counter-plugin.js';
 import './managed-entity-plugin-factory.js';
 // --- End Plugin Loading ---
 

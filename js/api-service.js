@@ -119,6 +119,7 @@ export class ApiService {
         try {
             const defaults = {
                 stream: config.use_stream && config.stream !== undefined ? config.stream : true,
+                stream_options: { include_usage: true },
                 model: config.use_model && config.model ? config.model : undefined,
                 temperature: config.use_temperature && config.temperature !== undefined ? parseFloat(config.temperature) : undefined,
                 top_p: config.use_top_p && config.top_p !== undefined ? parseFloat(config.top_p) : undefined,
@@ -152,16 +153,20 @@ export class ApiService {
             );
 
             message.value.content = ''; // Initialize content
+            message.value.streamedTokens = 0;
+            const startTime = Date.now();
             notifyUpdate();
 
             const decoder = new TextDecoder();
+            const tokenizer = window.gptTokenizer;
+
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
                 const chunk = decoder.decode(value);
                 const lines = chunk.split('\n');
-                const deltas = lines
+                const parsedLines = lines
                     .map(line => line.replace(/^data: /, '').trim())
                     .filter(line => line !== '' && line !== '[DONE]')
                     .map(line => {
@@ -172,13 +177,41 @@ export class ApiService {
                             return null;
                         }
                     })
-                    .filter(Boolean)
+                    .filter(Boolean);
+
+                const deltas = parsedLines
                     .map(json => json.choices[0].delta.content)
                     .filter(content => content);
 
                 if (deltas.length > 0) {
-                    message.value.content += deltas.join('');
+                    const joinedDeltas = deltas.join('');
+                    message.value.content += joinedDeltas;
+                    if (tokenizer) {
+                        try {
+                            message.value.streamedTokens += tokenizer.encode(joinedDeltas).length;
+                            const elapsedTime = (Date.now() - startTime) / 1000;
+                            if (elapsedTime > 0.1) { // Avoid division by zero and crazy numbers at the start
+                                message.value.tokensPerSecond = (message.value.streamedTokens / elapsedTime).toFixed(1);
+                            }
+                        } catch (e) {
+                            console.warn("Could not encode tokens for streaming count", e);
+                        }
+                    }
                     notifyUpdate();
+                }
+                for (const line of parsedLines) {
+                    if (line.usage) {
+                        message.value.usage = line.usage;
+                        if (line.usage.completion_tokens) {
+                            message.value.streamedTokens = line.usage.completion_tokens;
+                            const elapsedTime = (Date.now() - startTime) / 1000;
+                            if (elapsedTime > 0) {
+                                message.value.tokensPerSecond = (line.usage.completion_tokens / elapsedTime).toFixed(1);
+                            }
+                        }
+                        notifyUpdate();
+                        break;
+                    }
                 }
             }
         } catch (error) {
