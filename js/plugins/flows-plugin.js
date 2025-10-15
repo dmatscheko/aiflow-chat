@@ -489,11 +489,11 @@ class FlowRunner {
     }
 }
 
-// Initialize FlowsManager and register views on app init
+// Initialize FlowManager and register views on app init
 pluginManager.register({
-    name: 'FlowsManagerInitializer',
+    name: 'FlowManagerInitializer',
     onAppInit(app) {
-        flowManager = new FlowsManager(app);
+        flowManager = new FlowManager(app);
         app.flowManager = flowManager;
         pluginManager.registerView('flow-editor', (id) => flowManager.renderFlowEditor(id));
     }
