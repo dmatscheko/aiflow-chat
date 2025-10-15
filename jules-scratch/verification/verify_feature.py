@@ -14,9 +14,9 @@ def run(playwright):
 
     # Add a new flow
     page.click("button:has-text('Add New')")
-    page.wait_for_timeout(1000)
 
     # Add a consolidator step
+    page.wait_for_selector("button:has-text('Add Step')")
     page.click("button:has-text('Add Step')")
     page.click("text=Alt. Consolidator")
 

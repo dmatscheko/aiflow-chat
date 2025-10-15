@@ -292,13 +292,6 @@ export function registerFlowStepDefinitions(flowManager) {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
-            if (step.data.clearHistory) {
-                const error = executeHistoryClearing(step.data, chatLog, context);
-                if (error) {
-                    return context.stopFlow(error);
-                }
-            }
-
             const sourceMessage = _findLastMessageWithAlternatives(chatLog);
             if (!sourceMessage) {
                 return context.stopFlow('Consolidator could not find a preceding step with alternatives.');
@@ -310,6 +303,14 @@ export function registerFlowStepDefinitions(flowManager) {
             }).join('\n\n') + '\n\n--- END OF ALTERNATIVES ---';
 
             const finalPrompt = `${step.data.prePrompt || ''}\n\n${consolidatedContent}\n\n${step.data.postPrompt || ''}`;
+
+            if (step.data.clearHistory) {
+                const error = executeHistoryClearing(step.data, chatLog, context);
+                if (error) {
+                    return context.stopFlow(error);
+                }
+            }
+
             context.app.dom.messageInput.value = finalPrompt;
             context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
         },
