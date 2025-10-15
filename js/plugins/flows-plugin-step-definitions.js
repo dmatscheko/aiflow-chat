@@ -137,6 +137,67 @@ export function registerFlowStepDefinitions(flowManager) {
             <option value="">Default (Active Agent)</option>${agentOptions}
         </select>`;
 
+    // --- Reusable UI and Logic for History Clearing ---
+
+    const getClearHistoryUI = (step) => `
+        <div class="clear-history-options">
+            <label>From turn #:</label>
+            <input type="number" class="flow-step-clear-from flow-step-input" data-id="${step.id}" data-key="clearFrom" value="${step.data.clearFrom || 1}" min="1">
+            <div class="clear-history-to-container" style="${step.data.clearToBeginning ? 'display: none;' : ''}">
+                <label>To turn #:</label>
+                <input type="number" class="flow-step-clear-to flow-step-input" data-id="${step.id}" data-key="clearTo" value="${step.data.clearTo || 1}" min="1">
+            </div>
+            <label class="flow-step-checkbox-label">
+                <input type="checkbox" class="flow-step-clear-beginning flow-step-input" data-id="${step.id}" data-key="clearToBeginning" ${step.data.clearToBeginning ? 'checked' : ''}>
+                Clear to beginning
+            </label>
+            <small>(1 is the last turn)</small>
+        </div>`;
+
+    const handleClearHistoryUpdate = (step, target, renderAndConnect) => {
+        const key = target.dataset.key;
+        const value = target.type === 'checkbox' ? target.checked : parseInt(target.value, 10);
+        step.data[key] = value;
+        if (key === 'clearToBeginning') {
+            renderAndConnect();
+        }
+    };
+
+    const executeHistoryClearing = (stepData, chatLog, context) => {
+        const turns = _getTurns(chatLog);
+        const totalTurns = turns.length;
+        let clearFrom = stepData.clearFrom || 1;
+        let clearTo = stepData.clearToBeginning ? totalTurns : (stepData.clearTo || 1);
+
+        // Clamp values
+        if (clearFrom < 1) clearFrom = 1;
+        if (clearTo > totalTurns) clearTo = totalTurns;
+
+        const count = clearTo - clearFrom + 1;
+        if (count <= 0) {
+            return `At least one turn must be selected but ${count} turns selected.`;
+        }
+
+        for (let i = totalTurns - clearFrom; i >= totalTurns - clearTo; i--) {
+            if (!turns[i]) continue;
+            turns[i].forEach(msg => {
+                const alternatives = chatLog.findAlternatives(msg);
+                if (!alternatives) return;
+                const activeMessage = alternatives.getActiveMessage();
+                const messagesToDelete = [...alternatives.messages];
+                messagesToDelete.forEach(altMsg => {
+                    if (altMsg === activeMessage) {
+                        chatLog.deleteMessageAndPreserveChildren(altMsg);
+                    } else {
+                        chatLog.deleteMessage(altMsg);
+                    }
+                });
+            });
+        }
+        return null; // No error
+    };
+
+
     flowManager._defineStep('simple-prompt', {
         label: 'Simple Prompt',
         getDefaults: () => ({ prompt: 'Hello, world!', agentId: '' }),
@@ -183,14 +244,48 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('consolidator', {
         label: 'Alt. Consolidator',
-        getDefaults: () => ({ prePrompt: 'Please choose the best of the following answers (or if better than any single answer the best parts of the best answers combined):', postPrompt: 'Explain your choice.', agentId: '', onlyLastAnswer: false }),
-        render: (step, agentOptions) => `<h4>Alternatives Consolidator</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Text before alternatives:</label><textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea><label>Text after alternatives:</label><textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea><label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}>Only include each last answer</label></div>`,
-        onUpdate: (step, target) => {
+        getDefaults: () => ({
+            prePrompt: 'Please choose the best of the following answers (or if better than any single answer the best parts of the best answers combined):',
+            postPrompt: 'Explain your choice.',
+            agentId: '',
+            onlyLastAnswer: false,
+            // History clearing defaults
+            clearHistory: false,
+            clearFrom: 1,
+            clearTo: 1,
+            clearToBeginning: true
+        }),
+        render: (step, agentOptions) => `<h4>Alternatives Consolidator</h4>
+            <div class="flow-step-content">
+                ${getAgentsDropdown(step, agentOptions)}
+                <label>Text before alternatives:</label>
+                <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea>
+                <label>Text after alternatives:</label>
+                <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea>
+                <label class="flow-step-checkbox-label">
+                    <input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}>
+                    Only include each last answer
+                </label>
+                <hr>
+                <label class="flow-step-checkbox-label">
+                    <input type="checkbox" class="flow-step-clear-history-toggle flow-step-input" data-id="${step.id}" data-key="clearHistory" ${step.data.clearHistory ? 'checked' : ''}>
+                    Clear history before consolidating
+                </label>
+                <div class="consolidator-clear-history-container" style="${step.data.clearHistory ? '' : 'display: none;'}">
+                    ${getClearHistoryUI(step)}
+                </div>
+            </div>`,
+        onUpdate: (step, target, renderAndConnect) => {
             const key = target.dataset.key;
-            if (key === 'onlyLastAnswer') {
-                step.data[key] = target.checked;
-            } else {
-                step.data[key] = target.value;
+            const isCheckbox = target.type === 'checkbox';
+            const value = isCheckbox ? target.checked : target.value;
+
+            step.data[key] = value;
+
+            if (key === 'clearHistory') {
+                renderAndConnect(); // Re-render to show/hide the history options
+            } else if (Object.keys(step.data).some(k => k.startsWith('clear'))) {
+                handleClearHistoryUpdate(step, target, renderAndConnect);
             }
         },
         execute: (step, context) => {
@@ -198,7 +293,6 @@ export function registerFlowStepDefinitions(flowManager) {
             if (!chatLog) return context.stopFlow('No active chat.');
 
             const sourceMessage = _findLastMessageWithAlternatives(chatLog);
-
             if (!sourceMessage) {
                 return context.stopFlow('Consolidator could not find a preceding step with alternatives.');
             }
@@ -209,6 +303,14 @@ export function registerFlowStepDefinitions(flowManager) {
             }).join('\n\n') + '\n\n--- END OF ALTERNATIVES ---';
 
             const finalPrompt = `${step.data.prePrompt || ''}\n\n${consolidatedContent}\n\n${step.data.postPrompt || ''}`;
+
+            if (step.data.clearHistory) {
+                const error = executeHistoryClearing(step.data, chatLog, context);
+                if (error) {
+                    return context.stopFlow(error);
+                }
+            }
+
             context.app.dom.messageInput.value = finalPrompt;
             context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
         },
@@ -299,67 +401,19 @@ export function registerFlowStepDefinitions(flowManager) {
         label: 'Clear History',
         getDefaults: () => ({ clearFrom: 2, clearTo: 3, clearToBeginning: true }),
         render: (step) => `<h4>Clear History</h4>
-                <div class="flow-step-content">
-                    <label>From turn #:</label>
-                    <input type="number" class="flow-step-clear-from flow-step-input" data-id="${step.id}" data-key="clearFrom" value="${step.data.clearFrom || 1}" min="1">
-                    <div class="clear-history-to-container" style="${step.data.clearToBeginning ? 'display: none;' : ''}">
-                        <label>To turn #:</label>
-                        <input type="number" class="flow-step-clear-to flow-step-input" data-id="${step.id}" data-key="clearTo" value="${step.data.clearTo || 1}" min="1">
-                    </div>
-                    <label class="flow-step-checkbox-label">
-                        <input type="checkbox" class="flow-step-clear-beginning flow-step-input" data-id="${step.id}" data-key="clearToBeginning" ${step.data.clearToBeginning ? 'checked' : ''}>
-                        Clear to beginning
-                    </label>
-                    <small>(1 is the last turn)<br><br></small>
-                </div>`,
+            <div class="flow-step-content">
+                ${getClearHistoryUI(step)}
+            </div>`,
         onUpdate: (step, target, renderAndConnect) => {
-            const key = target.dataset.key;
-            const value = target.type === 'checkbox' ? target.checked : parseInt(target.value, 10);
-            step.data[key] = value;
-            if (key === 'clearToBeginning') {
-                renderAndConnect();
-            }
+            handleClearHistoryUpdate(step, target, renderAndConnect);
         },
         execute: (step, context) => {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
-            const turns = _getTurns(chatLog);
-            const totalTurns = turns.length;
-            let clearFrom = step.data.clearFrom || 1;
-            let clearTo = step.data.clearToBeginning ? totalTurns : (step.data.clearTo || 1);
-
-            // Clamp clearFrom to the minimum possible value
-            if (clearFrom < 1) {
-                clearFrom = 1;
-            }
-
-            // Clamp clearTo to the maximum possible value
-            if (clearTo > totalTurns) {
-                clearTo = totalTurns;
-            }
-
-            const count = clearTo - clearFrom + 1;
-            if (count <= 0) {
-                context.stopFlow(`At least one turn must be selected but ${count} turns selected.`);
-                return;
-            }
-
-            for (let i = totalTurns - clearFrom; i >= totalTurns - clearTo; i--) {
-                turns[i].forEach(msg => {
-                    const alternatives = chatLog.findAlternatives(msg);
-                    if (!alternatives) return;
-                    const activeMessage = alternatives.getActiveMessage();
-                    // Create a copy of the messages array to iterate over, as we are modifying it.
-                    const messagesToDelete = [...alternatives.messages];
-                    messagesToDelete.forEach(altMsg => {
-                        if (altMsg === activeMessage) {
-                            chatLog.deleteMessageAndPreserveChildren(altMsg);
-                        } else {
-                            chatLog.deleteMessage(altMsg);
-                        }
-                    });
-                });
+            const error = executeHistoryClearing(step.data, chatLog, context);
+            if (error) {
+                return context.stopFlow(error);
             }
 
             const nextStep = context.getNextStep(step.id);
