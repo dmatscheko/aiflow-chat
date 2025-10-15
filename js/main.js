@@ -25,6 +25,7 @@ import './plugins/title-bar-plugin.js';
 import './plugins/mobile-style-plugin.js';
 import './plugins/custom-dropdown-plugin.js';
 import './plugins/ui-controls-plugin.js';
+import './managed-entity-plugin-factory.js';
 // --- End Plugin Loading ---
 
 /**
@@ -115,6 +116,8 @@ class App {
          */
         this.responseProcessor = responseProcessor;
 
+        pluginManager.app = this; // Make app instance globally available to plugins
+
         this.initDOM();
 
         // --- Managers will be attached by plugins ---
@@ -124,6 +127,8 @@ class App {
         this.chatManager = null;
         /** @type {import('./plugins/agents-plugin.js').AgentManager | null} */
         this.agentManager = null;
+        /** @type {import('./plugins/flows-plugin.js').FlowManager | null} */
+        this.flowManager = null;
         // --- End of Managers ---
 
         // The constructor kicks off an async IIFE (Immediately Invoked Function Expression)

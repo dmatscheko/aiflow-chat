@@ -9,7 +9,7 @@
 'use strict';
 
 /**
- * @typedef {import('./flows-plugin.js').FlowsManager} FlowsManager
+ * @typedef {import('./flows-plugin.js').FlowManager} FlowManager
  * @typedef {import('../chat-data.js').ChatLog} ChatLog
  * @typedef {import('../chat-data.js').Message} Message
  */
@@ -69,7 +69,7 @@ function _extractContentFromBranch(startMessage, onlyLast) {
         if (!message || !message.value) return;
 
         const role = roleMapping[message.value.role] || message.value.role;
-        const formattedMessage = `**${role}:** ${message.value.content || ''}`;
+        const formattedMessage = `**${role}:**\n${message.value.content || ''}`;
         const newPath = [...currentPath, formattedMessage];
 
         const hasAnswers = message.answerAlternatives && message.answerAlternatives.messages.length > 0;
@@ -125,19 +125,19 @@ function _getTurns(chatLog) {
 }
 
 /**
- * Registers all the standard flow step definitions with the `FlowsManager`.
+ * Registers all the standard flow step definitions with the `FlowManager`.
  * Each step is defined with its label, default data, rendering logic (`render`),
  * UI update handler (`onUpdate`), and execution logic (`execute`).
- * @param {FlowsManager} flowsManager The instance of the FlowsManager to which the steps will be added.
+ * @param {FlowManager} flowManager The instance of the FlowManager to which the steps will be added.
  */
-export function registerFlowStepDefinitions(flowsManager) {
+export function registerFlowStepDefinitions(flowManager) {
     const getAgentsDropdown = (step, agentOptions) => `
         <label>Agent:</label>
         <select class="flow-step-agent flow-step-input" data-id="${step.id}" data-key="agentId">
             <option value="">Default (Active Agent)</option>${agentOptions}
         </select>`;
 
-    flowsManager._defineStep('simple-prompt', {
+    flowManager._defineStep('simple-prompt', {
         label: 'Simple Prompt',
         getDefaults: () => ({ prompt: 'Hello, world!', agentId: '' }),
         render: (step, agentOptions) => `<h4>Simple Prompt</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea></div>`,
@@ -149,7 +149,7 @@ export function registerFlowStepDefinitions(flowsManager) {
         },
     });
 
-    flowsManager._defineStep('multi-prompt', {
+    flowManager._defineStep('multi-prompt', {
         label: 'Multi Prompt',
         getDefaults: () => ({ prompt: '', count: 2, agentId: '' }),
         render: (step, agentOptions) => `<h4>Multi Prompt</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea><label>Number of alternatives:</label><input type="number" class="flow-step-count flow-step-input" data-id="${step.id}" data-key="count" value="${step.data.count || 1}" min="1" max="10"></div>`,
@@ -157,7 +157,7 @@ export function registerFlowStepDefinitions(flowsManager) {
         execute: (step, context) => {
             if (!step.data.prompt) return context.stopFlow('Multi Prompt step is not configured.');
 
-            const runner = flowsManager.activeFlowRunner;
+            const runner = flowManager.activeFlowRunner;
             if (!runner) return context.stopFlow('Flow runner not active.');
 
             const chat = context.app.chatManager.getActiveChat();
@@ -181,7 +181,7 @@ export function registerFlowStepDefinitions(flowsManager) {
         },
     });
 
-    flowsManager._defineStep('consolidator', {
+    flowManager._defineStep('consolidator', {
         label: 'Alt. Consolidator',
         getDefaults: () => ({ prePrompt: 'Please choose the best of the following answers (or if better than any single answer the best parts of the best answers combined):', postPrompt: 'Explain your choice.', agentId: '', onlyLastAnswer: false }),
         render: (step, agentOptions) => `<h4>Alternatives Consolidator</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Text before alternatives:</label><textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea><label>Text after alternatives:</label><textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea><label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}>Only include each last answer</label></div>`,
@@ -205,8 +205,8 @@ export function registerFlowStepDefinitions(flowsManager) {
 
             const consolidatedContent = sourceMessage.answerAlternatives.messages.map((alternativeStartMessage, i) => {
                 const turnContent = _extractContentFromBranch(alternativeStartMessage, step.data.onlyLastAnswer);
-                return `--- ALTERNATIVE ${i + 1} ---\n${turnContent}`;
-            }).join('\n\n');
+                return `--- ALTERNATIVE ${i + 1} ---\n\n${turnContent}`;
+            }).join('\n\n') + '\n\n--- END OF ALTERNATIVES ---';
 
             const finalPrompt = `${step.data.prePrompt || ''}\n\n${consolidatedContent}\n\n${step.data.postPrompt || ''}`;
             context.app.dom.messageInput.value = finalPrompt;
@@ -214,7 +214,7 @@ export function registerFlowStepDefinitions(flowsManager) {
         },
     });
 
-    flowsManager._defineStep('echo-answer', {
+    flowManager._defineStep('echo-answer', {
         label: 'Echo Answer',
         getDefaults: () => ({
             prePrompt: 'Is this idea and code correct? Be concise.\n\n\n',
@@ -295,7 +295,7 @@ export function registerFlowStepDefinitions(flowsManager) {
         },
     });
 
-    flowsManager._defineStep('clear-history', {
+    flowManager._defineStep('clear-history', {
         label: 'Clear History',
         getDefaults: () => ({ clearFrom: 2, clearTo: 3, clearToBeginning: true }),
         render: (step) => `<h4>Clear History</h4>
@@ -367,7 +367,7 @@ export function registerFlowStepDefinitions(flowsManager) {
         },
     });
 
-    flowsManager._defineStep('branch', {
+    flowManager._defineStep('branch', {
         label: 'Branch',
         getDefaults: () => ({ conditionType: 'contains', condition: '' }),
         render: (step) => `<h4>Branch</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea></div>`,
@@ -388,7 +388,7 @@ export function registerFlowStepDefinitions(flowsManager) {
         },
     });
 
-    flowsManager._defineStep('conditional-stop', {
+    flowManager._defineStep('conditional-stop', {
         label: 'Conditional Stop',
         getDefaults: () => ({ conditionType: 'contains', condition: '', onMatch: 'stop' }),
         render: (step) => `<h4>Conditional Stop</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea><label>On Match:</label><select class="flow-step-on-match flow-step-input" data-id="${step.id}" data-key="onMatch"><option value="stop" ${step.data.onMatch === 'stop' ? 'selected' : ''}>Stop flow</option><option value="continue" ${step.data.onMatch === 'continue' ? 'selected' : ''}>Must match to continue</option></select></div>`,
