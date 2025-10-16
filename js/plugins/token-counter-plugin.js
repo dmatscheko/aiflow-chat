@@ -9,8 +9,14 @@
 
 import { pluginManager } from '../plugin-manager.js';
 
+let appInstance = null;
+
 const tokenCounterPlugin = {
     name: 'TokenCounter',
+
+    onAppInit(app) {
+        appInstance = app;
+    },
 
     /**
      * Adds the token counter control to the title bar.
@@ -20,29 +26,25 @@ const tokenCounterPlugin = {
     onTitleBarControlsRegistered(controls) {
         controls.push({
             id: 'token-counter-container',
-            html: '<div id="token-counter" class="title-bar-control">Tokens: 0</div>',
+            html: `
+                <div class="token-counter-group">
+                    <span id="context-token-counter" class="title-bar-control">Context: 0</span>
+                    <span id="prompt-token-counter" class="title-bar-control">Prompt: 0</span>
+                </div>
+            `,
             onMount: (container) => {
                 const messageInput = document.getElementById('message-input');
-                const tokenCounter = container.querySelector('#token-counter');
-
-                if (messageInput && tokenCounter) {
-                    const updateTokenCount = () => {
-                        if (typeof GPTTokenizer_cl100k_base === 'undefined') return;
-                        const text = messageInput.value;
-                        if (text) {
-                            const tokens = GPTTokenizer_cl100k_base.encode(text);
-                            tokenCounter.textContent = `Tokens: ${tokens.length}`;
-                        } else {
-                            tokenCounter.textContent = 'Tokens: 0';
-                        }
-                    };
-
-                    messageInput.addEventListener('input', updateTokenCount);
-                    updateTokenCount(); // Initial count
+                if (messageInput) {
+                    messageInput.addEventListener('input', updateAllTokenCounts);
                 }
+                updateAllTokenCounts();
             }
         });
         return controls;
+    },
+
+    onViewRendered() {
+        updateAllTokenCounts();
     },
 
     /**
@@ -115,6 +117,7 @@ const tokenCounterPlugin = {
             }
             delete message.liveSpeed;
             notifyUpdate();
+            updateAllTokenCounts();
         }
     },
 
@@ -122,11 +125,37 @@ const tokenCounterPlugin = {
      * Resets the token counter when the message form is submitted.
      */
     onMessageFormSubmit() {
-        const tokenCounter = document.getElementById('token-counter');
-        if (tokenCounter) {
-            tokenCounter.textContent = 'Tokens: 0';
-        }
+        updateAllTokenCounts();
     }
 };
+
+function updateAllTokenCounts() {
+    if (typeof GPTTokenizer_cl100k_base === 'undefined' || !appInstance) {
+        return;
+    }
+
+    const contextTokenCounter = document.getElementById('context-token-counter');
+    const promptTokenCounter = document.getElementById('prompt-token-counter');
+    const messageInput = document.getElementById('message-input');
+
+    if (!contextTokenCounter || !promptTokenCounter || !messageInput) {
+        return;
+    }
+
+    // Calculate and display prompt tokens
+    const promptText = messageInput.value;
+    const promptTokens = promptText ? GPTTokenizer_cl100k_base.encode(promptText).length : 0;
+    promptTokenCounter.textContent = `Prompt: ${promptTokens}`;
+
+    // Calculate and display context tokens
+    const activeChat = appInstance.chatManager.getActiveChat();
+    let contextTokens = 0;
+    if (activeChat) {
+        const messages = activeChat.log.getActiveMessages();
+        const historyText = messages.map(m => m.value.content).join('\n');
+        contextTokens = GPTTokenizer_cl100k_base.encode(historyText).length;
+    }
+    contextTokenCounter.textContent = `Context: ${contextTokens}`;
+}
 
 pluginManager.register(tokenCounterPlugin);
