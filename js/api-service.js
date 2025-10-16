@@ -181,7 +181,7 @@ export class ApiService {
                     .filter(content => content);
 
                 if (deltas.length > 0) {
-                    pluginManager.trigger('onStreamingData', { message, deltas });
+                    pluginManager.trigger('onStreamingData', { message, deltas, notifyUpdate });
                     message.value.content += deltas.join('');
                     notifyUpdate();
                 }

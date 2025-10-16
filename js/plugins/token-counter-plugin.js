@@ -57,13 +57,15 @@ const tokenCounterPlugin = {
                 let speedSpan = titleText.querySelector('.token-speed-display');
                 if (!speedSpan) {
                     speedSpan = document.createElement('span');
-                    speedSpan.id = `token-speed-${message.id}`;
                     speedSpan.className = 'token-speed-display';
                     titleText.appendChild(speedSpan);
                 }
 
-                if (message.value.tokensPerSecond) {
-                    speedSpan.textContent = ` (${message.value.tokensPerSecond.toFixed(1)} t/s)`;
+                const speed = message.liveSpeed || message.value.tokensPerSecond;
+                if (speed) {
+                    speedSpan.textContent = ` (${speed.toFixed(1)} t/s)`;
+                } else {
+                    speedSpan.textContent = '';
                 }
             }
         }
@@ -76,27 +78,25 @@ const tokenCounterPlugin = {
     onStreamingStart({ message }) {
         message.startTime = Date.now();
         message.totalTokens = 0;
+        message.liveSpeed = 0;
     },
 
     /**
      * Updates the token count as data is received.
      * @param {object} data - The streaming data.
      */
-    onStreamingData({ message, deltas }) {
+    onStreamingData({ message, deltas, notifyUpdate }) {
         if (typeof GPTTokenizer_cl100k_base === 'undefined') return;
         if (message.totalTokens !== undefined) {
             const text = deltas.join('');
             const tokens = GPTTokenizer_cl100k_base.encode(text);
             message.totalTokens += tokens.length;
 
-            const speedSpan = document.getElementById(`token-speed-${message.id}`);
-            if (speedSpan) {
-                const elapsedTime = (Date.now() - message.startTime) / 1000;
-                if (elapsedTime > 0) {
-                    const speed = message.totalTokens / elapsedTime;
-                    speedSpan.textContent = ` (${speed.toFixed(1)} t/s)`;
-                }
+            const elapsedTime = (Date.now() - message.startTime) / 1000;
+            if (elapsedTime > 0) {
+                message.liveSpeed = message.totalTokens / elapsedTime;
             }
+            notifyUpdate();
         }
     },
 
@@ -113,6 +113,7 @@ const tokenCounterPlugin = {
             } else {
                 message.value.tokensPerSecond = 0;
             }
+            delete message.liveSpeed;
             notifyUpdate();
         }
     }
