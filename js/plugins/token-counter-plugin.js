@@ -27,10 +27,10 @@ const tokenCounterPlugin = {
 
                 if (messageInput && tokenCounter) {
                     const updateTokenCount = () => {
-                        if (typeof cl100k_base === 'undefined') return;
+                        if (typeof GPTTokenizer_cl100k_base === 'undefined') return;
                         const text = messageInput.value;
                         if (text) {
-                            const tokens = cl100k_base.encode(text);
+                            const tokens = GPTTokenizer_cl100k_base.encode(text);
                             tokenCounter.textContent = `Tokens: ${tokens.length}`;
                         } else {
                             tokenCounter.textContent = 'Tokens: 0';
@@ -46,27 +46,17 @@ const tokenCounterPlugin = {
     },
 
     /**
-     * Attaches an event listener to the message input to update the token count.
-     * @param {object} view - The current view object.
-     */
-    onViewRendered(view) {
-        if (view.type !== 'chat') {
-            return;
-        }
-    },
-
-    /**
      * Adds a placeholder for the token speed display in AI message bubbles.
      * @param {HTMLElement} el - The message bubble element.
      * @param {object} message - The message object being rendered.
      */
     onMessageRendered(el, message) {
-        if (message.value.role === 'assistant') {
+        if (message.value.role === 'assistant' && message.value.tokensPerSecond) {
             const titleText = el.querySelector('.message-title-text');
             if (titleText) {
                 const speedSpan = document.createElement('span');
-                speedSpan.id = `token-speed-${message.id}`;
                 speedSpan.className = 'token-speed-display';
+                speedSpan.textContent = ` (${message.value.tokensPerSecond.toFixed(1)} t/s)`;
                 titleText.appendChild(speedSpan);
             }
         }
@@ -86,9 +76,9 @@ const tokenCounterPlugin = {
      * @param {object} data - The streaming data.
      */
     onStreamingData({ message, chunk }) {
-        if (typeof cl100k_base === 'undefined') return;
+        if (typeof GPTTokenizer_cl100k_base === 'undefined') return;
         if (message.totalTokens !== undefined) {
-            const tokens = cl100k_base.encode(chunk);
+            const tokens = GPTTokenizer_cl100k_base.encode(chunk);
             message.totalTokens += tokens.length;
         }
     },
@@ -101,12 +91,15 @@ const tokenCounterPlugin = {
         if (message.startTime && message.totalTokens) {
             const endTime = Date.now();
             const durationInSeconds = (endTime - message.startTime) / 1000;
-            const tokensPerSecond = message.totalTokens / durationInSeconds;
-
-            const speedSpan = document.getElementById(`token-speed-${message.id}`);
-            if (speedSpan) {
-                speedSpan.textContent = ` (${tokensPerSecond.toFixed(1)} t/s)`;
+            // Avoid division by zero for very fast responses
+            if (durationInSeconds > 0) {
+                message.value.tokensPerSecond = message.totalTokens / durationInSeconds;
+            } else {
+                message.value.tokensPerSecond = 0;
             }
+            // The chat log will be saved automatically by its subscription,
+            // and the UI will re-render via the same mechanism,
+            // which will trigger onMessageRendered.
         }
     }
 };

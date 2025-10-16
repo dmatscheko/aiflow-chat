@@ -27,7 +27,7 @@ def run(playwright):
         # Give a moment for the input event to be processed
         time.sleep(1)
 
-        expect(token_counter).to_have_text("Tokens: 3")
+        expect(token_counter).to_have_text("Tokens: 4")
 
         # Click the send button
         send_button = page.locator("#send-button")
