@@ -10,6 +10,7 @@
 import { pluginManager } from '../plugin-manager.js';
 
 let appInstance = null;
+let currentChatLog = null;
 
 const tokenCounterPlugin = {
     name: 'TokenCounter',
@@ -44,6 +45,16 @@ const tokenCounterPlugin = {
     },
 
     onViewRendered() {
+        if (!appInstance) return;
+
+        const activeChat = appInstance.chatManager.getActiveChat();
+        if (activeChat && activeChat.log !== currentChatLog) {
+            if (currentChatLog) {
+                currentChatLog.unsubscribe(updateAllTokenCounts);
+            }
+            currentChatLog = activeChat.log;
+            currentChatLog.subscribe(updateAllTokenCounts);
+        }
         updateAllTokenCounts();
     },
 
@@ -117,7 +128,6 @@ const tokenCounterPlugin = {
             }
             delete message.liveSpeed;
             notifyUpdate();
-            updateAllTokenCounts();
         }
     },
 
@@ -125,10 +135,6 @@ const tokenCounterPlugin = {
      * Resets the token counter when the message form is submitted.
      */
     onMessageFormSubmit() {
-        updateAllTokenCounts();
-    },
-
-    onMessageDeleted() {
         updateAllTokenCounts();
     }
 };

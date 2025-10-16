@@ -182,8 +182,7 @@ export class ChatLog {
     /**
      * Creates an instance of ChatLog.
      */
-    constructor(pluginManager) {
-        this.pluginManager = pluginManager;
+    constructor() {
         /**
          * The root of the message tree. It's an `Alternatives` object to allow
          * even the very first message to have alternatives.
@@ -474,9 +473,6 @@ export class ChatLog {
                 alternatives.activeMessageIndex = Math.max(0, alternatives.activeMessageIndex - 1);
             }
             this.notify();
-            if (this.pluginManager) {
-                this.pluginManager.trigger('onMessageDeleted');
-            }
         }
     }
 
@@ -574,8 +570,8 @@ export class ChatLog {
      * @param {SerializedAlternatives | null} jsonData - The serialized data to load from.
      * @returns {ChatLog} A new `ChatLog` instance populated with the provided data.
      */
-    static fromJSON(jsonData, pluginManager) {
-        const chatLog = new ChatLog(pluginManager);
+    static fromJSON(jsonData) {
+        const chatLog = new ChatLog();
         if (!jsonData) {
             return chatLog;
         }
