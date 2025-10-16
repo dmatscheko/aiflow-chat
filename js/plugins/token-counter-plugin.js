@@ -116,6 +116,16 @@ const tokenCounterPlugin = {
             delete message.liveSpeed;
             notifyUpdate();
         }
+    },
+
+    /**
+     * Resets the token counter when the message form is submitted.
+     */
+    onMessageFormSubmit() {
+        const tokenCounter = document.getElementById('token-counter');
+        if (tokenCounter) {
+            tokenCounter.textContent = 'Tokens: 0';
+        }
     }
 };
 
