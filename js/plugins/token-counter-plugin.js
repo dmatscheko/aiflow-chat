@@ -51,16 +51,20 @@ const tokenCounterPlugin = {
      * @param {object} message - The message object being rendered.
      */
     onMessageRendered(el, message) {
-        if (message.value.role === 'assistant' && message.value.tokensPerSecond) {
+        if (message.value.role === 'assistant') {
             const titleText = el.querySelector('.message-title-text');
             if (titleText) {
                 let speedSpan = titleText.querySelector('.token-speed-display');
                 if (!speedSpan) {
                     speedSpan = document.createElement('span');
+                    speedSpan.id = `token-speed-${message.id}`;
                     speedSpan.className = 'token-speed-display';
                     titleText.appendChild(speedSpan);
                 }
-                speedSpan.textContent = ` (${message.value.tokensPerSecond.toFixed(1)} t/s)`;
+
+                if (message.value.tokensPerSecond) {
+                    speedSpan.textContent = ` (${message.value.tokensPerSecond.toFixed(1)} t/s)`;
+                }
             }
         }
     },
@@ -84,6 +88,15 @@ const tokenCounterPlugin = {
             const text = deltas.join('');
             const tokens = GPTTokenizer_cl100k_base.encode(text);
             message.totalTokens += tokens.length;
+
+            const speedSpan = document.getElementById(`token-speed-${message.id}`);
+            if (speedSpan) {
+                const elapsedTime = (Date.now() - message.startTime) / 1000;
+                if (elapsedTime > 0) {
+                    const speed = message.totalTokens / elapsedTime;
+                    speedSpan.textContent = ` (${speed.toFixed(1)} t/s)`;
+                }
+            }
         }
     },
 
