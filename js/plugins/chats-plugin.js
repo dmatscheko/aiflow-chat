@@ -200,6 +200,7 @@ class ChatManager {
             this.app.dom.messageInput.value = '';
             activeChat.draftMessage = '';
             this.dataManager.save();
+            pluginManager.trigger('onMessageFormSubmit');
         }
 
         const finalAgentId = agentId || activeChat.agent;
