@@ -126,6 +126,10 @@ const tokenCounterPlugin = {
      */
     onMessageFormSubmit() {
         updateAllTokenCounts();
+    },
+
+    onMessageDeleted() {
+        updateAllTokenCounts();
     }
 };
 

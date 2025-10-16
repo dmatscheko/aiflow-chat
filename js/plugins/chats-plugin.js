@@ -61,7 +61,10 @@ class ChatManager {
 
     _hydrateChat(chatData) {
         // If the log is already a ChatLog instance, don't re-hydrate.
-        const log = chatData.log instanceof ChatLog ? chatData.log : ChatLog.fromJSON(chatData.log);
+        const log = chatData.log instanceof ChatLog ? chatData.log : ChatLog.fromJSON(chatData.log, pluginManager);
+        if (!(log.pluginManager)) {
+            log.pluginManager = pluginManager;
+        }
         const chat = {
             id: chatData.id,
             title: chatData.title,
@@ -91,7 +94,7 @@ class ChatManager {
     createNewChat() {
         const newChatData = {
             title: 'New Chat',
-            log: new ChatLog(),
+            log: new ChatLog(pluginManager),
             draftMessage: '',
             agent: null,
             flow: null,
