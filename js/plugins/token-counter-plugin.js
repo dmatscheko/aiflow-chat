@@ -53,7 +53,7 @@ const tokenCounterPlugin = {
      * @param {object} message - The message object being rendered.
      */
     onMessageRendered(el, message) {
-        if (message.value.role === 'assistant') {
+        if (message.value.role === 'assistant' || message.value.role === 'tool') {
             const titleText = el.querySelector('.message-title-text');
             if (titleText) {
                 let speedSpan = titleText.querySelector('.token-speed-display');
