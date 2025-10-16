@@ -54,10 +54,13 @@ const tokenCounterPlugin = {
         if (message.value.role === 'assistant' && message.value.tokensPerSecond) {
             const titleText = el.querySelector('.message-title-text');
             if (titleText) {
-                const speedSpan = document.createElement('span');
-                speedSpan.className = 'token-speed-display';
+                let speedSpan = titleText.querySelector('.token-speed-display');
+                if (!speedSpan) {
+                    speedSpan = document.createElement('span');
+                    speedSpan.className = 'token-speed-display';
+                    titleText.appendChild(speedSpan);
+                }
                 speedSpan.textContent = ` (${message.value.tokensPerSecond.toFixed(1)} t/s)`;
-                titleText.appendChild(speedSpan);
             }
         }
     },
@@ -75,10 +78,11 @@ const tokenCounterPlugin = {
      * Updates the token count as data is received.
      * @param {object} data - The streaming data.
      */
-    onStreamingData({ message, chunk }) {
+    onStreamingData({ message, deltas }) {
         if (typeof GPTTokenizer_cl100k_base === 'undefined') return;
         if (message.totalTokens !== undefined) {
-            const tokens = GPTTokenizer_cl100k_base.encode(chunk);
+            const text = deltas.join('');
+            const tokens = GPTTokenizer_cl100k_base.encode(text);
             message.totalTokens += tokens.length;
         }
     },
@@ -87,19 +91,16 @@ const tokenCounterPlugin = {
      * Calculates and displays the final tokens/second rate when the stream ends.
      * @param {object} data - The streaming end data.
      */
-    onStreamingEnd({ message }) {
+    onStreamingEnd({ message, notifyUpdate }) {
         if (message.startTime && message.totalTokens) {
             const endTime = Date.now();
             const durationInSeconds = (endTime - message.startTime) / 1000;
-            // Avoid division by zero for very fast responses
             if (durationInSeconds > 0) {
                 message.value.tokensPerSecond = message.totalTokens / durationInSeconds;
             } else {
                 message.value.tokensPerSecond = 0;
             }
-            // The chat log will be saved automatically by its subscription,
-            // and the UI will re-render via the same mechanism,
-            // which will trigger onMessageRendered.
+            notifyUpdate();
         }
     }
 };

@@ -164,9 +164,6 @@ export class ApiService {
                 if (done) break;
 
                 const chunk = decoder.decode(value);
-
-                pluginManager.trigger('onStreamingData', { message, chunk });
-
                 const lines = chunk.split('\n');
                 const deltas = lines
                     .map(line => line.replace(/^data: /, '').trim())
@@ -184,11 +181,12 @@ export class ApiService {
                     .filter(content => content);
 
                 if (deltas.length > 0) {
+                    pluginManager.trigger('onStreamingData', { message, deltas });
                     message.value.content += deltas.join('');
                     notifyUpdate();
                 }
             }
-            pluginManager.trigger('onStreamingEnd', { message });
+            pluginManager.trigger('onStreamingEnd', { message, notifyUpdate });
         } catch (error) {
             if (error.name === 'AbortError') {
                 message.value.content += '\n\n[Aborted by user]';
