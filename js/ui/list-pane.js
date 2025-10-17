@@ -20,6 +20,7 @@
  * @property {function(): object} onAddNew - A callback function that creates a new item and returns it.
  * @property {function(object): string} getItemName - A function to get the display name of an item.
  * @property {function(string, string): boolean} [onDelete] - An optional callback to confirm deletion.
+ * @property {Array<object>} [actionButtons] - An optional array of button definitions to add to the bottom of the pane.
  */
 
 /**
@@ -36,17 +37,35 @@ export function createListPane(config) {
         onAddNew,
         getItemName,
         onDelete,
+        actionButtons = [],
     } = config;
 
     container.innerHTML = `
         <div class="list-pane">
-            <ul class="item-list"></ul>
             <button class="add-new-button">${addNewButtonLabel}</button>
+            <ul class="item-list"></ul>
+            <div class="list-pane-footer">
+                <div class="spacer"></div>
+                <div class="action-buttons"></div>
+            </div>
         </div>
     `;
 
     const listEl = container.querySelector('.item-list');
     const addButton = container.querySelector('.add-new-button');
+    const actionButtonsContainer = container.querySelector('.action-buttons');
+
+    // Render action buttons if provided
+    if (actionButtons.length > 0) {
+        actionButtons.forEach(buttonInfo => {
+            const button = document.createElement('button');
+            button.id = buttonInfo.id;
+            button.textContent = buttonInfo.label;
+            button.className = buttonInfo.className || 'btn-gray';
+            button.addEventListener('click', buttonInfo.onClick);
+            actionButtonsContainer.appendChild(button);
+        });
+    }
 
     const renderList = () => {
         listEl.innerHTML = '';

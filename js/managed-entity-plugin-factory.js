@@ -24,6 +24,7 @@ import { pluginManager } from './plugin-manager.js';
  * @property {() => any} onAddNew - Function to call when the 'Add New' button is clicked.
  * @property {(item: any) => string} getItemName - Function to get the display name of an item.
  * @property {(itemId: string, itemName: string) => boolean} onDelete - Function to call when an item is deleted.
+ * @property {Array<object>} [actionButtons] - An optional array of button definitions to add to the bottom of the pane.
  * @property {object} [pluginHooks={}] - Additional plugin hooks to merge into the created plugin.
  * @property {boolean} [addAtStart=false] - Whether to add the tab at the beginning of the tab list.
  */
@@ -58,6 +59,7 @@ export function createManagedEntityPlugin(config) {
                         onAddNew: config.onAddNew,
                         getItemName: config.getItemName,
                         onDelete: config.onDelete,
+                        actionButtons: config.actionButtons || [],
                     });
 
                     // If a custom onActivate is provided, call it.

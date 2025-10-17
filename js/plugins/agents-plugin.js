@@ -252,7 +252,7 @@ class AgentManager {
     async fetchModels(agentId = null, targetSelectElement = null) {
         const effectiveConfig = this.getEffectiveApiConfig(agentId);
         const { apiUrl, apiKey, model: currentModelValue } = effectiveConfig;
-        if (!apiUrl) return console.warn("Cannot fetch models without an API URL.");
+        if (!apiUrl) return;
 
         const populateSelect = (models) => {
             const modelSelect = targetSelectElement || document.querySelector(`#agent-${agentId}-modelSettings-model`);
@@ -324,34 +324,7 @@ class AgentManager {
         }
 
         // --- Title Bar ---
-        const buttons = [
-            {
-                id: 'import-agents-btn',
-                label: 'Import Agents',
-                className: 'btn-gray',
-                onClick: () => {
-                    importJson('.agents', (data) => {
-                        if (Array.isArray(data)) {
-                            data.forEach(agentData => this.addAgentFromData(agentData));
-                            alert(`${data.length} agent(s) imported successfully.`);
-                        } else {
-                            this.addAgentFromData(data);
-                            alert(`Agent imported successfully.`);
-                        }
-                    });
-                }
-            },
-            {
-                id: 'export-agents-btn',
-                label: 'Export Agents',
-                className: 'btn-gray',
-                onClick: () => {
-                    const agentsToExport = this.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
-                    if (agentsToExport.length > 0) exportJson(agentsToExport, 'agents_config', 'agents');
-                    else alert('No custom agents to export.');
-                }
-            }
-        ];
+        const buttons = [];
         const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
         const titleParts = [];
         if (isDefaultAgent) {
@@ -511,7 +484,9 @@ pluginManager.register({
         agentManager = new AgentManager(app);
         app.agentManager = agentManager;
         pluginManager.registerView('agent-editor', (id) => agentManager.renderAgentEditor(id));
-        agentManager.fetchModels(DEFAULT_AGENT_ID);
+        if (agentManager.getAgent(DEFAULT_AGENT_ID)?.modelSettings?.apiUrl) {
+            agentManager.fetchModels(DEFAULT_AGENT_ID);
+        }
 
         document.body.addEventListener('mcp-tools-updated', (e) => {
             if (app.activeView.type === 'agent-editor' && app.activeView.id) {
@@ -534,6 +509,34 @@ createManagedEntityPlugin({
     viewType: 'agent-editor',
     onAddNew: () => agentManager.addAgent({}),
     getItemName: (item) => item.name,
+    actionButtons: [
+        {
+            id: 'import-agents-btn',
+            label: 'Import Agents',
+            className: 'btn-gray',
+            onClick: () => {
+                importJson('.agents', (data) => {
+                    if (Array.isArray(data)) {
+                        data.forEach(agentData => agentManager.addAgentFromData(agentData));
+                        alert(`${data.length} agent(s) imported successfully.`);
+                    } else {
+                        agentManager.addAgentFromData(data);
+                        alert(`Agent imported successfully.`);
+                    }
+                });
+            }
+        },
+        {
+            id: 'export-agents-btn',
+            label: 'Export Agents',
+            className: 'btn-gray',
+            onClick: () => {
+                const agentsToExport = agentManager.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
+                if (agentsToExport.length > 0) exportJson(agentsToExport, 'agents_config', 'agents');
+                else alert('No custom agents to export.');
+            }
+        }
+    ],
     onDelete: (itemId, itemName) => {
         if (itemId === DEFAULT_AGENT_ID) {
             alert("The Default Agent cannot be deleted.");

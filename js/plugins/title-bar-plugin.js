@@ -249,36 +249,7 @@ const titleBarPlugin = {
             // Allow plugins to add their own controls
             controls = pluginManager.trigger('onTitleBarControlsRegistered', controls);
 
-            const buttons = [
-                {
-                    id: 'load-chat-btn',
-                    label: 'Load Chat',
-                    className: 'btn-gray',
-                    onClick: () => {
-                        importJson('.chat', (data) => {
-                            appInstance.chatManager.createChatFromData(data);
-                        });
-                    }
-                },
-                {
-                    id: 'save-chat-btn',
-                    label: 'Save Chat',
-                    className: 'btn-gray',
-                    onClick: () => {
-                        const activeChat = appInstance.chatManager.getActiveChat();
-                        if (activeChat) {
-                            const chatToSave = {
-                                title: activeChat.title,
-                                log: activeChat.log.toJSON(),
-                                draftMessage: activeChat.draftMessage,
-                                agent: activeChat.agent,
-                                flow: activeChat.flow,
-                            };
-                            exportJson(chatToSave, activeChat.title.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'chat');
-                        }
-                    }
-                }
-            ];
+            const buttons = [];
 
             const titleBar = createTitleBar(titleParts, controls, buttons);
             mainPanel.prepend(titleBar);

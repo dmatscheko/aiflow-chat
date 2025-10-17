@@ -506,6 +506,32 @@ createManagedEntityPlugin({
     viewType: 'flow-editor',
     onAddNew: () => flowManager.addFlow({ name: 'New Flow', steps: [], connections: [] }),
     getItemName: (item) => item.name,
+    actionButtons: [
+        {
+            id: 'load-flow-btn',
+            label: 'Load Flow',
+            className: 'btn-gray',
+            onClick: () => {
+                importJson('.flow', (data) => {
+                    const newFlow = flowManager.addFlowFromData(data);
+                    flowManager.app.setView('flow-editor', newFlow.id);
+                });
+            }
+        },
+        {
+            id: 'save-flow-btn',
+            label: 'Save Flow',
+            className: 'btn-gray',
+            onClick: () => {
+                const activeFlow = flowManager.getFlow(flowManager.app.activeView.id);
+                if (activeFlow) {
+                    exportJson(activeFlow, activeFlow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow');
+                } else {
+                    alert('No active flow to save.');
+                }
+            }
+        }
+    ],
     onDelete: (itemId, itemName) => {
         const flow = flowManager.getFlow(itemId);
         if (flow && flow.steps.length > 0) {
@@ -574,18 +600,6 @@ createManagedEntityPlugin({
                                     renderAndConnect();
                                 }
                             }
-                        },
-                        {
-                            id: 'load-flow-btn',
-                            label: 'Load Flow',
-                            className: 'btn-gray',
-                            onClick: () => importJson('.flow', handleImport)
-                        },
-                        {
-                            id: 'save-flow-btn',
-                            label: 'Save Flow',
-                            className: 'btn-gray',
-                            onClick: () => exportJson(flow, flow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow')
                         }
                     ];
 
