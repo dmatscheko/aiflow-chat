@@ -337,6 +337,10 @@ class ChatUI {
         const el = document.createElement('div');
         el.classList.add('message', `role-${message.value.role}`);
 
+        if (appInstance.virtualEditingState && appInstance.virtualEditingState.originalMessage.id === message.id) {
+            el.classList.add('virtual-editing');
+        }
+
         if (depth > 0) {
             // Indent the message bubble to make space for the depth lines.
             el.style.marginLeft = `${depth * 20}px`;

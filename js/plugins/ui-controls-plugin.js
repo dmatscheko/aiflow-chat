@@ -73,14 +73,26 @@ const uiControlsPlugin = {
         const alternatives = chatLog.findAlternatives(message);
 
         // Add alternative navigation controls if applicable.
-        if (alternatives && alternatives.messages.length > 1) {
+        const isVirtualEditing = el.classList.contains('virtual-editing');
+        const hasAlternatives = alternatives && alternatives.messages.length > 1;
+
+        if (hasAlternatives || isVirtualEditing) {
+            const total = alternatives ? alternatives.messages.length + (isVirtualEditing ? 1 : 0) : 1;
+            const current = alternatives ? (isVirtualEditing ? total : alternatives.activeMessageIndex + 1) : 1;
+
             const prevBtn = createControlButton('Previous Message', '<svg width="16" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 7.766c0-1.554-1.696-2.515-3.029-1.715l-7.056 4.234c-1.295.777-1.295 2.653 0 3.43l7.056 4.234c1.333.8 3.029-.16 3.029-1.715V7.766zM9.944 12L17 7.766v8.468L9.944 12zM6 6a1 1 0 0 1 1 1v10a1 1 0 1 1-2 0V7a1 1 0 0 1 1-1z" fill="currentColor"/></svg>', () => chatLog.cycleAlternatives(message, 'prev'));
             const nextBtn = createControlButton('Next Message', '<svg width="16" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 7.766c0-1.554 1.696-2.515 3.029-1.715l7.056 4.234c1.295.777-1.295 2.653 0 3.43L8.03 17.949c-1.333.8-3.029-.16-3.029-1.715V7.766zM14.056 12L7 7.766v8.468L14.056 12zM18 6a1 1 0 0 1 1 1v10a1 1 0 1 1-2 0V7a1 1 0 0 1 1-1z" fill="currentColor"/></svg>', () => chatLog.cycleAlternatives(message, 'next'));
             const status = document.createElement('span');
-            status.innerHTML = `&nbsp;${alternatives.activeMessageIndex + 1}/${alternatives.messages.length}&nbsp;`;
+            status.innerHTML = `&nbsp;${current}/${total}&nbsp;`;
             controlsContainer.appendChild(prevBtn);
             controlsContainer.appendChild(status);
             controlsContainer.appendChild(nextBtn);
+
+            // In virtual editing, the cycle buttons should be disabled.
+            if (isVirtualEditing) {
+                prevBtn.disabled = true;
+                nextBtn.disabled = true;
+            }
         }
 
         // Spacer
@@ -95,11 +107,13 @@ const uiControlsPlugin = {
                 chatLog.addAlternative(message, { role: 'assistant', content: null, agent: message.agent });
                 responseProcessor.scheduleProcessing(appInstance);
             } else {
-                // For user messages, adding an alternative means creating an editable copy.
-                // A special flag is used to trigger the edit UI on the new message after the re-render.
-                const newMsg = chatLog.addAlternative(message, { ...message.value });
-                appInstance.editingJustAddedMessage = newMsg;
-                chatLog.notify();
+                // For user messages, create a "virtual" alternative for editing.
+                // The actual message is only added to the log on save.
+                appInstance.virtualEditingState = {
+                    originalMessage: message,
+                    content: message.value.content, // Start editing with original content
+                };
+                chatLog.notify(); // Re-render to show the editable message
             }
         });
 
@@ -119,28 +133,33 @@ const uiControlsPlugin = {
         controlsContainer.appendChild(editBtn);
         controlsContainer.appendChild(delBtn);
 
-        // This special case handles the UX flow where adding a new user alternative
-        // immediately puts it into edit mode.
-        if (appInstance.editingJustAddedMessage === message) {
+        // This handles the "virtual" editing state for new user message alternatives.
+        if (el.classList.contains('virtual-editing')) {
             const contentEl = el.querySelector('.message-content');
             if (contentEl) {
                 makeEditable(
                     contentEl,
-                    message.value.content,
+                    appInstance.virtualEditingState.content,
                     (newText) => { // onSave
-                        message.value.content = newText;
+                        // Create the new message alternative in the log
+                        const newMsg = chatLog.addAlternative(appInstance.virtualEditingState.originalMessage, { ...appInstance.virtualEditingState.originalMessage.value, content: newText });
+                        // Set the new message as the active one
+                        const alternatives = chatLog.findAlternatives(newMsg);
+                        if (alternatives) {
+                            alternatives.activeMessageIndex = alternatives.messages.length - 1;
+                        }
+                        // Reset the state and get a response
+                        appInstance.virtualEditingState = null;
                         chatLog.notify();
-                        // After saving, automatically submit to get the AI's response to the new message.
                         appInstance.chatManager.handleFormSubmit({ isContinuation: true });
                     },
                     () => { // onCancel
-                        // If the user cancels editing the new alternative, delete it.
-                        chatLog.deleteMessage(message);
+                        // Just reset the state and re-render
+                        appInstance.virtualEditingState = null;
+                        chatLog.notify();
                     }
                 );
             }
-            // Reset the flag.
-            appInstance.editingJustAddedMessage = null;
         }
     }
 };

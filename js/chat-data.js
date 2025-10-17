@@ -58,6 +58,11 @@ class Message {
      */
     constructor(value, depth = 0, agent = null, is_full_context_call = undefined) {
         /**
+         * A unique identifier for the message.
+         * @type {string}
+         */
+        this.id = `msg-${Date.now()}-${Math.random()}`;
+        /**
          * The core properties of the message (role, content, etc.).
          * @type {MessageValue}
          */
