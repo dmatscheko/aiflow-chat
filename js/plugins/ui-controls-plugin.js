@@ -153,7 +153,10 @@ const uiControlsPlugin = {
                         // Reset the template flag *before* setting active, so the UI updates correctly.
                         appInstance.newAlternativeTemplate = null;
                         // Set the new message as the active one, which triggers a re-render.
-                        chatLog.setActiveAlternative(newMsg);
+                        const parentAlternatives = chatLog.findAlternatives(newMsg);
+                        if (parentAlternatives) {
+                            parentAlternatives.activeMessageIndex = parentAlternatives.messages.indexOf(newMsg);
+                        }
                         // After saving, automatically submit to get the AI's response to the new message.
                         appInstance.chatManager.handleFormSubmit({ isContinuation: true });
                     },
