@@ -29,8 +29,11 @@ const tokenCounterPlugin = {
             id: 'token-counter-container',
             html: `
                 <div class="token-counter-group">
-                    <span id="context-token-counter" class="title-bar-control">Context: 0</span>
-                    <span id="prompt-token-counter" class="title-bar-control">Prompt: 0</span>
+                    <span id="title-token-counter">Token</span>
+                    <span class="token-counter-inner-group">
+                        <span id="context-token-counter">Context: 0</span>
+                        <span id="prompt-token-counter">Prompt: 0</span>
+                    </span>
                 </div>
             `,
             onMount: (container) => {

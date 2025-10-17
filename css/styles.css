@@ -895,3 +895,22 @@ hr.divider {
 .flow-step-clear-history {
     background-color: hsla(0, 0%, 15%, 0.8);
 }
+
+/* --- Token-Counter Styles --- */
+
+.token-counter-group {
+    display: flex;
+    align-items: center;
+}
+
+.token-counter-inner-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    margin-left: 10px;
+}
+
+#context-token-counter,
+#prompt-token-counter {
+    font-size: 0.8em;
+}
