@@ -8,6 +8,8 @@
 import { pluginManager } from '../plugin-manager.js';
 import { createButton } from './ui-elements.js';
 
+let appInstance = null;
+
 class RightPanelManager {
     constructor(app) {
         this.app = app;
@@ -58,20 +60,44 @@ class RightPanelManager {
             return;
         }
 
-        pane.innerHTML = `
-            <div class="list-pane">
-                <ul class="item-list"></ul>
-                <div class="list-pane-spacer"></div>
-                <div class="list-pane-footer">
-                    <button class="add-new-button">Add New ${tab.label}</button>
-                    <div class="list-pane-actions"></div>
-                </div>
-            </div>
-        `;
+        pane.innerHTML = ''; // Clear previous content
 
-        const listEl = pane.querySelector('.item-list');
-        const addButton = pane.querySelector('.add-new-button');
-        const actionsContainer = pane.querySelector('.list-pane-actions');
+        const listPane = document.createElement('div');
+        listPane.className = 'list-pane';
+        listPane.style.display = 'flex';
+        listPane.style.flexDirection = 'column';
+        listPane.style.height = '100%';
+
+        const listEl = document.createElement('ul');
+        listEl.className = 'item-list';
+
+        const spacer = document.createElement('div');
+        spacer.style.flexGrow = '1';
+
+        const footer = document.createElement('div');
+        footer.className = 'list-pane-footer';
+
+        const addButton = createButton({
+            label: `Add New ${tab.label}`,
+            className: 'add-new-button',
+            onClick: () => {
+                const newItem = tab.onAddNew();
+                if (newItem) {
+                    this.app.setView(tab.id, newItem.id);
+                }
+            }
+        });
+
+        const actionsContainer = document.createElement('div');
+        actionsContainer.className = 'list-pane-actions';
+
+        footer.appendChild(addButton);
+        footer.appendChild(actionsContainer);
+
+        listPane.appendChild(listEl);
+        listPane.appendChild(spacer);
+        listPane.appendChild(footer);
+        pane.appendChild(listPane);
 
         // Render list items
         const items = manager.dataManager.getAll();
@@ -106,13 +132,6 @@ class RightPanelManager {
             actionsContainer.appendChild(button);
         });
 
-        addButton.addEventListener('click', () => {
-            const newItem = tab.onAddNew();
-            if (newItem) {
-                this.app.setView(tab.id, newItem.id);
-            }
-        });
-
         this.updateActiveListItem(listEl);
     }
 
@@ -142,15 +161,16 @@ class RightPanelManager {
 pluginManager.register({
     name: 'RightPanelManagerInitializer',
     onAppInit(app) {
+        appInstance = app;
         app.rightPanelManager = new RightPanelManager(app);
     },
     onViewRendered(view) {
-        if (app.rightPanelManager) {
-            if (!app.rightPanelManager.isReady) {
-                app.rightPanelManager.renderTabs();
-                app.rightPanelManager.isReady = true;
+        if (appInstance.rightPanelManager) {
+            if (!appInstance.rightPanelManager.isReady) {
+                appInstance.rightPanelManager.renderTabs();
+                appInstance.rightPanelManager.isReady = true;
             }
-            app.rightPanelManager.renderActivePane();
+            appInstance.rightPanelManager.renderActivePane();
         }
     }
 });

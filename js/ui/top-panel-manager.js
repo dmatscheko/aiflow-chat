@@ -8,6 +8,8 @@ import { pluginManager } from '../plugin-manager.js';
 import { createButton } from './ui-elements.js';
 import { makeSingleLineEditable } from '../utils.js';
 
+let appInstance = null;
+
 class TopPanelManager {
     constructor(app) {
         this.app = app;
@@ -86,11 +88,12 @@ class TopPanelManager {
 pluginManager.register({
     name: 'TopPanelManagerInitializer',
     onAppInit(app) {
+        appInstance = app;
         app.topPanelManager = new TopPanelManager(app);
     },
     onViewRendered() {
-        if (app.topPanelManager) {
-            app.topPanelManager.render();
+        if (appInstance.topPanelManager) {
+            appInstance.topPanelManager.render();
         }
     }
 });
