@@ -1,7 +1,1 @@
-.venv/
-uv.lock
-__pycache__/
-
-_test/
-
-.DS_Store
+node_modules/
