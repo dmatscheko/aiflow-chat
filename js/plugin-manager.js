@@ -182,6 +182,19 @@ class PluginManager {
         // If no handler returned true, it means the event was not handled by any plugin.
         return false;
     }
+
+    /**
+     * Triggers a simple hook, executing all registered callbacks without any data
+     * transformation. This is useful for simple event notifications.
+     * @param {string} hookName - The name of the hook to trigger.
+     * @param {...any} args - Arguments to pass to the hook's callbacks.
+     */
+    triggerSimple(hookName, ...args) {
+        const callbacks = this.hooks[hookName];
+        if (callbacks) {
+            callbacks.forEach(callback => callback(...args));
+        }
+    }
 }
 
 /**

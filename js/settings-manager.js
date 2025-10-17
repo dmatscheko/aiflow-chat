@@ -9,6 +9,7 @@
 'use.strict';
 
 import { pluginManager } from './plugin-manager.js';
+import { createButton, createInput, createTextarea, createSelect } from './ui/ui-elements.js';
 
 /**
  * @typedef {import('./main.js').App} App
@@ -218,58 +219,15 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
 
                     // Create and configure the input element first
                     if (setting.type === 'textarea') {
-                        input = document.createElement('textarea');
-                        input.rows = setting.rows || 4; // Allow custom rows
-                        input.value = valueToSet;
+                        input = createTextarea({ id: settingId, value: valueToSet, rows: setting.rows, placeholder: setting.placeholder });
                     } else if (setting.type === 'select') {
-                        input = document.createElement('select');
-                        // Support multiple select
-                        if (setting.multiple) {
-                            input.multiple = true;
-                            const selectedSet = new Set(Array.isArray(valueToSet) ? valueToSet : [valueToSet]);
-                            if (setting.options) {
-                                setting.options.forEach(opt => {
-                                    const option = document.createElement('option');
-                                    option.value = typeof opt === 'string' ? opt : opt.value;
-                                    option.textContent = typeof opt === 'string' ? opt : opt.label;
-                                    option.selected = selectedSet.has(option.value);
-                                    input.appendChild(option);
-                                });
-                            }
-                        } else {
-                            if (setting.options) {
-                                setting.options.forEach(opt => {
-                                    const option = document.createElement('option');
-                                    option.value = typeof opt === 'string' ? opt : opt.value;
-                                    option.textContent = typeof opt === 'string' ? opt : opt.label;
-                                    input.appendChild(option);
-                                });
-                            }
-                            let optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
-                            if (!optionToSelect && valueToSet) {
-                                const newOption = document.createElement('option');
-                                newOption.value = valueToSet;
-                                newOption.textContent = `${valueToSet} (saved)`;
-                                input.appendChild(newOption);
-                                optionToSelect = newOption;
-                            }
-                            if (optionToSelect) optionToSelect.selected = true;
-                        }
+                        input = createSelect({ id: settingId, options: setting.options, selectedValue: valueToSet });
                     } else if (setting.type === 'range') {
-                        input = document.createElement('input');
-                        input.type = 'range';
-                        input.min = setting.min ?? 0;
-                        input.max = setting.max ?? 100;
-                        input.step = setting.step ?? 1;
-                        input.value = valueToSet;
+                        input = createInput({ id: settingId, type: 'range', value: valueToSet, min: setting.min, max: setting.max, step: setting.step });
                     } else {
-                        input = document.createElement('input');
-                        input.type = setting.type || 'text'; // Handles 'color', 'date', 'file', 'email', etc.
-                        if (setting.placeholder) input.placeholder = setting.placeholder;
+                        input = createInput({ id: settingId, type: setting.type, value: valueToSet, placeholder: setting.placeholder });
                         if (['checkbox', 'radio'].includes(input.type)) {
                             input.checked = !!valueToSet;
-                        } else {
-                            input.value = valueToSet;
                         }
                     }
 
@@ -354,14 +312,10 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                 const buttonContainer = document.createElement('div');
                 buttonContainer.classList.add('setting-actions');
                 setting.actions.forEach(action => {
-                    const button = document.createElement('button');
-                    button.id = action.id;
-                    button.textContent = action.label;
-                    button.type = 'button';
-                    button.addEventListener('click', (e) => {
-                        // Pass the input element if it exists, otherwise the container.
-                        // This makes the behavior consistent for fieldsets vs. regular inputs.
-                        action.onClick(e, input || container);
+                    const button = createButton({
+                        id: action.id,
+                        label: action.label,
+                        onClick: (e) => action.onClick(e, input || container)
                     });
                     buttonContainer.appendChild(button);
                 });

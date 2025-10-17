@@ -9,10 +9,8 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { debounce, importJson, exportJson, generateUniqueName } from '../utils.js';
-import { createTitleBar } from './title-bar-plugin.js';
 import { registerFlowStepDefinitions } from './flows-plugin-step-definitions.js';
 import { DataManager } from '../data-manager.js';
-import { createManagedEntityPlugin } from '../managed-entity-plugin-factory.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -80,7 +78,6 @@ let flowManager = null;
 export class FlowManager {
     constructor(app) {
         this.app = app;
-        this.listPane = null;
         this.dataManager = new DataManager('core_flows', 'flow');
         this.flows = this.dataManager.getAll();
         this.stepTypes = {};
@@ -125,11 +122,6 @@ export class FlowManager {
         registerFlowStepDefinitions(this);
     }
 
-    updateActiveFlowInList() {
-        if (this.listPane) {
-            this.listPane.updateActiveItem();
-        }
-    }
 
     /**
      * Renders the placeholder container for the flow editor view.
@@ -499,187 +491,156 @@ pluginManager.register({
     }
 });
 
-// Use the factory to create the main flows plugin UI and hooks
-createManagedEntityPlugin({
+pluginManager.register({
     name: 'Flows',
-    id: 'flows',
-    viewType: 'flow-editor',
-    onAddNew: () => flowManager.addFlow({ name: 'New Flow', steps: [], connections: [] }),
-    getItemName: (item) => item.name,
-    onDelete: (itemId, itemName) => {
-        const flow = flowManager.getFlow(itemId);
-        if (flow && flow.steps.length > 0) {
-            if (!confirm('This flow is not empty. Are you sure you want to delete it?')) {
-                return false;
-            }
-        }
-        if (flowManager.app.activeView.id === itemId) {
-            flowManager.app.setView('flow-editor', null);
-        }
-        return true;
-    },
-    onActivate: (manager) => {
-        if (!manager.app.lastActiveIds['flow-editor']) {
-            manager.app.setView('flow-editor', null);
-        }
-    },
-    actions: () => {
-        const activeFlow = flowManager.getFlow(flowManager.app.activeView.id);
-        const actions = [
-            {
-                id: 'load-flow-btn',
-                label: 'Load Flow',
-                className: 'btn-gray',
-                onClick: () => {
-                    importJson('.flow', (data) => {
-                        const newFlow = flowManager.addFlowFromData(data);
-                        flowManager.app.setView('flow-editor', newFlow.id);
+    onAppInit(app) {
+        app.rightPanelManager.registerTab({
+            id: 'flows',
+            label: 'Flows',
+            viewType: 'flow-editor',
+            manager: 'flowManager',
+            order: 3,
+            onAddNew: () => flowManager.addFlow({ name: 'New Flow', steps: [], connections: [] }),
+            getItemName: (item) => item.name,
+            onDelete: (itemId, itemName) => {
+                const flow = flowManager.getFlow(itemId);
+                if (flow && flow.steps.length > 0) {
+                    if (!confirm('This flow is not empty. Are you sure you want to delete it?')) {
+                        return false;
+                    }
+                }
+                if (flowManager.app.activeView.id === itemId) {
+                    flowManager.app.setView('flow-editor', null);
+                }
+                return true;
+            },
+            actions: () => {
+                const activeFlow = flowManager.getFlow(flowManager.app.activeView.id);
+                const actions = [
+                    {
+                        id: 'load-flow-btn',
+                        label: 'Load Flow',
+                        className: 'btn-gray',
+                        onClick: () => {
+                            importJson('.flow', (data) => {
+                                const newFlow = flowManager.addFlowFromData(data);
+                                flowManager.app.setView('flow-editor', newFlow.id);
+                            });
+                        }
+                    }
+                ];
+                if (activeFlow) {
+                    actions.push({
+                        id: 'save-flow-btn',
+                        label: 'Save Flow',
+                        className: 'btn-gray',
+                        onClick: () => exportJson(activeFlow, activeFlow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow')
                     });
                 }
+                return actions;
             }
-        ];
-
-        if (activeFlow) {
-            actions.push({
-                id: 'save-flow-btn',
-                label: 'Save Flow',
-                className: 'btn-gray',
-                onClick: () => {
-                    exportJson(activeFlow, activeFlow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow');
-                }
-            });
-        }
-
-        return actions;
+        });
     },
-    pluginHooks: {
-        onViewRendered(view, chat) {
-            if (view.type === 'flow-editor') {
-                if (flowManager.listPane) {
-                    flowManager.listPane.renderActions();
-                }
-                const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
-                if (existingTitleBar) {
-                    existingTitleBar.remove();
-                }
-
-                const mainPanel = document.getElementById('main-panel');
-                const flow = flowManager.getFlow(view.id);
-                let title;
-                let buttons = [];
-
+    onViewRendered(view) {
+        if (view.type === 'flow-editor') {
+            const flow = flowManager.getFlow(view.id);
+            if (flow) {
                 const renderAndConnect = () => {
                     flowManager.renderFlow(flow);
                     setTimeout(() => flowManager.updateConnections(flow), 0);
                 };
+                const debouncedUpdate = debounce(() => flowManager.updateFlow(flow), 500);
 
-                const handleImport = (data) => {
-                    const newFlow = flowManager.addFlowFromData(data);
-                    flowManager.app.setView('flow-editor', newFlow.id);
-                };
+                renderAndConnect(); // Initial render
 
-                if (flow) {
-                    title = flow.name;
-                    const dropdownContent = Object.entries(flowManager.stepTypes)
-                        .map(([type, { label }]) => `<a href="#" data-step-type="${type}">${label}</a>`)
-                        .join('');
-
-                    buttons = [
-                        {
-                            id: 'add-flow-step-btn',
-                            label: 'Add Step ▾',
-                            className: 'primary-btn',
-                            dropdownContent: dropdownContent,
-                            onClick: (e) => {
-                                const type = e.target.dataset.stepType;
-                                if (type && flowManager.stepTypes[type]) {
-                                    const stepData = flowManager.stepTypes[type].getDefaults();
-                                    flow.steps.push({
-                                        id: `step-${Date.now()}`,
-                                        type,
-                                        x: 50,
-                                        y: 50,
-                                        isMinimized: false,
-                                        data: stepData
-                                    });
-                                    flowManager.updateFlow(flow);
-                                    renderAndConnect();
-                                }
-                            }
-                        }
-                    ];
-
-                    const debouncedUpdate = debounce(() => flowManager.updateFlow(flow), 500);
-
-                    renderAndConnect(); // Initial render
-
-                    const canvas = document.getElementById('flow-canvas');
-                    canvas.addEventListener('mousedown', (e) => flowManager._handleCanvasMouseDown(e, flow, debouncedUpdate));
-                    canvas.addEventListener('mousemove', (e) => flowManager._handleCanvasMouseMove(e, flow));
-                    canvas.addEventListener('mouseup', (e) => flowManager._handleCanvasMouseUp(e, flow, debouncedUpdate));
-                    canvas.addEventListener('change', (e) => {
-                        const step = flow.steps.find(s => s.id === e.target.dataset.id);
-                        if (step && flowManager.stepTypes[step.type]?.onUpdate) {
-                            flowManager.stepTypes[step.type].onUpdate(step, e.target, renderAndConnect);
-                            debouncedUpdate();
-                        }
-                    });
-                    canvas.addEventListener('click', (e) => {
-                        const target = e.target;
-                        if (target.classList.contains('delete-flow-step-btn')) {
-                            const stepId = target.dataset.id;
-                            flow.steps = flow.steps.filter(s => s.id !== stepId);
-                            flow.connections = flow.connections.filter(c => c.from !== stepId && c.to !== stepId);
+                const canvas = document.getElementById('flow-canvas');
+                canvas.addEventListener('mousedown', (e) => flowManager._handleCanvasMouseDown(e, flow, debouncedUpdate));
+                canvas.addEventListener('mousemove', (e) => flowManager._handleCanvasMouseMove(e, flow));
+                canvas.addEventListener('mouseup', (e) => flowManager._handleCanvasMouseUp(e, flow, debouncedUpdate));
+                canvas.addEventListener('change', (e) => {
+                    const step = flow.steps.find(s => s.id === e.target.dataset.id);
+                    if (step && flowManager.stepTypes[step.type]?.onUpdate) {
+                        flowManager.stepTypes[step.type].onUpdate(step, e.target, renderAndConnect);
+                        debouncedUpdate();
+                    }
+                });
+                canvas.addEventListener('click', (e) => {
+                    const target = e.target;
+                    if (target.classList.contains('delete-flow-step-btn')) {
+                        const stepId = target.dataset.id;
+                        flow.steps = flow.steps.filter(s => s.id !== stepId);
+                        flow.connections = flow.connections.filter(c => c.from !== stepId && c.to !== stepId);
+                        flowManager.updateFlow(flow);
+                        renderAndConnect();
+                    } else if (target.classList.contains('delete-connection-btn')) {
+                        const { from, to, outputName } = target.dataset;
+                        flow.connections = flow.connections.filter(c =>
+                            !(c.from === from && c.to === to && (c.outputName || 'default') === outputName)
+                        );
+                        flowManager.updateFlow(flow);
+                        renderAndConnect();
+                    } else if (target.classList.contains('minimize-flow-step-btn')) {
+                        const stepId = target.dataset.id;
+                        const step = flow.steps.find(s => s.id === stepId);
+                        if (step) {
+                            step.isMinimized = !step.isMinimized;
                             flowManager.updateFlow(flow);
                             renderAndConnect();
-                        } else if (target.classList.contains('delete-connection-btn')) {
-                            const { from, to, outputName } = target.dataset;
-                            flow.connections = flow.connections.filter(c =>
-                                !(c.from === from && c.to === to && (c.outputName || 'default') === outputName)
-                            );
-                            flowManager.updateFlow(flow);
-                            renderAndConnect();
-                        } else if (target.classList.contains('minimize-flow-step-btn')) {
-                            const stepId = target.dataset.id;
-                            const step = flow.steps.find(s => s.id === stepId);
-                            if (step) {
-                                step.isMinimized = !step.isMinimized;
-                                flowManager.updateFlow(flow);
-                                renderAndConnect();
-                            }
                         }
-                    });
-
-                } else {
-                    title = 'Flow Editor';
-                    buttons = [];
-                }
-
-                const titleParts = [];
-                if (flow) {
-                    titleParts.push({
-                        text: title,
-                        onSave: (newName) => {
-                            flow.name = newName;
-                            flowManager.updateFlow(flow);
-                            flowManager.listPane.renderList();
-                            flowManager.app.setView('flow-editor', flow.id);
-                        }
-                    });
-                } else {
-                    titleParts.push(title);
-                }
-
-                const titleBar = createTitleBar(titleParts, [], buttons);
-                mainPanel.prepend(titleBar);
+                    }
+                });
             }
-            flowManager.updateActiveFlowInList();
-        },
-        onResponseComplete(message, chat) {
-            if (!flowManager.activeFlowRunner) {
-                return false;
-            }
-            return flowManager.activeFlowRunner.continue(message, chat);
         }
+    },
+    onTitleBarRegister(config) {
+        const flow = flowManager.getFlow(app.activeView.id);
+        if (app.activeView.type === 'flow-editor' && flow) {
+            config.title = {
+                text: flow.name,
+                onSave: (newName) => {
+                    flow.name = newName;
+                    flowManager.updateFlow(flow);
+                    app.rightPanelManager.renderActivePane();
+                    app.topPanelManager.render();
+                }
+            };
+            const dropdownContent = Object.entries(flowManager.stepTypes)
+                .map(([type, { label }]) => `<a href="#" data-step-type="${type}">${label}</a>`)
+                .join('');
+            config.buttons = [
+                {
+                    id: 'add-flow-step-btn',
+                    label: 'Add Step ▾',
+                    className: 'primary-btn',
+                    dropdownContent: dropdownContent,
+                    onClick: (e) => {
+                        const type = e.target.dataset.stepType;
+                        if (type && flowManager.stepTypes[type]) {
+                            const stepData = flowManager.stepTypes[type].getDefaults();
+                            flow.steps.push({
+                                id: `step-${Date.now()}`,
+                                type,
+                                x: 50,
+                                y: 50,
+                                isMinimized: false,
+                                data: stepData
+                            });
+                            flowManager.updateFlow(flow);
+                            flowManager.renderFlow(flow);
+                            setTimeout(() => flowManager.updateConnections(flow), 0);
+                        }
+                    }
+                }
+            ];
+        } else if (app.activeView.type === 'flow-editor') {
+            config.title = 'Flow Editor';
+        }
+        return config;
+    },
+    onResponseComplete(message, chat) {
+        if (!flowManager.activeFlowRunner) {
+            return false;
+        }
+        return flowManager.activeFlowRunner.continue(message, chat);
     }
 });

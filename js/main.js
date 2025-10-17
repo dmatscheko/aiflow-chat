@@ -21,13 +21,15 @@ import './plugins/agents-call-plugin.js';
 import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
 import './plugins/formatting-plugin.js';
-import './plugins/title-bar-plugin.js';
 import './plugins/mobile-style-plugin.js';
 import './plugins/custom-dropdown-plugin.js';
 import './plugins/ui-controls-plugin.js';
 import './plugins/autoresize-textarea-plugin.js';
 import './plugins/token-counter-plugin.js';
-import './managed-entity-plugin-factory.js';
+
+// --- UI Managers ---
+import './ui/right-panel-manager.js';
+import './ui/top-panel-manager.js';
 // --- End Plugin Loading ---
 
 /**
@@ -146,22 +148,12 @@ class App {
                 this.chatManager.init();
             }
 
-            this.defineTabs();
-            this.renderTabs();
             this._loadLastActiveIds();
 
             await this.renderMainView();
             this.initEventListeners();
+            pluginManager.triggerSimple('onAppReady', this);
         })();
-    }
-
-    /**
-     * Populates the `this.tabs` array by triggering the 'onTabsRegistered' plugin hook.
-     * @private
-     */
-    defineTabs() {
-        const coreTabs = [];
-        this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
     }
 
     /**
@@ -174,32 +166,6 @@ class App {
             panelTabs: document.getElementById('panel-tabs'),
             panelContent: document.getElementById('panel-content'),
         };
-    }
-
-    /**
-     * Renders the tab buttons and their corresponding panes in the sidebar.
-     * @private
-     */
-    renderTabs() {
-        this.dom.panelTabs.innerHTML = '';
-        this.dom.panelContent.innerHTML = '';
-        this.tabs.forEach(tab => {
-            const tabBtn = document.createElement('button');
-            tabBtn.id = `tab-btn-${tab.id}`;
-            tabBtn.classList.add('tab-btn');
-            tabBtn.dataset.tabId = tab.id;
-            tabBtn.textContent = tab.label;
-            this.dom.panelTabs.appendChild(tabBtn);
-            const tabPane = document.createElement('div');
-            tabPane.id = `${tab.id}-pane`;
-            tabPane.classList.add('tab-pane');
-            this.dom.panelContent.appendChild(tabPane);
-        });
-        if (this.tabs.length > 0) {
-            this.dom.panelTabs.querySelector('.tab-btn').classList.add('active');
-            this.dom.panelContent.querySelector('.tab-pane').classList.add('active');
-            this.tabs[0].onActivate();
-        }
     }
 
     /**
@@ -239,47 +205,10 @@ class App {
     }
 
     /**
-     * Handles the logic for switching between sidebar tabs, activating the correct
-     * tab and pane, and calling the tab's `onActivate` function.
-     * @param {string} tabId - The ID of the tab to show.
-     * @private
-     * @async
-     */
-    async showTab(tabId) {
-        if (!tabId) return;
-        const tab = this.tabs.find(t => t.id === tabId);
-        if (!tab) return;
-
-        this.dom.panelTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        this.dom.panelContent.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-        const tabBtn = document.getElementById(`tab-btn-${tabId}`);
-        const tabPane = document.getElementById(`${tabId}-pane`);
-        if (tabBtn) tabBtn.classList.add('active');
-        if (tabPane) tabPane.classList.add('active');
-
-        if (tab.onActivate) {
-            tab.onActivate();
-        }
-
-        const lastActiveId = tab.viewType ? this.lastActiveIds[tab.viewType] : null;
-        if (lastActiveId) {
-            await this.setView(tab.viewType, lastActiveId);
-        }
-    }
-
-    /**
-     * Initializes global event listeners for the application.
+     * Initializes global event listeners for the anpplication.
      * @private
      */
     initEventListeners() {
-        // Listener for sidebar tab clicks.
-        this.dom.panelTabs.addEventListener('click', async (e) => {
-            const tabId = e.target.dataset.tabId;
-            if (tabId) {
-                await this.showTab(tabId);
-            }
-        });
-
         // Global keydown listener for the Escape key to abort chat generation.
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
