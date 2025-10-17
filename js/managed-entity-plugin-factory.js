@@ -16,6 +16,10 @@ import { pluginManager } from './plugin-manager.js';
  */
 
 /**
+ * @typedef {import('./ui/list-pane.js').ListPaneAction} ListPaneAction
+ */
+
+/**
  * Configuration object for the managed entity plugin factory.
  * @typedef {object} ManagedEntityPluginConfig
  * @property {string} name - The name of the entity (e.g., 'Chat', 'Agent').
@@ -26,6 +30,7 @@ import { pluginManager } from './plugin-manager.js';
  * @property {(itemId: string, itemName: string) => boolean} onDelete - Function to call when an item is deleted.
  * @property {object} [pluginHooks={}] - Additional plugin hooks to merge into the created plugin.
  * @property {boolean} [addAtStart=false] - Whether to add the tab at the beginning of the tab list.
+ * @property {ListPaneAction[]} [actions] - An optional array of action buttons to display at the bottom of the list pane.
  */
 
 /**
@@ -58,6 +63,7 @@ export function createManagedEntityPlugin(config) {
                         onAddNew: config.onAddNew,
                         getItemName: config.getItemName,
                         onDelete: config.onDelete,
+                        actions: config.actions || [],
                     });
 
                     // If a custom onActivate is provided, call it.

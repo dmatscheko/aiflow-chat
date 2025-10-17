@@ -523,6 +523,32 @@ createManagedEntityPlugin({
             manager.app.setView('flow-editor', null);
         }
     },
+    actions: [
+        {
+            id: 'load-flow-btn',
+            label: 'Load Flow',
+            className: 'btn-gray',
+            onClick: () => {
+                importJson('.flow', (data) => {
+                    const newFlow = flowManager.addFlowFromData(data);
+                    flowManager.app.setView('flow-editor', newFlow.id);
+                });
+            }
+        },
+        {
+            id: 'save-flow-btn',
+            label: 'Save Flow',
+            className: 'btn-gray',
+            onClick: () => {
+                const activeFlow = flowManager.getFlow(flowManager.app.activeView.id);
+                if (activeFlow) {
+                    exportJson(activeFlow, activeFlow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow');
+                } else {
+                    alert('Please select a flow to save.');
+                }
+            }
+        }
+    ],
     pluginHooks: {
         onViewRendered(view, chat) {
             if (view.type === 'flow-editor') {
@@ -574,18 +600,6 @@ createManagedEntityPlugin({
                                     renderAndConnect();
                                 }
                             }
-                        },
-                        {
-                            id: 'load-flow-btn',
-                            label: 'Load Flow',
-                            className: 'btn-gray',
-                            onClick: () => importJson('.flow', handleImport)
-                        },
-                        {
-                            id: 'save-flow-btn',
-                            label: 'Save Flow',
-                            className: 'btn-gray',
-                            onClick: () => exportJson(flow, flow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow')
                         }
                     ];
 
@@ -632,14 +646,7 @@ createManagedEntityPlugin({
 
                 } else {
                     title = 'Flow Editor';
-                    buttons = [
-                        {
-                            id: 'load-flow-btn',
-                            label: 'Load Flow',
-                            className: 'btn-gray',
-                            onClick: () => importJson('.flow', handleImport)
-                        }
-                    ];
+                    buttons = [];
                 }
 
                 const titleParts = [];

@@ -7,7 +7,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { ChatLog } from '../chat-data.js';
-import { debounce } from '../utils.js';
+import { debounce, importJson, exportJson } from '../utils.js';
 import { responseProcessor } from '../response-processor.js';
 import { DataManager } from '../data-manager.js';
 import { createManagedEntityPlugin } from '../managed-entity-plugin-factory.js';
@@ -454,6 +454,36 @@ createManagedEntityPlugin({
         }
         return false;
     },
+    actions: [
+        {
+            id: 'load-chat-btn',
+            label: 'Load Chat',
+            className: 'btn-gray',
+            onClick: () => {
+                importJson('.chat', (data) => {
+                    appInstance.chatManager.createChatFromData(data);
+                });
+            }
+        },
+        {
+            id: 'save-chat-btn',
+            label: 'Save Chat',
+            className: 'btn-gray',
+            onClick: () => {
+                const activeChat = appInstance.chatManager.getActiveChat();
+                if (activeChat) {
+                    const chatToSave = {
+                        title: activeChat.title,
+                        log: activeChat.log.toJSON(),
+                        draftMessage: activeChat.draftMessage,
+                        agent: activeChat.agent,
+                        flow: activeChat.flow,
+                    };
+                    exportJson(chatToSave, activeChat.title.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'chat');
+                }
+            }
+        }
+    ],
     pluginHooks: {
         onViewRendered(view, chat) {
             if (view.type === 'chat') {

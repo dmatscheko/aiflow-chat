@@ -324,34 +324,6 @@ class AgentManager {
         }
 
         // --- Title Bar ---
-        const buttons = [
-            {
-                id: 'import-agents-btn',
-                label: 'Import Agents',
-                className: 'btn-gray',
-                onClick: () => {
-                    importJson('.agents', (data) => {
-                        if (Array.isArray(data)) {
-                            data.forEach(agentData => this.addAgentFromData(agentData));
-                            alert(`${data.length} agent(s) imported successfully.`);
-                        } else {
-                            this.addAgentFromData(data);
-                            alert(`Agent imported successfully.`);
-                        }
-                    });
-                }
-            },
-            {
-                id: 'export-agents-btn',
-                label: 'Export Agents',
-                className: 'btn-gray',
-                onClick: () => {
-                    const agentsToExport = this.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
-                    if (agentsToExport.length > 0) exportJson(agentsToExport, 'agents_config', 'agents');
-                    else alert('No custom agents to export.');
-                }
-            }
-        ];
         const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
         const titleParts = [];
         if (isDefaultAgent) {
@@ -365,7 +337,7 @@ class AgentManager {
                 }
             });
         }
-        const titleBar = createTitleBar(titleParts, [], buttons);
+        const titleBar = createTitleBar(titleParts, [], []);
         mainPanel.prepend(titleBar);
         // --- End Title Bar ---
 
@@ -553,6 +525,34 @@ createManagedEntityPlugin({
             manager.app.setView('agent-editor', DEFAULT_AGENT_ID);
         }
     },
+    actions: [
+        {
+            id: 'import-agents-btn',
+            label: 'Import Agents',
+            className: 'btn-gray',
+            onClick: () => {
+                importJson('.agents', (data) => {
+                    if (Array.isArray(data)) {
+                        data.forEach(agentData => agentManager.addAgentFromData(agentData));
+                        alert(`${data.length} agent(s) imported successfully.`);
+                    } else {
+                        agentManager.addAgentFromData(data);
+                        alert(`Agent imported successfully.`);
+                    }
+                });
+            }
+        },
+        {
+            id: 'export-agents-btn',
+            label: 'Export Agents',
+            className: 'btn-gray',
+            onClick: () => {
+                const agentsToExport = agentManager.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
+                if (agentsToExport.length > 0) exportJson(agentsToExport, 'agents_config', 'agents');
+                else alert('No custom agents to export.');
+            }
+        }
+    ],
     pluginHooks: {
         onViewRendered(view, chat) {
             if (view.type === 'agent-editor') {
