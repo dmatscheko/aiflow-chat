@@ -52,8 +52,10 @@ export function createListPane(config) {
         <div class="list-pane">
             <ul class="item-list"></ul>
             <div class="list-pane-spacer"></div>
-            <div class="list-pane-actions"></div>
-            <button class="add-new-button">${addNewButtonLabel}</button>
+            <div class="list-pane-footer">
+                <button class="add-new-button">${addNewButtonLabel}</button>
+                <div class="list-pane-actions"></div>
+            </div>
         </div>
     `;
 

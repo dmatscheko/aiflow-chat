@@ -140,7 +140,7 @@ h2 {
     flex-grow: 1;
 }
 
-.list-pane-actions {
+.list-pane-footer {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
@@ -148,8 +148,15 @@ h2 {
     border-top: 1px solid var(--border-color);
 }
 
+.list-pane-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
 .add-new-button {
-    margin-top: 1rem;
+    order: -1; /* Move to the top of the footer */
+    margin-bottom: 0.5rem;
 }
 
 /* Make agent and flow list items clickable */
