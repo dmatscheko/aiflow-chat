@@ -523,35 +523,41 @@ createManagedEntityPlugin({
             manager.app.setView('flow-editor', null);
         }
     },
-    actions: [
-        {
-            id: 'load-flow-btn',
-            label: 'Load Flow',
-            className: 'btn-gray',
-            onClick: () => {
-                importJson('.flow', (data) => {
-                    const newFlow = flowManager.addFlowFromData(data);
-                    flowManager.app.setView('flow-editor', newFlow.id);
-                });
-            }
-        },
-        {
-            id: 'save-flow-btn',
-            label: 'Save Flow',
-            className: 'btn-gray',
-            onClick: () => {
-                const activeFlow = flowManager.getFlow(flowManager.app.activeView.id);
-                if (activeFlow) {
-                    exportJson(activeFlow, activeFlow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow');
-                } else {
-                    alert('Please select a flow to save.');
+    actions: () => {
+        const activeFlow = flowManager.getFlow(flowManager.app.activeView.id);
+        const actions = [
+            {
+                id: 'load-flow-btn',
+                label: 'Load Flow',
+                className: 'btn-gray',
+                onClick: () => {
+                    importJson('.flow', (data) => {
+                        const newFlow = flowManager.addFlowFromData(data);
+                        flowManager.app.setView('flow-editor', newFlow.id);
+                    });
                 }
             }
+        ];
+
+        if (activeFlow) {
+            actions.push({
+                id: 'save-flow-btn',
+                label: 'Save Flow',
+                className: 'btn-gray',
+                onClick: () => {
+                    exportJson(activeFlow, activeFlow.name.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'flow');
+                }
+            });
         }
-    ],
+
+        return actions;
+    },
     pluginHooks: {
         onViewRendered(view, chat) {
             if (view.type === 'flow-editor') {
+                if (flowManager.listPane) {
+                    flowManager.listPane.renderActions();
+                }
                 const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
                 if (existingTitleBar) {
                     existingTitleBar.remove();

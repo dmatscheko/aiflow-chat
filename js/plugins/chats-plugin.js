@@ -454,24 +454,27 @@ createManagedEntityPlugin({
         }
         return false;
     },
-    actions: [
-        {
-            id: 'load-chat-btn',
-            label: 'Load Chat',
-            className: 'btn-gray',
-            onClick: () => {
-                importJson('.chat', (data) => {
-                    appInstance.chatManager.createChatFromData(data);
-                });
+    actions: () => {
+        const activeChat = appInstance.chatManager.getActiveChat();
+        const actions = [
+            {
+                id: 'load-chat-btn',
+                label: 'Load Chat',
+                className: 'btn-gray',
+                onClick: () => {
+                    importJson('.chat', (data) => {
+                        appInstance.chatManager.createChatFromData(data);
+                    });
+                }
             }
-        },
-        {
-            id: 'save-chat-btn',
-            label: 'Save Chat',
-            className: 'btn-gray',
-            onClick: () => {
-                const activeChat = appInstance.chatManager.getActiveChat();
-                if (activeChat) {
+        ];
+
+        if (activeChat) {
+            actions.push({
+                id: 'save-chat-btn',
+                label: 'Save Chat',
+                className: 'btn-gray',
+                onClick: () => {
                     const chatToSave = {
                         title: activeChat.title,
                         log: activeChat.log.toJSON(),
@@ -481,9 +484,10 @@ createManagedEntityPlugin({
                     };
                     exportJson(chatToSave, activeChat.title.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'chat');
                 }
-            }
+            });
         }
-    ],
+        return actions;
+    },
     pluginHooks: {
         onViewRendered(view, chat) {
             if (view.type === 'chat') {
@@ -491,6 +495,9 @@ createManagedEntityPlugin({
                 appInstance.chatManager.saveActiveChatId();
                 appInstance.chatManager.initChatView(view.id);
                 appInstance.chatManager.updateActiveChatInList();
+                if (appInstance.chatManager.listPane) {
+                    appInstance.chatManager.listPane.renderActions();
+                }
             }
         }
     }

@@ -28,7 +28,7 @@
  * @property {function(): object} onAddNew - A callback function that creates a new item and returns it.
  * @property {function(object): string} getItemName - A function to get the display name of an item.
  * @property {function(string, string): boolean} [onDelete] - An optional callback to confirm deletion.
- * @property {ListPaneAction[]} [actions] - An optional array of action buttons to display at the bottom.
+ * @property {ListPaneAction[] | function(): ListPaneAction[]} [actions] - An optional array or function returning an array of action buttons.
  */
 
 /**
@@ -45,7 +45,7 @@ export function createListPane(config) {
         onAddNew,
         getItemName,
         onDelete,
-        actions = [],
+        actions,
     } = config;
 
     container.innerHTML = `
@@ -63,17 +63,20 @@ export function createListPane(config) {
     const addButton = container.querySelector('.add-new-button');
     const actionsContainer = container.querySelector('.list-pane-actions');
 
-    // Render action buttons
-    if (actions.length > 0) {
-        actions.forEach(action => {
-            const button = document.createElement('button');
-            button.id = action.id;
-            button.textContent = action.label;
-            button.className = action.className || 'btn-gray';
-            button.addEventListener('click', action.onClick);
-            actionsContainer.appendChild(button);
-        });
-    }
+    const renderActions = () => {
+        actionsContainer.innerHTML = '';
+        const currentActions = typeof actions === 'function' ? actions() : actions || [];
+        if (currentActions.length > 0) {
+            currentActions.forEach(action => {
+                const button = document.createElement('button');
+                button.id = action.id;
+                button.textContent = action.label;
+                button.className = action.className || 'btn-gray';
+                button.addEventListener('click', action.onClick);
+                actionsContainer.appendChild(button);
+            });
+        }
+    };
 
     const renderList = () => {
         listEl.innerHTML = '';
@@ -132,10 +135,12 @@ export function createListPane(config) {
 
     // Initial render
     renderList();
+    renderActions();
 
     // Return an object with the update function so it can be called externally
     return {
         updateActiveItem,
         renderList,
+        renderActions,
     };
 }
