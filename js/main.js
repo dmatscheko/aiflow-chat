@@ -12,6 +12,10 @@ import { pluginManager } from './plugin-manager.js';
 import { SettingsManager } from './settings-manager.js';
 import { responseProcessor } from './response-processor.js';
 
+// --- UI Managers ---
+import './ui/right-panel-manager.js';
+import './ui/top-panel-manager.js';
+
 // --- Plugin Loading ---
 // The application's functionality is extended through plugins. Each imported plugin
 // file registers its hooks, views, and components with the PluginManager.
@@ -26,10 +30,6 @@ import './plugins/custom-dropdown-plugin.js';
 import './plugins/ui-controls-plugin.js';
 import './plugins/autoresize-textarea-plugin.js';
 import './plugins/token-counter-plugin.js';
-
-// --- UI Managers ---
-import './ui/right-panel-manager.js';
-import './ui/top-panel-manager.js';
 // --- End Plugin Loading ---
 
 /**
@@ -152,7 +152,6 @@ class App {
 
             await this.renderMainView();
             this.initEventListeners();
-            pluginManager.triggerSimple('onAppReady', this);
         })();
     }
 

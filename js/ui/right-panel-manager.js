@@ -146,13 +146,11 @@ pluginManager.register({
     },
     onViewRendered(view) {
         if (app.rightPanelManager) {
+            if (!app.rightPanelManager.isReady) {
+                app.rightPanelManager.renderTabs();
+                app.rightPanelManager.isReady = true;
+            }
             app.rightPanelManager.renderActivePane();
-        }
-    },
-    onAppReady(app) {
-        if (app.rightPanelManager && !app.rightPanelManager.isReady) {
-            app.rightPanelManager.renderTabs();
-            app.rightPanelManager.isReady = true;
         }
     }
 });
