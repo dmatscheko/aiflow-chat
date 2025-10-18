@@ -78,6 +78,7 @@ const DEFAULT_AGENT_ID = 'agent-default';
  * @type {AgentManager | null}
  */
 let agentManager = null;
+let appInstance = null;
 
 /**
  * Manages the lifecycle, storage, UI, and configuration of all agents in the application.
@@ -460,6 +461,7 @@ class AgentManager {
 pluginManager.register({
     name: 'AgentManagerInitializer',
     onAppInit(app) {
+        appInstance = app;
         agentManager = new AgentManager(app);
         app.agentManager = agentManager;
         pluginManager.registerView('agent-editor', (id) => agentManager.renderAgentEditor(id));
@@ -538,8 +540,8 @@ pluginManager.register({
         }
     },
     onTitleBarRegister(config) {
-        const agent = agentManager.getAgent(app.activeView.id);
-        if (app.activeView.type === 'agent-editor' && agent) {
+        const agent = agentManager.getAgent(appInstance.activeView.id);
+        if (appInstance.activeView.type === 'agent-editor' && agent) {
             const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
             if (isDefaultAgent) {
                 config.title = agent.name;
@@ -548,8 +550,8 @@ pluginManager.register({
                     text: agent.name,
                     onSave: (newName) => {
                         agentManager.updateAgentProperty(agent.id, 'name', newName);
-                        app.rightPanelManager.renderActivePane();
-                        app.topPanelManager.render();
+                        appInstance.rightPanelManager.renderActivePane();
+                        appInstance.topPanelManager.render();
                     }
                 };
             }

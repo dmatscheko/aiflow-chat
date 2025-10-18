@@ -68,6 +68,7 @@ import { DataManager } from '../data-manager.js';
  */
 
 let flowManager = null;
+let appInstance = null;
 
 /**
  * Manages the entire lifecycle, execution, and UI of flows. It handles loading,
@@ -485,6 +486,7 @@ class FlowRunner {
 pluginManager.register({
     name: 'FlowManagerInitializer',
     onAppInit(app) {
+        appInstance = app;
         flowManager = new FlowManager(app);
         app.flowManager = flowManager;
         pluginManager.registerView('flow-editor', (id) => flowManager.renderFlowEditor(id));
@@ -593,15 +595,15 @@ pluginManager.register({
         }
     },
     onTitleBarRegister(config) {
-        const flow = flowManager.getFlow(app.activeView.id);
-        if (app.activeView.type === 'flow-editor' && flow) {
+        const flow = flowManager.getFlow(appInstance.activeView.id);
+        if (appInstance.activeView.type === 'flow-editor' && flow) {
             config.title = {
                 text: flow.name,
                 onSave: (newName) => {
                     flow.name = newName;
                     flowManager.updateFlow(flow);
-                    app.rightPanelManager.renderActivePane();
-                    app.topPanelManager.render();
+                    appInstance.rightPanelManager.renderActivePane();
+                    appInstance.topPanelManager.render();
                 }
             };
             const dropdownContent = Object.entries(flowManager.stepTypes)
@@ -632,7 +634,7 @@ pluginManager.register({
                     }
                 }
             ];
-        } else if (app.activeView.type === 'flow-editor') {
+        } else if (appInstance.activeView.type === 'flow-editor') {
             config.title = 'Flow Editor';
         }
         return config;
