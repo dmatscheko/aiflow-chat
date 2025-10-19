@@ -107,6 +107,7 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
     const isTopLevel = !pathPrefix; // We are at the top level if pathPrefix is empty
 
     settings.forEach(setting => {
+        console.log(setting.id, setting.type);
         if (setting.type === 'divider') {
             fragment.appendChild(document.createElement('hr'));
             return;
