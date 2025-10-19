@@ -15,15 +15,55 @@
  * @param {function(MouseEvent): void} options.onClick - The click event handler.
  * @returns {HTMLButtonElement} The created button element.
  */
-export function createButton({ id, label, className, onClick }) {
-    const button = document.createElement('button');
-    button.id = id;
-    button.textContent = label;
-    if (className) {
-        button.className = className;
+export function createButton({ id, label, className, onClick, dropdownContent }) {
+    if (dropdownContent) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'dropdown-wrapper';
+        if (className) {
+            wrapper.classList.add(...className.split(' '));
+        }
+
+        const button = document.createElement('button');
+        button.id = id;
+        button.textContent = label;
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'dropdown-menu';
+        dropdown.innerHTML = dropdownContent;
+
+        wrapper.appendChild(button);
+        wrapper.appendChild(dropdown);
+
+        button.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('show');
+        });
+
+        dropdown.addEventListener('click', (e) => {
+            if (e.target.tagName === 'A' || e.target.closest('a')) {
+                onClick(e);
+                dropdown.classList.remove('show');
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!wrapper.contains(e.target)) {
+                dropdown.classList.remove('show');
+            }
+        });
+
+        return wrapper;
+
+    } else {
+        const button = document.createElement('button');
+        button.id = id;
+        button.textContent = label;
+        if (className) {
+            button.className = className;
+        }
+        button.addEventListener('click', onClick);
+        return button;
     }
-    button.addEventListener('click', onClick);
-    return button;
 }
 
 /**
