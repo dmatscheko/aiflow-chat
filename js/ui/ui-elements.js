@@ -35,9 +35,9 @@ export function createButton({ id, label, className, onClick }) {
  * @param {string} [options.value] - The initial value of the input.
  * @returns {HTMLInputElement} The created input element.
  */
-export function createInput({ id, className, placeholder, value }) {
+export function createInput({ id, className, placeholder, value, type = 'text', checked }) {
     const input = document.createElement('input');
-    input.type = 'text';
+    input.type = type;
     input.id = id;
     if (className) {
         input.className = className;
@@ -47,6 +47,9 @@ export function createInput({ id, className, placeholder, value }) {
     }
     if (value) {
         input.value = value;
+    }
+    if (type === 'checkbox' && checked) {
+        input.checked = checked;
     }
     return input;
 }
