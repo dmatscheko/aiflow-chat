@@ -32,7 +32,7 @@ class RightPanelManager {
                 id: `${tab.id}-tab`,
                 label: tab.label,
                 className: 'tab-btn',
-                onClick: () => this.app.setView(tab.id, this.app.lastActiveIds[tab.id] || null)
+                onClick: () => this.app.setView(tab.viewType, this.app.lastActiveIds[tab.viewType] || null)
             });
             this.tabContainer.appendChild(tabButton);
 
@@ -46,7 +46,7 @@ class RightPanelManager {
     renderActivePane() {
         this.tabs.forEach(tab => {
             const pane = document.getElementById(`${tab.id}-pane`);
-            if (this.app.activeView.type === tab.id) {
+            if (this.app.activeView.type === tab.viewType) {
                 this.renderPaneContent(pane, tab);
             }
         });
@@ -83,7 +83,7 @@ class RightPanelManager {
             onClick: () => {
                 const newItem = tab.onAddNew();
                 if (newItem) {
-                    this.app.setView(tab.id, newItem.id);
+                    this.app.setView(tab.viewType, newItem.id);
                 }
             }
         });
@@ -121,7 +121,7 @@ class RightPanelManager {
                 });
                 li.appendChild(deleteButton);
             }
-            li.addEventListener('click', () => this.app.setView(tab.id, item.id));
+            li.addEventListener('click', () => this.app.setView(tab.viewType, item.id));
             listEl.appendChild(li);
         });
 
@@ -146,7 +146,7 @@ class RightPanelManager {
         this.tabs.forEach(tab => {
             const tabButton = document.getElementById(`${tab.id}-tab`);
             const pane = document.getElementById(`${tab.id}-pane`);
-            const isActive = this.app.activeView.type === tab.id;
+            const isActive = this.app.activeView.type === tab.viewType;
 
             if (tabButton) {
                 tabButton.classList.toggle('active', isActive);
