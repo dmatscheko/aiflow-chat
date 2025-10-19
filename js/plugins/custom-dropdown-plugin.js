@@ -15,6 +15,48 @@
 'use strict';
 
 (function() {
+
+    // Inject CSS for custom dropdowns
+    const dropdownCSS = `
+        .custom-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .dropdown-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            background-color: var(--background-color-secondary);
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 100;
+            border-radius: 4px;
+            padding: 5px 0;
+            right: 0; /* Align to the right of the button */
+        }
+        .dropdown-menu.show {
+            display: block;
+        }
+        .dropdown-menu a {
+            color: var(--text-color);
+            padding: 8px 12px;
+            text-decoration: none;
+            display: block;
+            font-size: 0.9rem;
+        }
+        .dropdown-menu a:hover {
+            background-color: var(--background-color-tertiary);
+        }
+    `;
+    const styleSheet = document.createElement("style");
+    styleSheet.type = "text/css";
+    styleSheet.innerText = dropdownCSS;
+    document.head.appendChild(styleSheet);
+
+
   /**
    * Converts a single native `<select>` element into a custom dropdown component.
    * It hides the original select, builds a new structure with a button and a list,

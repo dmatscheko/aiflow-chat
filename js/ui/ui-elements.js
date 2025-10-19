@@ -16,16 +16,16 @@
  * @returns {HTMLButtonElement} The created button element.
  */
 export function createButton({ id, label, className, onClick, dropdownContent }) {
+    const button = document.createElement('button');
+    button.id = id;
+    button.innerHTML = label; // Use innerHTML to allow for icons like ▾
+    if (className) {
+        button.className = className;
+    }
+
     if (dropdownContent) {
         const wrapper = document.createElement('div');
         wrapper.className = 'dropdown-wrapper';
-        if (className) {
-            wrapper.classList.add(...className.split(' '));
-        }
-
-        const button = document.createElement('button');
-        button.id = id;
-        button.textContent = label;
 
         const dropdown = document.createElement('div');
         dropdown.className = 'dropdown-menu';
@@ -36,34 +36,37 @@ export function createButton({ id, label, className, onClick, dropdownContent })
 
         button.addEventListener('click', (e) => {
             e.stopPropagation();
+            // Close other dropdowns
+            document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                if (menu !== dropdown) {
+                    menu.classList.remove('show');
+                }
+            });
             dropdown.classList.toggle('show');
         });
 
+        // The original onClick from the plugin should handle clicks on the items
         dropdown.addEventListener('click', (e) => {
-            if (e.target.tagName === 'A' || e.target.closest('a')) {
-                onClick(e);
-                dropdown.classList.remove('show');
-            }
+            onClick(e);
+            dropdown.classList.remove('show');
         });
 
-        document.addEventListener('click', (e) => {
-            if (!wrapper.contains(e.target)) {
-                dropdown.classList.remove('show');
-            }
-        });
+        // Add a global click listener to close the dropdown
+        // Use a static property to ensure the listener is only added once
+        if (!createButton.globalClickListenerAdded) {
+            document.addEventListener('click', () => {
+                document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                    menu.classList.remove('show');
+                });
+            });
+            createButton.globalClickListenerAdded = true;
+        }
 
         return wrapper;
-
-    } else {
-        const button = document.createElement('button');
-        button.id = id;
-        button.textContent = label;
-        if (className) {
-            button.className = className;
-        }
-        button.addEventListener('click', onClick);
-        return button;
     }
+
+    button.addEventListener('click', onClick);
+    return button;
 }
 
 /**
