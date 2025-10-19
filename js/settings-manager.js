@@ -209,6 +209,25 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     }
                     break;
 
+                case 'checkbox':
+                    container = document.createElement('div');
+                    container.classList.add('setting', 'setting-checkbox');
+                    if (setting.className) container.classList.add(setting.className);
+
+                    label = document.createElement('label');
+                    label.htmlFor = settingId;
+
+                    input = createInput({ id: settingId, type: 'checkbox', checked: currentValue ?? setting.default ?? false });
+                    input.dataset.path = settingPath;
+                    input.addEventListener('change', (e) => {
+                        onChange?.(settingPath, e.target.checked, context, e.target);
+                    });
+
+                    label.appendChild(input);
+                    label.appendChild(document.createTextNode(` ${setting.label}`));
+                    container.appendChild(label);
+                    break;
+
                 default:
                     container = document.createElement('div');
                     container.classList.add('setting');
@@ -237,12 +256,11 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     // Required attribute
                     if (setting.required) input.required = true;
 
-                    input.addEventListener('change', (e) => {
+                    // Generic event listener
+                    const genericOnChange = (e) => {
                         const target = e.target;
                         let newValue;
-                        if (['checkbox', 'radio'].includes(target.type)) {
-                            newValue = target.checked;
-                        } else if (target.type === 'select-multiple') { // Handle multi-select
+                        if (target.type === 'select-multiple') {
                             newValue = Array.from(target.selectedOptions).map(opt => opt.value);
                         } else if (target.type === 'range' || target.type === 'number') {
                             newValue = parseFloat(target.value);
@@ -250,45 +268,27 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                             newValue = target.value;
                         }
                         onChange?.(settingPath, newValue, context, target);
-                    });
+                    };
+                    input.addEventListener('change', genericOnChange);
 
-                    // Now, construct the DOM structure based on the input type
-                    if (['checkbox', 'radio'].includes(input.type)) {
-                        if (setting.label) {
-                            label = document.createElement('label');
-                            label.classList.add(`${input.type}-label`);
-                            // Asterisk for required
-                            label.appendChild(document.createTextNode(setting.required ? `${setting.label} *` : setting.label));
-                            label.appendChild(input);
-                            container.appendChild(label);
-                        } else {
-                            // If there's no label, just append the input itself
-                            container.appendChild(input);
-                            // Aria-label for accessibility
-                            if (setting.description) input.setAttribute('aria-label', setting.description);
-                        }
-                    } else {
-                        // Original logic for all other input types
-                        if (setting.label) {
-                            label = document.createElement('label');
-                            label.setAttribute('for', settingId);
-                            // Optional required asterisk
-                            const requiredMark = setting.required ? ' *' : '';
-                            label.textContent = `${setting.label}${requiredMark}`;
-                            container.appendChild(label);
-                        }
 
-                        if (input) {
-                            container.appendChild(input);
-                        }
+                    // Default structure for text, password, number, etc.
+                    if (setting.label) {
+                        label = document.createElement('label');
+                        label.setAttribute('for', settingId);
+                        const requiredMark = setting.required ? ' *' : '';
+                        label.textContent = `${setting.label}${requiredMark}`;
+                        container.appendChild(label);
+                    }
 
-                        if (setting.type === 'range') {
-                            const valueSpan = document.createElement('span');
-                            valueSpan.id = `${settingId}-value`;
-                            valueSpan.textContent = valueToSet;
-                            container.appendChild(valueSpan);
-                            input.addEventListener('input', () => { valueSpan.textContent = input.value; });
-                        }
+                    container.appendChild(input);
+
+                    if (setting.type === 'range') {
+                        const valueSpan = document.createElement('span');
+                        valueSpan.id = `${settingId}-value`;
+                        valueSpan.textContent = valueToSet;
+                        container.appendChild(valueSpan);
+                        input.addEventListener('input', () => { valueSpan.textContent = input.value; });
                     }
 
                     // Description/help text
