@@ -315,6 +315,8 @@ class AgentManager {
         const agent = this.getAgent(agentId);
         if (!agent) return;
 
+        const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
+
         // Remove existing title bar before adding a new one to prevent duplication
         const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
         if (existingTitleBar) {
