@@ -11,9 +11,7 @@
 import { pluginManager } from '../plugin-manager.js';
 import { debounce, importJson, exportJson } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
-import { createTitleBar } from './title-bar-plugin.js';
 import { DataManager } from '../data-manager.js';
-import { createManagedEntityPlugin } from '../managed-entity-plugin-factory.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -107,7 +105,7 @@ class AgentManager {
                 systemPrompt: 'You are a helpful assistant.',
                 useCustomModelSettings: true,
                 modelSettings: {
-                    apiUrl: 'http://127.0.0.1:1234',
+                    apiUrl: '',
                     apiKey: 'none',
                     model: '',
                     temperature: 1,
@@ -313,38 +311,37 @@ class AgentManager {
      * using `createSettingsUI`, and fetches any necessary data like available models.
      * @async
      */
-    async initializeAgentEditor() {
-        const mainPanel = document.getElementById('main-panel');
+    initializeAgentEditor() {
         const editorView = document.getElementById('agent-editor-container');
-        if (!mainPanel || !editorView || !editorView.dataset.agentId) return;
+        if (!editorView || !editorView.dataset.agentId) return;
 
         const agentId = editorView.dataset.agentId;
         const agent = this.getAgent(agentId);
         if (!agent) return;
 
-        // Remove existing title bar before adding a new one to prevent duplication
-        const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
-        if (existingTitleBar) {
-            existingTitleBar.remove();
-        }
+        // Start with a placeholder render.
+        editorView.innerHTML = '<h2>Loading agent settings...</h2>';
 
-        // --- Title Bar ---
+        // Fetch tools asynchronously, then render the full UI.
+        const effectiveConfig = this.getEffectiveApiConfig(agent.id);
+        const mcpServerUrl = effectiveConfig.toolSettings.mcpServer;
+        (this.app.mcp?.getTools(mcpServerUrl) || Promise.resolve([])).then(tools => {
+            // Re-check if the view is still active before rendering
+            const currentEditorView = document.getElementById('agent-editor-container');
+            if (!currentEditorView || currentEditorView.dataset.agentId !== agentId) {
+                return;
+            }
+            this._renderAgentEditorUI(agent, tools);
+            this.fetchModels(agentId);
+        });
+    }
+
+    _renderAgentEditorUI(agent, tools) {
+        const editorView = document.getElementById('agent-editor-container');
+        if (!editorView) return;
+
+        const agentId = agent.id;
         const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
-        const titleParts = [];
-        if (isDefaultAgent) {
-            titleParts.push(agent.name);
-        } else {
-            titleParts.push({
-                text: agent.name,
-                onSave: (newName) => {
-                    this.updateAgentProperty(agent.id, 'name', newName);
-                    this.app.setView('agent-editor', agent.id);
-                }
-            });
-        }
-        const titleBar = createTitleBar(titleParts, [], []);
-        mainPanel.prepend(titleBar);
-        // --- End Title Bar ---
 
         const modelSettingDefs = [
             { id: 'apiUrl', label: 'API URL', type: 'text', placeholder: 'e.g. https://api.someai.com/' },
@@ -353,7 +350,14 @@ class AgentManager {
             {
                 id: 'model', label: '', type: 'select', options: [], dependsOn: 'use_model', dependsOnValue: true, actions: [{
                     id: 'agent-refresh-models', label: 'Refresh',
-                    onClick: (e, modelInput) => this.fetchModels(agentId, modelInput)
+                    onClick: (e, modelInput) => {
+                        const effectiveConfig = this.getEffectiveApiConfig(agentId);
+                        if (effectiveConfig.apiUrl) {
+                            this.fetchModels(agentId, modelInput);
+                        } else {
+                            alert('Please set an API URL for this agent or the Default Agent first.');
+                        }
+                    }
                 }]
             },
             { id: 'use_temperature', type: 'checkbox', label: 'Temperature', className: 'settings-inline-checkbox' },
@@ -380,17 +384,11 @@ class AgentManager {
             { id: 'seed', label: '', type: 'number', placeholder: 'e.g. 12345', dependsOn: 'use_seed', dependsOnValue: true },
         ];
 
-        const effectiveConfig = this.getEffectiveApiConfig(agent.id);
-        const mcpServerUrl = effectiveConfig.toolSettings.mcpServer;
-        const tools = await this.app.mcp?.getTools(mcpServerUrl) || [];
-
-        let settingsDefinition = [];
-
-        settingsDefinition.push(
+        let settingsDefinition = [
             { id: 'description', label: 'Description', type: 'textarea', rows: 2, placeholder: 'A brief description of the agent\'s purpose and capabilities.' },
             { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', required: true },
             { type: 'divider' }
-        );
+        ];
 
         if (!isDefaultAgent) settingsDefinition.push({ id: 'useCustomModelSettings', label: 'Use Custom Model Settings', type: 'checkbox' });
         settingsDefinition.push({
@@ -426,7 +424,6 @@ class AgentManager {
             ],
             ...(isDefaultAgent ? {} : { dependsOn: 'useCustomToolSettings', dependsOnValue: true })
         });
-
         settingsDefinition.push({ type: 'divider' });
 
         const agentCallSettingsChildren = [
@@ -457,38 +454,21 @@ class AgentManager {
 
         editorView.innerHTML = ''; // Clear potential old content
         editorView.appendChild(settingsFragment);
-
-        this.fetchModels(agentId);
     }
 
-    /**
-     * Generates the HTML for the agent selector dropdown.
-     * @param {string | null} activeAgentId - The ID of the agent to be pre-selected.
-     * @returns {string} The HTML string for the agent selector component.
-     */
-    getAgentSelectorHtml(activeAgentId) {
-        const finalActiveAgentId = activeAgentId || DEFAULT_AGENT_ID;
-        const optionsHtml = this.agents.map(agent =>
-            `<option value="${agent.id}" ${agent.id === finalActiveAgentId ? 'selected' : ''}>${agent.name}</option>`
-        ).join('');
-
-        return `
-            <div id="agent-selector-container">
-                <label for="agent-selector">Active Agent:</label>
-                <select id="agent-selector">${optionsHtml}</select>
-            </div>
-        `;
-    }
 }
 
 // Initialize AgentManager and register views on app init
 pluginManager.register({
-    name: 'AgentManagerInitializer',
+    name: 'Agents',
     onAppInit(app) {
         agentManager = new AgentManager(app);
         app.agentManager = agentManager;
         pluginManager.registerView('agent-editor', (id) => agentManager.renderAgentEditor(id));
-        agentManager.fetchModels(DEFAULT_AGENT_ID);
+
+        // Don't fetch models immediately on startup, as this can block rendering
+        // if the API URL isn't configured. Instead, models will be fetched when
+        // the agent editor is actually viewed.
 
         document.body.addEventListener('mcp-tools-updated', (e) => {
             if (app.activeView.type === 'agent-editor' && app.activeView.id) {
@@ -501,100 +481,106 @@ pluginManager.register({
                 }
             }
         });
-    }
-});
+    },
 
-// Use the factory to create the main agents plugin UI and hooks
-createManagedEntityPlugin({
-    name: 'Agent',
-    id: 'agents',
-    viewType: 'agent-editor',
-    onAddNew: () => agentManager.addAgent({}),
-    getItemName: (item) => item.name,
-    onDelete: (itemId, itemName) => {
-        if (itemId === DEFAULT_AGENT_ID) {
-            alert("The Default Agent cannot be deleted.");
-            return false;
-        }
-        if (confirm(`Are you sure you want to delete agent "${itemName}"?`)) {
-            // The manager's delete method already handles reverting chats.
+    onViewRendered(view) {
+        if (view.type === 'agent-editor') {
+            agentManager.initializeAgentEditor();
             if (agentManager.listPane) {
-                // We need to re-render the actions *after* the item is deleted.
-                setTimeout(() => agentManager.listPane.renderActions(), 0);
+                agentManager.listPane.updateActiveItem();
             }
-            return true;
-        }
-        return false;
-    },
-    onActivate: (manager) => {
-        // When the tab is activated, ensure a valid agent is being viewed.
-        const lastActiveId = manager.app.lastActiveIds['agent-editor'];
-        const lastAgent = manager.getAgent(lastActiveId);
-        if (!lastAgent) {
-            manager.app.setView('agent-editor', DEFAULT_AGENT_ID);
         }
     },
-    actions: () => {
-        const actions = [
-            {
-                id: 'import-agents-btn',
-                label: 'Import Agents',
-                className: 'btn-gray',
-                onClick: () => {
-                    importJson('.agents', (data) => {
-                        if (Array.isArray(data)) {
-                            data.forEach(agentData => agentManager.addAgentFromData(agentData));
-                            alert(`${data.length} agent(s) imported successfully.`);
-                        } else {
-                            agentManager.addAgentFromData(data);
-                            alert(`Agent imported successfully.`);
-                        }
-                    });
-                }
-            }
-        ];
 
-        const agentsToExport = agentManager.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
-        if (agentsToExport.length > 0) {
-            actions.push({
-                id: 'export-agents-btn',
-                label: 'Export Agents',
-                className: 'btn-gray',
-                onClick: () => {
-                    exportJson(agentsToExport, 'agents_config', 'agents');
+    onRightPanelRegister(rightPanelManager) {
+        rightPanelManager.registerTab({
+            id: 'agents',
+            label: 'Agents',
+            viewType: 'agent-editor',
+            listPane: {
+                dataManager: agentManager.dataManager,
+                viewType: 'agent-editor',
+                addNewButtonLabel: 'Add New Agent',
+                onAddNew: () => agentManager.addAgent({}),
+                getItemName: (item) => item.name,
+                onDelete: (itemId, itemName) => {
+                    if (itemId === DEFAULT_AGENT_ID) {
+                        alert("The Default Agent cannot be deleted.");
+                        return false;
+                    }
+                    if (confirm(`Are you sure you want to delete agent "${itemName}"?`)) {
+                        // Let the list pane handle deletion, and view switching.
+                        return true;
+                    }
+                    return false;
+                },
+                actions: () => {
+                    const actions = [{
+                        id: 'import-agents-btn',
+                        label: 'Import Agents',
+                        className: 'btn-gray',
+                        onClick: () => importJson('.agents', (data) => {
+                            if (Array.isArray(data)) {
+                                data.forEach(d => agentManager.addAgentFromData(d));
+                                alert(`${data.length} agent(s) imported.`);
+                            } else {
+                                agentManager.addAgentFromData(data);
+                                alert('Agent imported.');
+                            }
+                        }),
+                    }];
+                    const agentsToExport = agentManager.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
+                    if (agentsToExport.length > 0) {
+                        actions.push({
+                            id: 'export-agents-btn',
+                            label: 'Export Agents',
+                            className: 'btn-gray',
+                            onClick: () => exportJson(agentsToExport, 'agents_config', 'agents'),
+                        });
+                    }
+                    return actions;
+                },
+            },
+            onActivate: (pane) => {
+                // When the tab is activated, ensure a valid agent is being viewed.
+                const lastActiveId = agentManager.app.lastActiveIds['agent-editor'];
+                const lastAgent = agentManager.getAgent(lastActiveId);
+                if (!lastAgent) {
+                    agentManager.app.setView('agent-editor', DEFAULT_AGENT_ID);
                 }
+            },
+        });
+    },
+
+    onTitleBarRegister(config, view, app) {
+        if (view.type !== 'agent-editor') {
+            return config;
+        }
+
+        const agent = agentManager.getAgent(view.id);
+        if (!agent) {
+            config.titleParts = ['Agent Not Found'];
+            return config;
+        }
+
+        const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
+        config.titleParts = []; // Clear existing title
+
+        if (isDefaultAgent) {
+            config.titleParts.push({ text: agent.name, onSave: null });
+        } else {
+            config.titleParts.push({
+                text: agent.name,
+                onSave: (newName) => {
+                    agentManager.updateAgentProperty(agent.id, 'name', newName);
+                    // Re-render the list pane to show the new name
+                    if (agentManager.listPane) {
+                        agentManager.listPane.renderList();
+                    }
+                    app.topPanelManager.render();
+                },
             });
         }
-
-        return actions;
-    },
-    pluginHooks: {
-        onViewRendered(view, chat) {
-            if (view.type === 'agent-editor') {
-                const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
-                if (existingTitleBar) {
-                    existingTitleBar.remove();
-                }
-                agentManager.initializeAgentEditor();
-                agentManager.updateActiveAgentInList();
-            }
-        },
-        onChatSwitched(chat) {
-            const agentSelector = document.getElementById('agent-selector');
-            if (agentSelector) {
-                agentSelector.addEventListener('change', (e) => {
-                    const activeChat = agentManager.app.chatManager.getActiveChat();
-                    if (activeChat) {
-                        activeChat.agent = e.target.value;
-                        agentManager.app.chatManager.dataManager.save();
-                    }
-                });
-
-                if (!chat.agent) {
-                    chat.agent = agentSelector.value;
-                    agentManager.app.chatManager.dataManager.save();
-                }
-            }
-        }
+        return config;
     }
 });

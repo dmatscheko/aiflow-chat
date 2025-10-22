@@ -11,6 +11,8 @@ import { ApiService } from './api-service.js';
 import { pluginManager } from './plugin-manager.js';
 import { SettingsManager } from './settings-manager.js';
 import { responseProcessor } from './response-processor.js';
+import { RightPanelManager } from './ui/right-panel-manager.js';
+import { TopPanelManager } from './ui/top-panel-manager.js';
 
 // --- Plugin Loading ---
 // The application's functionality is extended through plugins. Each imported plugin
@@ -21,13 +23,11 @@ import './plugins/agents-call-plugin.js';
 import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
 import './plugins/formatting-plugin.js';
-import './plugins/title-bar-plugin.js';
 import './plugins/mobile-style-plugin.js';
 import './plugins/custom-dropdown-plugin.js';
 import './plugins/ui-controls-plugin.js';
 import './plugins/autoresize-textarea-plugin.js';
 import './plugins/token-counter-plugin.js';
-import './managed-entity-plugin-factory.js';
 // --- End Plugin Loading ---
 
 /**
@@ -103,11 +103,6 @@ class App {
          */
         this.dom = {};
         /**
-         * An array of tab definitions, populated by plugins.
-         * @type {Tab[]}
-         */
-        this.tabs = [];
-        /**
          * The application's settings manager.
          * @type {SettingsManager}
          */
@@ -117,6 +112,8 @@ class App {
          * @type {import('./response-processor.js').ResponseProcessor}
          */
         this.responseProcessor = responseProcessor;
+        this.rightPanelManager = new RightPanelManager(this, pluginManager);
+        this.topPanelManager = new TopPanelManager(this, pluginManager);
 
         pluginManager.app = this; // Make app instance globally available to plugins
 
@@ -145,23 +142,16 @@ class App {
             if (this.chatManager) {
                 this.chatManager.init();
             }
+             // Register right panel tabs from plugins
+            pluginManager.trigger('onRightPanelRegister', this.rightPanelManager);
+            this.rightPanelManager.render();
 
-            this.defineTabs();
-            this.renderTabs();
+
             this._loadLastActiveIds();
 
             await this.renderMainView();
             this.initEventListeners();
         })();
-    }
-
-    /**
-     * Populates the `this.tabs` array by triggering the 'onTabsRegistered' plugin hook.
-     * @private
-     */
-    defineTabs() {
-        const coreTabs = [];
-        this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
     }
 
     /**
@@ -171,35 +161,10 @@ class App {
     initDOM() {
         this.dom = {
             mainPanel: document.getElementById('main-panel'),
+            mainContent: document.getElementById('main-content'),
             panelTabs: document.getElementById('panel-tabs'),
             panelContent: document.getElementById('panel-content'),
         };
-    }
-
-    /**
-     * Renders the tab buttons and their corresponding panes in the sidebar.
-     * @private
-     */
-    renderTabs() {
-        this.dom.panelTabs.innerHTML = '';
-        this.dom.panelContent.innerHTML = '';
-        this.tabs.forEach(tab => {
-            const tabBtn = document.createElement('button');
-            tabBtn.id = `tab-btn-${tab.id}`;
-            tabBtn.classList.add('tab-btn');
-            tabBtn.dataset.tabId = tab.id;
-            tabBtn.textContent = tab.label;
-            this.dom.panelTabs.appendChild(tabBtn);
-            const tabPane = document.createElement('div');
-            tabPane.id = `${tab.id}-pane`;
-            tabPane.classList.add('tab-pane');
-            this.dom.panelContent.appendChild(tabPane);
-        });
-        if (this.tabs.length > 0) {
-            this.dom.panelTabs.querySelector('.tab-btn').classList.add('active');
-            this.dom.panelContent.querySelector('.tab-pane').classList.add('active');
-            this.tabs[0].onActivate();
-        }
     }
 
     /**
@@ -229,41 +194,47 @@ class App {
     async renderMainView() {
         const { type, id } = this.activeView;
         const renderer = pluginManager.getViewRenderer(type);
+
         if (renderer) {
-            this.dom.mainPanel.innerHTML = renderer(id);
+            // 1. Render the main view's content first.
+            this.dom.mainContent.innerHTML = renderer(id);
+
             const activeChat = this.chatManager ? this.chatManager.getActiveChat() : null;
+            // 2. Trigger hooks for plugins to attach listeners or modify the rendered content.
+            await pluginManager.triggerAsync('onAfterViewRendered', this.activeView, activeChat);
             await pluginManager.triggerAsync('onViewRendered', this.activeView, activeChat);
         } else {
             this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
         }
+
+        // 3. Now that the panel is populated, render the title bar and prepend it.
+        // This ensures it isn't overwritten by the innerHTML assignment above.
+        this.topPanelManager.render();
     }
 
     /**
-     * Handles the logic for switching between sidebar tabs, activating the correct
-     * tab and pane, and calling the tab's `onActivate` function.
+     * Handles the logic for switching between sidebar tabs.
      * @param {string} tabId - The ID of the tab to show.
      * @private
      * @async
      */
     async showTab(tabId) {
         if (!tabId) return;
-        const tab = this.tabs.find(t => t.id === tabId);
-        if (!tab) return;
 
-        this.dom.panelTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        this.dom.panelContent.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-        const tabBtn = document.getElementById(`tab-btn-${tabId}`);
-        const tabPane = document.getElementById(`${tabId}-pane`);
-        if (tabBtn) tabBtn.classList.add('active');
-        if (tabPane) tabPane.classList.add('active');
+        // Update button and pane visibility
+        this.dom.panelTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.toggle('active', btn.dataset.tabId === tabId));
+        this.dom.panelContent.querySelectorAll('.tab-pane').forEach(pane => pane.classList.toggle('active', pane.id === `${tabId}-pane`));
 
-        if (tab.onActivate) {
-            tab.onActivate();
-        }
+        // Activate tab content (e.g., render list panes)
+        this.rightPanelManager.activateTab(tabId);
 
-        const lastActiveId = tab.viewType ? this.lastActiveIds[tab.viewType] : null;
-        if (lastActiveId) {
-            await this.setView(tab.viewType, lastActiveId);
+        // Switch main view if the tab is associated with one
+        const tab = this.rightPanelManager.tabs.find(t => t.id === tabId);
+        if (tab && tab.viewType) {
+            const lastActiveId = this.lastActiveIds[tab.viewType];
+            if (lastActiveId) {
+                await this.setView(tab.viewType, lastActiveId);
+            }
         }
     }
 
