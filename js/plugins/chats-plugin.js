@@ -513,12 +513,14 @@ pluginManager.register({
                 html: `<label for="agent-selector">Agent:</label><select id="agent-selector"></select>`,
                 onMount: (container) => {
                     const selector = container.querySelector('#agent-selector');
-                    selector.innerHTML = agentOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
-                    selector.value = chat.agent || 'agent-default';
-                    selector.addEventListener('change', (e) => {
-                        chat.agent = e.target.value === 'agent-default' ? null : e.target.value;
-                        app.chatManager.debouncedSave();
-                    });
+                    if (selector) {
+                        selector.innerHTML = agentOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+                        selector.value = chat.agent || 'agent-default';
+                        selector.addEventListener('change', (e) => {
+                            chat.agent = e.target.value === 'agent-default' ? null : e.target.value;
+                            app.chatManager.debouncedSave();
+                        });
+                    }
                 }
             },
             {
@@ -526,18 +528,22 @@ pluginManager.register({
                 html: `<label for="flow-selector">Flow:</label><select id="flow-selector"><option value="">None</option></select><button id="run-chat-flow-btn" class="btn-gray">Run</button>`,
                 onMount: (container) => {
                     const selector = container.querySelector('#flow-selector');
-                    selector.innerHTML += flowOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
-                    selector.value = chat.flow || '';
-                    selector.addEventListener('change', (e) => {
-                        chat.flow = e.target.value || null;
-                        app.chatManager.debouncedSave();
-                    });
-
-                    container.querySelector('#run-chat-flow-btn').addEventListener('click', () => {
-                        if (chat.flow) {
-                            app.flowManager.startFlow(chat.flow);
-                        }
-                    });
+                    if (selector) {
+                        selector.innerHTML += flowOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+                        selector.value = chat.flow || '';
+                        selector.addEventListener('change', (e) => {
+                            chat.flow = e.target.value || null;
+                            app.chatManager.debouncedSave();
+                        });
+                    }
+                    const runBtn = container.querySelector('#run-chat-flow-btn');
+                    if (runBtn) {
+                        runBtn.addEventListener('click', () => {
+                            if (chat.flow) {
+                                app.flowManager.startFlow(chat.flow);
+                            }
+                        });
+                    }
                 }
             }
         ];

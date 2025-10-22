@@ -135,7 +135,10 @@ export class TopPanelManager {
             wrapper.innerHTML = control.html;
             controlsContainer.appendChild(wrapper);
             if (control.onMount) {
-                setTimeout(() => control.onMount(wrapper), 0);
+                requestAnimationFrame(() => {
+                    // We need another frame to ensure the innerHTML is parsed and in the DOM
+                    requestAnimationFrame(() => control.onMount(wrapper));
+                });
             }
         });
 
