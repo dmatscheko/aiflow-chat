@@ -12,6 +12,7 @@
 <body>
     <!-- This is the main application container, laid out using CSS Grid. -->
     <div id="app-container">
+        <div id="top-panel"></div>
         <!-- The central panel for the main content, such as the chat view or editors. -->
         <div id="main-panel">
             <!-- The active view is rendered here by main.js based on the current state. -->
@@ -19,10 +20,10 @@
 
         <!-- The right panel, which contains multiple tabs for different functionalities. -->
         <div id="right-panel">
-            <div id="panel-tabs">
-                <!-- Tab buttons are dynamically rendered here by main.js -->
+            <div id="tab-list">
+                <!-- Tab buttons are dynamically rendered here -->
             </div>
-            <div id="panel-content">
+            <div id="tab-content">
                 <!-- The content for the active tab is rendered here. -->
             </div>
         </div>

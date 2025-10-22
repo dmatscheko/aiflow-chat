@@ -22,8 +22,35 @@ body {
 }
 
 #app-container {
+    display: grid;
+    grid-template-columns: 1fr 250px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+        "top-panel right-panel"
+        "main-panel right-panel";
+    height: 100vh;
+}
+
+#top-panel {
+    grid-area: top-panel;
+}
+
+#main-panel {
+    grid-area: main-panel;
     display: flex;
+    flex-direction: column;
     height: 100%;
+    min-width: 0;
+}
+
+#right-panel {
+    grid-area: right-panel;
+    width: 250px;
+    background-color: var(--panel-bg-color);
+    display: flex;
+    flex-direction: column;
+    border-left: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
 
 /* Panels (Settings and Right Panel) */

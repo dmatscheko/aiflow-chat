@@ -11,23 +11,21 @@ import { ApiService } from './api-service.js';
 import { pluginManager } from './plugin-manager.js';
 import { SettingsManager } from './settings-manager.js';
 import { responseProcessor } from './response-processor.js';
+import { RightPanelManager } from './ui/right-panel-manager.js';
+import { TopPanelManager } from './ui/top-panel-manager.js';
 
 // --- Plugin Loading ---
-// The application's functionality is extended through plugins. Each imported plugin
-// file registers its hooks, views, and components with the PluginManager.
 import './plugins/chats-plugin.js';
 import './plugins/agents-plugin.js';
 import './plugins/agents-call-plugin.js';
 import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
 import './plugins/formatting-plugin.js';
-import './plugins/title-bar-plugin.js';
 import './plugins/mobile-style-plugin.js';
 import './plugins/custom-dropdown-plugin.js';
 import './plugins/ui-controls-plugin.js';
 import './plugins/autoresize-textarea-plugin.js';
 import './plugins/token-counter-plugin.js';
-import './managed-entity-plugin-factory.js';
 // --- End Plugin Loading ---
 
 /**
@@ -77,91 +75,47 @@ class App {
      * asynchronous initialization process.
      */
     constructor() {
-        /**
-         * Instance of the ApiService for making backend requests.
-         * @type {ApiService}
-         */
         this.apiService = new ApiService();
-        /**
-         * The currently active view in the main panel.
-         * @type {View}
-         */
         this.activeView = { type: 'chat', id: null };
-        /**
-         * Controller for aborting in-progress fetch requests (e.g., streaming chat).
-         * @type {AbortController | null}
-         */
         this.abortController = null;
-        /**
-         * A map to store the last active ID for each view type, to restore state.
-         * @type {Object.<string, string>}
-         */
         this.lastActiveIds = {};
-        /**
-         * A cache for frequently accessed DOM elements.
-         * @type {Object.<string, HTMLElement>}
-         */
         this.dom = {};
-        /**
-         * An array of tab definitions, populated by plugins.
-         * @type {Tab[]}
-         */
-        this.tabs = [];
-        /**
-         * The application's settings manager.
-         * @type {SettingsManager}
-         */
         this.settingsManager = new SettingsManager(this);
-        /**
-         * The application's response processor for handling AI response generation.
-         * @type {import('./response-processor.js').ResponseProcessor}
-         */
         this.responseProcessor = responseProcessor;
 
-        pluginManager.app = this; // Make app instance globally available to plugins
+        pluginManager.app = this;
+
+        // Initialize UI Managers
+        this.rightPanelManager = new RightPanelManager(pluginManager);
+        this.topPanelManager = new TopPanelManager(pluginManager);
 
         this.initDOM();
 
         // --- Managers will be attached by plugins ---
-        // These properties are initialized to null and are expected to be
-        // populated by their respective plugins during the `onAppInit` hook.
-        /** @type {import('./plugins/chats-plugin.js').ChatManager | null} */
         this.chatManager = null;
-        /** @type {import('./plugins/agents-plugin.js').AgentManager | null} */
         this.agentManager = null;
-        /** @type {import('./plugins/flows-plugin.js').FlowManager | null} */
         this.flowManager = null;
         // --- End of Managers ---
 
-        // The constructor kicks off an async IIFE (Immediately Invoked Function Expression)
-        // to handle the asynchronous parts of initialization without making the
-        // constructor itself async.
         (async () => {
-            // Allow plugins to initialize and attach managers to the app instance.
             await pluginManager.triggerAsync('onAppInit', this);
+            pluginManager.trigger('onStart', this); // New hook for post-init setup
 
-            // Initialize managers that require post-plugin setup.
-            // This needs to run before any UI is rendered that might depend on this data.
-            if (this.chatManager) {
-                this.chatManager.init();
-            }
-
-            this.defineTabs();
-            this.renderTabs();
             this._loadLastActiveIds();
 
+            const chats = this.chatManager.dataManager.getAll();
+            const chatIds = Object.keys(chats);
+            if (chatIds.length > 0) {
+                this.setView('chat', chatIds[0]);
+            } else {
+                const newChat = this.chatManager.createNewChat();
+                this.setView('chat', newChat.id);
+            }
+
             await this.renderMainView();
+            pluginManager.trigger('onViewRendered');
             this.initEventListeners();
         })();
-    }
-
-    /**
-     * Populates the `this.tabs` array by triggering the 'onTabsRegistered' plugin hook.
-     * @private
-     */
-    defineTabs() {
-        const coreTabs = [];
-        this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
     }
 
     /**
@@ -171,35 +125,10 @@ class App {
     initDOM() {
         this.dom = {
             mainPanel: document.getElementById('main-panel'),
-            panelTabs: document.getElementById('panel-tabs'),
-            panelContent: document.getElementById('panel-content'),
+            rightPanel: document.getElementById('right-panel'),
+            topPanel: document.getElementById('top-panel'),
+            // Add other commonly accessed elements as needed
         };
-    }
-
-    /**
-     * Renders the tab buttons and their corresponding panes in the sidebar.
-     * @private
-     */
-    renderTabs() {
-        this.dom.panelTabs.innerHTML = '';
-        this.dom.panelContent.innerHTML = '';
-        this.tabs.forEach(tab => {
-            const tabBtn = document.createElement('button');
-            tabBtn.id = `tab-btn-${tab.id}`;
-            tabBtn.classList.add('tab-btn');
-            tabBtn.dataset.tabId = tab.id;
-            tabBtn.textContent = tab.label;
-            this.dom.panelTabs.appendChild(tabBtn);
-            const tabPane = document.createElement('div');
-            tabPane.id = `${tab.id}-pane`;
-            tabPane.classList.add('tab-pane');
-            this.dom.panelContent.appendChild(tabPane);
-        });
-        if (this.tabs.length > 0) {
-            this.dom.panelTabs.querySelector('.tab-btn').classList.add('active');
-            this.dom.panelContent.querySelector('.tab-pane').classList.add('active');
-            this.tabs[0].onActivate();
-        }
     }
 
     /**
@@ -230,7 +159,13 @@ class App {
         const { type, id } = this.activeView;
         const renderer = pluginManager.getViewRenderer(type);
         if (renderer) {
-            this.dom.mainPanel.innerHTML = renderer(id);
+            const content = renderer(id);
+            this.dom.mainPanel.innerHTML = ''; // Clear previous content
+            if (typeof content === 'string') {
+                this.dom.mainPanel.innerHTML = content;
+            } else if (content instanceof HTMLElement) {
+                this.dom.mainPanel.appendChild(content);
+            }
             const activeChat = this.chatManager ? this.chatManager.getActiveChat() : null;
             await pluginManager.triggerAsync('onViewRendered', this.activeView, activeChat);
         } else {
