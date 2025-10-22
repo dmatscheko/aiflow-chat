@@ -190,7 +190,7 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     };
 
                     if (setting.type === 'textarea') {
-                        input = createTextarea({ ...commonInputProps, rows: setting.rows || 4, value: valueToSet });
+                        input = createTextarea({ ...commonInputProps, rows: setting.rows || 4, value: valueToSet, placeholder: setting.placeholder });
                     } else if (setting.type === 'select') {
                         const options = setting.options.map(opt => ({
                             value: typeof opt === 'string' ? opt : opt.value,

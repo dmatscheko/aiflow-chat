@@ -328,7 +328,14 @@ class AgentManager {
             {
                 id: 'model', label: '', type: 'select', options: [], dependsOn: 'use_model', dependsOnValue: true, actions: [{
                     id: 'agent-refresh-models', label: 'Refresh',
-                    onClick: (e, modelInput) => this.fetchModels(agentId, modelInput)
+                    onClick: (e, modelInput) => {
+                        const effectiveConfig = this.getEffectiveApiConfig(agentId);
+                        if (effectiveConfig.apiUrl) {
+                            this.fetchModels(agentId, modelInput);
+                        } else {
+                            alert('Please set an API URL for this agent or the Default Agent first.');
+                        }
+                    }
                 }]
             },
             { id: 'use_temperature', type: 'checkbox', label: 'Temperature', className: 'settings-inline-checkbox' },
