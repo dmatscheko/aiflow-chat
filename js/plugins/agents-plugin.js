@@ -11,9 +11,8 @@
 import { pluginManager } from '../plugin-manager.js';
 import { debounce, importJson, exportJson } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
-import { createTitleBar } from './title-bar-plugin.js';
 import { DataManager } from '../data-manager.js';
-import { createManagedEntityPlugin } from '../managed-entity-plugin-factory.js';
+import { createListPane } from '../ui/ui-components.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -328,24 +327,6 @@ class AgentManager {
             existingTitleBar.remove();
         }
 
-        // --- Title Bar ---
-        const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
-        const titleParts = [];
-        if (isDefaultAgent) {
-            titleParts.push(agent.name);
-        } else {
-            titleParts.push({
-                text: agent.name,
-                onSave: (newName) => {
-                    this.updateAgentProperty(agent.id, 'name', newName);
-                    this.app.setView('agent-editor', agent.id);
-                }
-            });
-        }
-        const titleBar = createTitleBar(titleParts, [], []);
-        mainPanel.prepend(titleBar);
-        // --- End Title Bar ---
-
         const modelSettingDefs = [
             { id: 'apiUrl', label: 'API URL', type: 'text', placeholder: 'e.g. https://api.someai.com/' },
             { id: 'apiKey', label: 'API Key', type: 'password' },
@@ -504,97 +485,146 @@ pluginManager.register({
     }
 });
 
-// Use the factory to create the main agents plugin UI and hooks
-createManagedEntityPlugin({
-    name: 'Agent',
-    id: 'agents',
-    viewType: 'agent-editor',
-    onAddNew: () => agentManager.addAgent({}),
-    getItemName: (item) => item.name,
-    onDelete: (itemId, itemName) => {
-        if (itemId === DEFAULT_AGENT_ID) {
-            alert("The Default Agent cannot be deleted.");
-            return false;
-        }
-        if (confirm(`Are you sure you want to delete agent "${itemName}"?`)) {
-            // The manager's delete method already handles reverting chats.
-            if (agentManager.listPane) {
-                // We need to re-render the actions *after* the item is deleted.
-                setTimeout(() => agentManager.listPane.renderActions(), 0);
-            }
-            return true;
-        }
-        return false;
-    },
-    onActivate: (manager) => {
-        // When the tab is activated, ensure a valid agent is being viewed.
-        const lastActiveId = manager.app.lastActiveIds['agent-editor'];
-        const lastAgent = manager.getAgent(lastActiveId);
-        if (!lastAgent) {
-            manager.app.setView('agent-editor', DEFAULT_AGENT_ID);
-        }
-    },
-    actions: () => {
-        const actions = [
-            {
-                id: 'import-agents-btn',
-                label: 'Import Agents',
-                className: 'btn-gray',
-                onClick: () => {
-                    importJson('.agents', (data) => {
-                        if (Array.isArray(data)) {
-                            data.forEach(agentData => agentManager.addAgentFromData(agentData));
-                            alert(`${data.length} agent(s) imported successfully.`);
-                        } else {
-                            agentManager.addAgentFromData(data);
-                            alert(`Agent imported successfully.`);
+// Register the main agents plugin UI and hooks
+pluginManager.register({
+    name: 'AgentsUI',
+
+    onRegisterRightPanelTabs(rightPanelManager) {
+        rightPanelManager.registerTab({
+            id: 'agents',
+            label: 'Agents',
+            viewType: 'agent-editor',
+            onActivate: (pane) => {
+                if (agentManager.listPane) {
+                    // If pane already exists, just ensure it's visible and updated
+                    pane.appendChild(agentManager.listPane.element);
+                    agentManager.listPane.renderList();
+                    agentManager.listPane.renderActions();
+                    return;
+                }
+
+                const actions = () => {
+                    const baseActions = [
+                        {
+                            id: 'import-agents-btn',
+                            label: 'Import Agents',
+                            className: 'btn-gray',
+                            onClick: () => {
+                                importJson('.agents', (data) => {
+                                    if (Array.isArray(data)) {
+                                        data.forEach(agentData => agentManager.addAgentFromData(agentData));
+                                        alert(`${data.length} agent(s) imported successfully.`);
+                                    } else {
+                                        agentManager.addAgentFromData(data);
+                                        alert(`Agent imported successfully.`);
+                                    }
+                                });
+                            }
                         }
-                    });
+                    ];
+
+                    const agentsToExport = agentManager.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
+                    if (agentsToExport.length > 0) {
+                        baseActions.push({
+                            id: 'export-agents-btn',
+                            label: 'Export Agents',
+                            className: 'btn-gray',
+                            onClick: () => {
+                                exportJson(agentsToExport, 'agents_config', 'agents');
+                            }
+                        });
+                    }
+                    return baseActions;
+                };
+
+
+                agentManager.listPane = createListPane({
+                    dataManager: agentManager.dataManager,
+                    app: agentManager.app,
+                    viewType: 'agent-editor',
+                    addNewButtonLabel: 'Add New Agent',
+                    onAddNew: () => agentManager.addAgent({}),
+                    getItemName: (item) => item.name,
+                    onDelete: (itemId, itemName) => {
+                        if (itemId === DEFAULT_AGENT_ID) {
+                            alert("The Default Agent cannot be deleted.");
+                            return false;
+                        }
+                        if (confirm(`Are you sure you want to delete agent "${itemName}"?`)) {
+                            // The manager's delete method already handles reverting chats.
+                            setTimeout(() => agentManager.listPane.renderActions(), 0);
+                            return true;
+                        }
+                        return false;
+                    },
+                    actions: actions,
+                });
+
+                pane.appendChild(agentManager.listPane.element);
+
+                // Ensure a valid agent is being viewed.
+                const lastActiveId = agentManager.app.lastActiveIds['agent-editor'];
+                const lastAgent = agentManager.getAgent(lastActiveId);
+                if (!lastAgent) {
+                    agentManager.app.setView('agent-editor', DEFAULT_AGENT_ID);
                 }
             }
-        ];
+        });
+    },
 
-        const agentsToExport = agentManager.agents.filter(a => a.id !== DEFAULT_AGENT_ID);
-        if (agentsToExport.length > 0) {
-            actions.push({
-                id: 'export-agents-btn',
-                label: 'Export Agents',
-                className: 'btn-gray',
-                onClick: () => {
-                    exportJson(agentsToExport, 'agents_config', 'agents');
+    onViewRendered(view) {
+        if (view.type === 'agent-editor') {
+            agentManager.initializeAgentEditor();
+            if (agentManager.listPane) {
+                agentManager.listPane.updateActiveItem();
+            }
+        }
+    },
+
+    onTitleBarRegister(config, view) {
+        if (view.type === 'agent-editor') {
+            const agent = agentManager.getAgent(view.id);
+            if (!agent) return;
+
+            const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
+            if (isDefaultAgent) {
+                config.titleParts.push(agent.name);
+            } else {
+                config.titleParts.push({
+                    text: agent.name,
+                    onSave: (newName) => {
+                        agentManager.updateAgentProperty(agent.id, 'name', newName);
+                        // No full re-render needed, just update the list pane
+                        if (agentManager.listPane) agentManager.listPane.renderList();
+                    }
+                });
+            }
+        }
+    },
+
+    onTitleBarControlsRegistered(controls) {
+        const activeChat = agentManager.app.chatManager?.getActiveChat();
+        if (agentManager.app.activeView.type === 'chat' && activeChat) {
+            controls.unshift({
+                id: 'agent-selector-container',
+                html: agentManager.getAgentSelectorHtml(activeChat.agent),
+                onMount: (container) => {
+                    const agentSelector = container.querySelector('#agent-selector');
+                    if (agentSelector) {
+                        agentSelector.addEventListener('change', (e) => {
+                            const selectedAgentId = e.target.value;
+                            const currentChat = agentManager.app.chatManager.getActiveChat();
+                            if (currentChat) {
+                                currentChat.agent = selectedAgentId === DEFAULT_AGENT_ID ? null : selectedAgentId;
+                                agentManager.app.chatManager.dataManager.save();
+                                // Re-render the title bar to reflect changes if necessary
+                                agentManager.app.topPanelManager.renderTitleBar(agentManager.app.activeView, currentChat);
+                            }
+                        });
+                    }
                 }
             });
         }
-
-        return actions;
-    },
-    pluginHooks: {
-        onViewRendered(view, chat) {
-            if (view.type === 'agent-editor') {
-                const existingTitleBar = document.querySelector('#main-panel .main-title-bar');
-                if (existingTitleBar) {
-                    existingTitleBar.remove();
-                }
-                agentManager.initializeAgentEditor();
-                agentManager.updateActiveAgentInList();
-            }
-        },
-        onChatSwitched(chat) {
-            const agentSelector = document.getElementById('agent-selector');
-            if (agentSelector) {
-                agentSelector.addEventListener('change', (e) => {
-                    const activeChat = agentManager.app.chatManager.getActiveChat();
-                    if (activeChat) {
-                        activeChat.agent = e.target.value;
-                        agentManager.app.chatManager.dataManager.save();
-                    }
-                });
-
-                if (!chat.agent) {
-                    chat.agent = agentSelector.value;
-                    agentManager.app.chatManager.dataManager.save();
-                }
-            }
-        }
+        return controls;
     }
 });

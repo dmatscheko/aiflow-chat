@@ -11,6 +11,8 @@ import { ApiService } from './api-service.js';
 import { pluginManager } from './plugin-manager.js';
 import { SettingsManager } from './settings-manager.js';
 import { responseProcessor } from './response-processor.js';
+import { RightPanelManager } from './ui/right-panel-manager.js';
+import { TopPanelManager } from './ui/top-panel-manager.js';
 
 // --- Plugin Loading ---
 // The application's functionality is extended through plugins. Each imported plugin
@@ -21,13 +23,11 @@ import './plugins/agents-call-plugin.js';
 import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
 import './plugins/formatting-plugin.js';
-import './plugins/title-bar-plugin.js';
 import './plugins/mobile-style-plugin.js';
 import './plugins/custom-dropdown-plugin.js';
 import './plugins/ui-controls-plugin.js';
 import './plugins/autoresize-textarea-plugin.js';
 import './plugins/token-counter-plugin.js';
-import './managed-entity-plugin-factory.js';
 // --- End Plugin Loading ---
 
 /**
@@ -103,15 +103,20 @@ class App {
          */
         this.dom = {};
         /**
-         * An array of tab definitions, populated by plugins.
-         * @type {Tab[]}
-         */
-        this.tabs = [];
-        /**
          * The application's settings manager.
          * @type {SettingsManager}
          */
         this.settingsManager = new SettingsManager(this);
+        /**
+         * Manages the right-hand panel UI.
+         * @type {RightPanelManager}
+         */
+        this.rightPanelManager = new RightPanelManager(this, pluginManager);
+        /**
+         * Manages the top panel UI.
+         * @type {TopPanelManager}
+         */
+        this.topPanelManager = new TopPanelManager(this, pluginManager);
         /**
          * The application's response processor for handling AI response generation.
          * @type {import('./response-processor.js').ResponseProcessor}
@@ -146,22 +151,11 @@ class App {
                 this.chatManager.init();
             }
 
-            this.defineTabs();
-            this.renderTabs();
             this._loadLastActiveIds();
 
             await this.renderMainView();
             this.initEventListeners();
         })();
-    }
-
-    /**
-     * Populates the `this.tabs` array by triggering the 'onTabsRegistered' plugin hook.
-     * @private
-     */
-    defineTabs() {
-        const coreTabs = [];
-        this.tabs = pluginManager.trigger('onTabsRegistered', coreTabs);
     }
 
     /**
@@ -171,35 +165,7 @@ class App {
     initDOM() {
         this.dom = {
             mainPanel: document.getElementById('main-panel'),
-            panelTabs: document.getElementById('panel-tabs'),
-            panelContent: document.getElementById('panel-content'),
         };
-    }
-
-    /**
-     * Renders the tab buttons and their corresponding panes in the sidebar.
-     * @private
-     */
-    renderTabs() {
-        this.dom.panelTabs.innerHTML = '';
-        this.dom.panelContent.innerHTML = '';
-        this.tabs.forEach(tab => {
-            const tabBtn = document.createElement('button');
-            tabBtn.id = `tab-btn-${tab.id}`;
-            tabBtn.classList.add('tab-btn');
-            tabBtn.dataset.tabId = tab.id;
-            tabBtn.textContent = tab.label;
-            this.dom.panelTabs.appendChild(tabBtn);
-            const tabPane = document.createElement('div');
-            tabPane.id = `${tab.id}-pane`;
-            tabPane.classList.add('tab-pane');
-            this.dom.panelContent.appendChild(tabPane);
-        });
-        if (this.tabs.length > 0) {
-            this.dom.panelTabs.querySelector('.tab-btn').classList.add('active');
-            this.dom.panelContent.querySelector('.tab-pane').classList.add('active');
-            this.tabs[0].onActivate();
-        }
     }
 
     /**
@@ -229,41 +195,15 @@ class App {
     async renderMainView() {
         const { type, id } = this.activeView;
         const renderer = pluginManager.getViewRenderer(type);
+        const activeChat = this.chatManager ? this.chatManager.getActiveChat() : null;
+
         if (renderer) {
             this.dom.mainPanel.innerHTML = renderer(id);
-            const activeChat = this.chatManager ? this.chatManager.getActiveChat() : null;
+            this.topPanelManager.renderTitleBar(this.activeView, activeChat);
             await pluginManager.triggerAsync('onViewRendered', this.activeView, activeChat);
+            this.rightPanelManager.render(); // This will only render once
         } else {
             this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
-        }
-    }
-
-    /**
-     * Handles the logic for switching between sidebar tabs, activating the correct
-     * tab and pane, and calling the tab's `onActivate` function.
-     * @param {string} tabId - The ID of the tab to show.
-     * @private
-     * @async
-     */
-    async showTab(tabId) {
-        if (!tabId) return;
-        const tab = this.tabs.find(t => t.id === tabId);
-        if (!tab) return;
-
-        this.dom.panelTabs.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        this.dom.panelContent.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-        const tabBtn = document.getElementById(`tab-btn-${tabId}`);
-        const tabPane = document.getElementById(`${tabId}-pane`);
-        if (tabBtn) tabBtn.classList.add('active');
-        if (tabPane) tabPane.classList.add('active');
-
-        if (tab.onActivate) {
-            tab.onActivate();
-        }
-
-        const lastActiveId = tab.viewType ? this.lastActiveIds[tab.viewType] : null;
-        if (lastActiveId) {
-            await this.setView(tab.viewType, lastActiveId);
         }
     }
 
@@ -272,14 +212,6 @@ class App {
      * @private
      */
     initEventListeners() {
-        // Listener for sidebar tab clicks.
-        this.dom.panelTabs.addEventListener('click', async (e) => {
-            const tabId = e.target.dataset.tabId;
-            if (tabId) {
-                await this.showTab(tabId);
-            }
-        });
-
         // Global keydown listener for the Escape key to abort chat generation.
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {

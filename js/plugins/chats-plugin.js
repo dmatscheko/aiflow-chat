@@ -10,7 +10,7 @@ import { ChatLog } from '../chat-data.js';
 import { debounce, importJson, exportJson } from '../utils.js';
 import { responseProcessor } from '../response-processor.js';
 import { DataManager } from '../data-manager.js';
-import { createManagedEntityPlugin } from '../managed-entity-plugin-factory.js';
+import { createListPane } from '../ui/ui-components.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -427,78 +427,95 @@ pluginManager.register({
     }
 });
 
-// Use the factory to create the main chat plugin UI and hooks
-createManagedEntityPlugin({
-    name: 'Chat',
-    id: 'chats',
-    viewType: 'chat',
-    addAtStart: true,
-    onAddNew: () => appInstance.chatManager.createNewChat(),
-    getItemName: (item) => item.title,
-    onDelete: (itemId, itemName) => {
-        if (confirm(`Are you sure you want to delete chat "${itemName}"?`)) {
-            if (appInstance.chatManager.activeChatId === itemId) {
-                // The active chat is being deleted. The list pane handles the data model.
-                // We just need to switch the view to a safe place.
-                setTimeout(() => {
-                    const remainingChats = appInstance.chatManager.dataManager.getAll();
-                    if (remainingChats.length > 0) {
-                        appInstance.setView('chat', remainingChats[0].id);
-                    } else {
-                        // If no chats are left, create a new one.
-                        appInstance.chatManager.createNewChat();
-                    }
-                }, 0);
-            }
-            return true;
-        }
-        return false;
-    },
-    actions: () => {
-        const activeChat = appInstance.chatManager.getActiveChat();
-        const actions = [
-            {
-                id: 'load-chat-btn',
-                label: 'Load Chat',
-                className: 'btn-gray',
-                onClick: () => {
-                    importJson('.chat', (data) => {
-                        appInstance.chatManager.createChatFromData(data);
-                    });
-                }
-            }
-        ];
+pluginManager.register({
+    name: 'ChatsUI',
 
-        if (activeChat) {
-            actions.push({
-                id: 'save-chat-btn',
-                label: 'Save Chat',
-                className: 'btn-gray',
-                onClick: () => {
-                    const chatToSave = {
-                        title: activeChat.title,
-                        log: activeChat.log.toJSON(),
-                        draftMessage: activeChat.draftMessage,
-                        agent: activeChat.agent,
-                        flow: activeChat.flow,
-                    };
-                    exportJson(chatToSave, activeChat.title.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'chat');
+    onRegisterRightPanelTabs(rightPanelManager) {
+        rightPanelManager.registerTab({
+            id: 'chats',
+            label: 'Chats',
+            viewType: 'chat',
+            addAtStart: true,
+            onActivate: (pane) => {
+                const chatManager = appInstance.chatManager;
+                if (chatManager.listPane) {
+                    pane.appendChild(chatManager.listPane.element);
+                    chatManager.listPane.renderList();
+                    chatManager.listPane.renderActions();
+                    return;
                 }
+
+                const actions = () => {
+                    const activeChat = chatManager.getActiveChat();
+                    const baseActions = [{
+                        id: 'load-chat-btn',
+                        label: 'Load Chat',
+                        className: 'btn-gray',
+                        onClick: () => importJson('.chat', (data) => chatManager.createChatFromData(data)),
+                    }];
+
+                    if (activeChat) {
+                        baseActions.push({
+                            id: 'save-chat-btn',
+                            label: 'Save Chat',
+                            className: 'btn-gray',
+                            onClick: () => {
+                                const chatToSave = {
+                                    title: activeChat.title,
+                                    log: activeChat.log.toJSON(),
+                                    draftMessage: activeChat.draftMessage,
+                                    agent: activeChat.agent,
+                                    flow: activeChat.flow,
+                                };
+                                exportJson(chatToSave, activeChat.title.replace(/[^a-z0-9]/gi, '_').toLowerCase(), 'chat');
+                            },
+                        });
+                    }
+                    return baseActions;
+                };
+
+                chatManager.listPane = createListPane({
+                    dataManager: chatManager.dataManager,
+                    app: appInstance,
+                    viewType: 'chat',
+                    addNewButtonLabel: 'Add New Chat',
+                    onAddNew: () => chatManager.createNewChat(),
+                    getItemName: (item) => item.title,
+                    onDelete: (itemId, itemName) => confirm(`Are you sure you want to delete chat "${itemName}"?`),
+                    actions: actions,
+                });
+
+                pane.appendChild(chatManager.listPane.element);
+            },
+        });
+    },
+
+    onViewRendered(view) {
+        if (view.type === 'chat') {
+            const chatManager = appInstance.chatManager;
+            chatManager.activeChatId = view.id;
+            chatManager.saveActiveChatId();
+            chatManager.initChatView(view.id);
+            if (chatManager.listPane) {
+                chatManager.listPane.updateActiveItem();
+                chatManager.listPane.renderActions();
+            }
+        }
+    },
+
+    onTitleBarRegister(config, view, data) {
+        if (view.type === 'chat' && data) {
+            const chat = data;
+            config.titleParts.push({
+                text: chat.title,
+                onSave: (newTitle) => {
+                    chat.title = newTitle;
+                    appInstance.chatManager.dataManager.save();
+                    if (appInstance.chatManager.listPane) {
+                        appInstance.chatManager.listPane.renderList();
+                    }
+                },
             });
         }
-        return actions;
     },
-    pluginHooks: {
-        onViewRendered(view, chat) {
-            if (view.type === 'chat') {
-                appInstance.chatManager.activeChatId = view.id;
-                appInstance.chatManager.saveActiveChatId();
-                appInstance.chatManager.initChatView(view.id);
-                appInstance.chatManager.updateActiveChatInList();
-                if (appInstance.chatManager.listPane) {
-                    appInstance.chatManager.listPane.renderActions();
-                }
-            }
-        }
-    }
 });

@@ -9,6 +9,7 @@
 'use.strict';
 
 import { pluginManager } from './plugin-manager.js';
+import { createElement, createButton, createInput, createTextarea, createSelect } from './ui/ui-elements.js';
 
 /**
  * @typedef {import('./main.js').App} App
@@ -107,7 +108,7 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
 
     settings.forEach(setting => {
         if (setting.type === 'divider') {
-            fragment.appendChild(document.createElement('hr'));
+            fragment.appendChild(createElement('hr'));
             return;
         }
 
@@ -122,16 +123,28 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
 
         let container;
         let input;
-        let label;
+        let labelEl;
+
+        const handle_change = (e) => {
+            const target = e.target;
+            let newValue;
+            if (['checkbox', 'radio'].includes(target.type)) {
+                newValue = target.checked;
+            } else if (target.type === 'select-multiple') {
+                newValue = Array.from(target.selectedOptions).map(opt => opt.value);
+            } else if (target.type === 'range' || target.type === 'number') {
+                newValue = parseFloat(target.value);
+            } else {
+                newValue = target.value;
+            }
+            onChange?.(settingPath, newValue, context, target);
+        };
 
         try {
             switch (setting.type) {
                 case 'fieldset':
-                    container = document.createElement('fieldset');
-                    container.id = settingId;
-                    const legend = document.createElement('legend');
-                    legend.textContent = setting.label;
-                    container.appendChild(legend);
+                    const legend = createElement('legend', { textContent: setting.label });
+                    container = createElement('fieldset', { id: settingId, children: [legend] });
                     if (setting.children) {
                         const childFragment = createSettingsUI(setting.children, currentValue || {}, onChange, `${settingId}-`, context, settingPath, dependencyMap);
                         container.appendChild(childFragment);
@@ -139,67 +152,33 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     break;
 
                 case 'checkbox-list':
-                    container = document.createElement('div');
-                    container.id = settingId;
-                    container.classList.add('setting', 'checkbox-list');
-                    if (setting.label) {
-                        label = document.createElement('label');
-                        label.textContent = setting.label;
-                        container.appendChild(label);
-                    }
-                    const allowedSet = new Set(currentValue || []);
-                    (setting.options || []).forEach(opt => {
-                        const cbLabel = document.createElement('label');
-                        cbLabel.classList.add('checkbox-label');
-                        const cb = document.createElement('input');
-                        cb.type = 'checkbox';
-                        cb.value = opt.value;
-                        cb.checked = allowedSet.has(opt.value);
-                        cb.addEventListener('change', () => {
-                            const selected = Array.from(container.querySelectorAll('input:checked')).map(c => c.value);
-                            onChange?.(settingPath, selected, context, cb);
-                        });
-                        cbLabel.appendChild(cb);
-                        cbLabel.appendChild(document.createTextNode(` ${opt.label}`));
-                        container.appendChild(cbLabel);
-                    });
-                    break;
-
                 case 'radio-list':
-                    container = document.createElement('div');
-                    container.id = settingId;
-                    container.classList.add('setting', 'radio-list');
-                    if (setting.label) {
-                        label = document.createElement('label');
-                        label.textContent = setting.label;
-                        container.appendChild(label);
-                    }
-                    const radioName = settingId; // Use settingId as the shared name for mutual exclusivity
-                    (setting.options || []).forEach(opt => {
-                        const radioLabel = document.createElement('label');
-                        radioLabel.classList.add('radio-label');
-                        const radio = document.createElement('input');
-                        radio.type = 'radio';
-                        radio.name = radioName;
-                        radio.value = opt.value;
-                        radio.checked = currentValue === opt.value;
-                        radio.addEventListener('change', () => {
-                            if (radio.checked) {
-                                onChange?.(settingPath, radio.value, context, radio);
-                            }
+                    const items = (setting.options || []).map(opt => {
+                        const itemInput = createInput({
+                            attributes: { type: setting.type.startsWith('checkbox') ? 'checkbox' : 'radio', value: opt.value, name: settingId },
+                            events: { change: setting.type.startsWith('checkbox') ? () => {
+                                const selected = Array.from(container.querySelectorAll('input:checked')).map(c => c.value);
+                                onChange?.(settingPath, selected, context, itemInput);
+                            } : (e) => {
+                                if (e.target.checked) onChange?.(settingPath, e.target.value, context, e.target);
+                            }},
                         });
-                        radioLabel.appendChild(radio);
-                        radioLabel.appendChild(document.createTextNode(` ${opt.label}`));
-                        container.appendChild(radioLabel);
+                        if (setting.type.startsWith('checkbox')) {
+                            itemInput.checked = new Set(currentValue || []).has(opt.value);
+                        } else {
+                            itemInput.checked = currentValue === opt.value;
+                        }
+                        return createElement('label', { className: `${setting.type.startsWith('checkbox') ? 'checkbox' : 'radio'}-label`, children: [itemInput, ` ${opt.label}`] });
                     });
+                    if (setting.label) {
+                        items.unshift(createElement('label', { textContent: setting.label }));
+                    }
+                    container = createElement('div', { id: settingId, className: `setting ${setting.type}`, children: items });
                     break;
 
-                // Support for custom renderers
                 case 'custom':
-                    if (typeof setting.render === 'function') {
-                        container = document.createElement('div');
-                        container.classList.add('setting');
-                        container.id = settingId;
+                     if (typeof setting.render === 'function') {
+                        container = createElement('div', { className: 'setting', id: settingId });
                         const customContent = setting.render({ setting, currentValue, onChange, settingPath, context });
                         if (customContent) container.appendChild(customContent);
                     } else {
@@ -209,167 +188,70 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     break;
 
                 default:
-                    container = document.createElement('div');
-                    container.classList.add('setting');
-                    // Add custom class if provided
-                    if (setting.className) container.classList.add(setting.className);
-
                     const valueToSet = currentValue ?? setting.default ?? '';
+                    const inputOptions = {
+                        id: settingId,
+                        attributes: { 'data-path': settingPath, required: setting.required },
+                        events: { change: handle_change },
+                    };
 
-                    // Create and configure the input element first
                     if (setting.type === 'textarea') {
-                        input = document.createElement('textarea');
-                        input.rows = setting.rows || 4; // Allow custom rows
-                        input.value = valueToSet;
+                        input = createTextarea({ ...inputOptions, value: valueToSet, attributes: { ...inputOptions.attributes, rows: setting.rows || 4 } });
                     } else if (setting.type === 'select') {
-                        input = document.createElement('select');
-                        // Support multiple select
-                        if (setting.multiple) {
-                            input.multiple = true;
-                            const selectedSet = new Set(Array.isArray(valueToSet) ? valueToSet : [valueToSet]);
-                            if (setting.options) {
-                                setting.options.forEach(opt => {
-                                    const option = document.createElement('option');
-                                    option.value = typeof opt === 'string' ? opt : opt.value;
-                                    option.textContent = typeof opt === 'string' ? opt : opt.label;
-                                    option.selected = selectedSet.has(option.value);
-                                    input.appendChild(option);
-                                });
-                            }
-                        } else {
-                            if (setting.options) {
-                                setting.options.forEach(opt => {
-                                    const option = document.createElement('option');
-                                    option.value = typeof opt === 'string' ? opt : opt.value;
-                                    option.textContent = typeof opt === 'string' ? opt : opt.label;
-                                    input.appendChild(option);
-                                });
-                            }
-                            let optionToSelect = Array.from(input.options).find(opt => opt.value === valueToSet);
-                            if (!optionToSelect && valueToSet) {
-                                const newOption = document.createElement('option');
-                                newOption.value = valueToSet;
-                                newOption.textContent = `${valueToSet} (saved)`;
-                                input.appendChild(newOption);
-                                optionToSelect = newOption;
-                            }
-                            if (optionToSelect) optionToSelect.selected = true;
-                        }
-                    } else if (setting.type === 'range') {
-                        input = document.createElement('input');
-                        input.type = 'range';
-                        input.min = setting.min ?? 0;
-                        input.max = setting.max ?? 100;
-                        input.step = setting.step ?? 1;
-                        input.value = valueToSet;
+                        const selectOptions = (setting.options || []).map(opt => ({ value: typeof opt === 'string' ? opt : opt.value, label: typeof opt === 'string' ? opt : opt.label }));
+                        input = createSelect(selectOptions, valueToSet, { ...inputOptions, attributes: { ...inputOptions.attributes, multiple: setting.multiple } });
                     } else {
-                        input = document.createElement('input');
-                        input.type = setting.type || 'text'; // Handles 'color', 'date', 'file', 'email', etc.
-                        if (setting.placeholder) input.placeholder = setting.placeholder;
-                        if (['checkbox', 'radio'].includes(input.type)) {
+                        const type = setting.type || 'text';
+                        input = createInput({ ...inputOptions, attributes: { ...inputOptions.attributes, type, placeholder: setting.placeholder } });
+                        if (['checkbox', 'radio'].includes(type)) {
                             input.checked = !!valueToSet;
                         } else {
                             input.value = valueToSet;
                         }
                     }
 
-                    input.id = settingId;
-                    input.dataset.path = settingPath;
+                    const children = [];
+                    if (setting.label) {
+                        const requiredMark = setting.required ? ' *' : '';
+                        labelEl = createElement('label', { textContent: `${setting.label}${requiredMark}`, attributes: { for: settingId } });
+                    }
 
-                    // Required attribute
-                    if (setting.required) input.required = true;
-
-                    input.addEventListener('change', (e) => {
-                        const target = e.target;
-                        let newValue;
-                        if (['checkbox', 'radio'].includes(target.type)) {
-                            newValue = target.checked;
-                        } else if (target.type === 'select-multiple') { // Handle multi-select
-                            newValue = Array.from(target.selectedOptions).map(opt => opt.value);
-                        } else if (target.type === 'range' || target.type === 'number') {
-                            newValue = parseFloat(target.value);
-                        } else {
-                            newValue = target.value;
-                        }
-                        onChange?.(settingPath, newValue, context, target);
-                    });
-
-                    // Now, construct the DOM structure based on the input type
-                    if (['checkbox', 'radio'].includes(input.type)) {
-                        if (setting.label) {
-                            label = document.createElement('label');
-                            label.classList.add(`${input.type}-label`);
-                            // Asterisk for required
-                            label.appendChild(document.createTextNode(setting.required ? `${setting.label} *` : setting.label));
-                            label.appendChild(input);
-                            container.appendChild(label);
-                        } else {
-                            // If there's no label, just append the input itself
-                            container.appendChild(input);
-                            // Aria-label for accessibility
-                            if (setting.description) input.setAttribute('aria-label', setting.description);
-                        }
+                    if (['checkbox', 'radio'].includes(input.type) && labelEl) {
+                        labelEl.classList.add(`${input.type}-label`);
+                        labelEl.appendChild(input);
+                        children.push(labelEl);
                     } else {
-                        // Original logic for all other input types
-                        if (setting.label) {
-                            label = document.createElement('label');
-                            label.setAttribute('for', settingId);
-                            // Optional required asterisk
-                            const requiredMark = setting.required ? ' *' : '';
-                            label.textContent = `${setting.label}${requiredMark}`;
-                            container.appendChild(label);
-                        }
-
-                        if (input) {
-                            container.appendChild(input);
-                        }
-
-                        if (setting.type === 'range') {
-                            const valueSpan = document.createElement('span');
-                            valueSpan.id = `${settingId}-value`;
-                            valueSpan.textContent = valueToSet;
-                            container.appendChild(valueSpan);
-                            input.addEventListener('input', () => { valueSpan.textContent = input.value; });
-                        }
+                        if (labelEl) children.push(labelEl);
+                        children.push(input);
                     }
 
-                    // Description/help text
+                    if (setting.type === 'range') {
+                        const valueSpan = createElement('span', { id: `${settingId}-value`, textContent: valueToSet });
+                        children.push(valueSpan);
+                        input.addEventListener('input', () => { valueSpan.textContent = input.value; });
+                    }
                     if (setting.description) {
-                        const help = document.createElement('small');
-                        help.classList.add('help-text');
-                        help.textContent = setting.description;
-                        container.appendChild(help);
+                        children.push(createElement('small', { className: 'help-text', textContent: setting.description }));
                     }
-
-                    // Error placeholder
                     if (setting.errorSpan) {
-                        const errorSpan = document.createElement('span');
-                        errorSpan.classList.add('error');
-                        container.appendChild(errorSpan);
+                        children.push(createElement('span', { className: 'error' }));
                     }
 
+                    container = createElement('div', { className: `setting ${setting.className || ''}`, children });
             }
 
             if (setting.actions) {
-                const buttonContainer = document.createElement('div');
-                buttonContainer.classList.add('setting-actions');
+                const buttonContainer = createElement('div', { className: 'setting-actions' });
                 setting.actions.forEach(action => {
-                    const button = document.createElement('button');
-                    button.id = action.id;
-                    button.textContent = action.label;
-                    button.type = 'button';
-                    button.addEventListener('click', (e) => {
-                        // Pass the input element if it exists, otherwise the container.
-                        // This makes the behavior consistent for fieldsets vs. regular inputs.
-                        action.onClick(e, input || container);
-                    });
-                    buttonContainer.appendChild(button);
+                    buttonContainer.appendChild(createButton(action.label, {
+                        id: action.id,
+                        events: { click: (e) => action.onClick(e, input || container) },
+                    }));
                 });
                 container.appendChild(buttonContainer);
             }
 
             if (setting.dependsOn) {
-                // The controller's ID is constructed relative to the current element's prefix.
                 const controllerId = `${idPrefix}${setting.dependsOn}`;
                 if (!dependencyMap.has(controllerId)) {
                     dependencyMap.set(controllerId, []);
@@ -381,7 +263,6 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
             }
 
             fragment.appendChild(container);
-
         } catch (error) {
             console.error('Error creating setting UI for:', setting, error);
         }
