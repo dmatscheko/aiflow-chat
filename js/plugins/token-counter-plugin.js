@@ -19,13 +19,12 @@ const tokenCounterPlugin = {
         appInstance = app;
     },
 
-    /**
-     * Adds the token counter control to the title bar.
-     * @param {Array<object>} controls - The array of existing title bar controls.
-     * @returns {Array<object>} The modified array of controls.
-     */
-    onTitleBarControlsRegistered(controls) {
-        controls.push({
+    onTitleBarRegister(config, view, app) {
+        if (view.type !== 'chat') {
+            return config;
+        }
+
+        config.controls.push({
             id: 'token-counter-container',
             html: `
                 <div class="token-counter-group">
@@ -44,7 +43,8 @@ const tokenCounterPlugin = {
                 updateAllTokenCounts();
             }
         });
-        return controls;
+
+        return config;
     },
 
     onViewRendered() {

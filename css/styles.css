@@ -293,6 +293,12 @@ h2 {
 
 #run-chat-flow-btn {
     margin-left: 0.5rem;
+    flex-shrink: 0;
+}
+
+.flow-selector-inner-wrapper {
+    display: flex;
+    align-items: center;
 }
 
 

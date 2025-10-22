@@ -525,7 +525,7 @@ pluginManager.register({
             },
             {
                 id: 'flow-selector-wrapper',
-                html: `<label for="flow-selector">Flow:</label><select id="flow-selector"><option value="">None</option></select><button id="run-chat-flow-btn" class="btn-gray">Run</button>`,
+                html: `<div class="flow-selector-inner-wrapper"><label for="flow-selector">Flow:</label><select id="flow-selector"><option value="">None</option></select><button id="run-chat-flow-btn" class="btn-gray">Run</button></div>`,
                 onMount: (container) => {
                     const selector = container.querySelector('#flow-selector');
                     if (selector) {
