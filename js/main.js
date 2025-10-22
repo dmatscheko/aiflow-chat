@@ -191,24 +191,24 @@ class App {
      * @async
      */
     async renderMainView() {
-        // Render title bar before main content
-        this.topPanelManager.render();
-
         const { type, id } = this.activeView;
         const renderer = pluginManager.getViewRenderer(type);
 
         if (renderer) {
-            // Renderer now only needs to return the core content HTML
+            // 1. Render the main view's content first.
             this.dom.mainPanel.innerHTML = renderer(id);
 
             const activeChat = this.chatManager ? this.chatManager.getActiveChat() : null;
-            // A new hook for after the innerHTML is set, crucial for some plugins
+            // 2. Trigger hooks for plugins to attach listeners or modify the rendered content.
             await pluginManager.triggerAsync('onAfterViewRendered', this.activeView, activeChat);
-            // The original hook, now used for attaching listeners etc.
             await pluginManager.triggerAsync('onViewRendered', this.activeView, activeChat);
         } else {
             this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
         }
+
+        // 3. Now that the panel is populated, render the title bar and prepend it.
+        // This ensures it isn't overwritten by the innerHTML assignment above.
+        this.topPanelManager.render();
     }
 
     /**
