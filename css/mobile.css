@@ -46,4 +46,8 @@
     #main-panel {
         width: 100%;
     }
+
+    #add-flow-step-btn {
+        margin-right: 48px;
+    }
 }

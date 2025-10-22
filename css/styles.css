@@ -949,9 +949,3 @@ hr.divider {
 #prompt-token-counter {
     font-size: 0.8em;
 }
-
-/* --- Flow-Step Styles --- */
-
-#add-flow-step-btn {
-    margin-right: 12px;
-}
