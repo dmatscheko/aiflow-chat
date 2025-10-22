@@ -311,7 +311,7 @@ class AgentManager {
      * using `createSettingsUI`, and fetches any necessary data like available models.
      * @async
      */
-    async initializeAgentEditor() {
+    initializeAgentEditor() {
         const editorView = document.getElementById('agent-editor-container');
         if (!editorView || !editorView.dataset.agentId) return;
 
@@ -319,6 +319,28 @@ class AgentManager {
         const agent = this.getAgent(agentId);
         if (!agent) return;
 
+        // Start with a placeholder render.
+        editorView.innerHTML = '<h2>Loading agent settings...</h2>';
+
+        // Fetch tools asynchronously, then render the full UI.
+        const effectiveConfig = this.getEffectiveApiConfig(agent.id);
+        const mcpServerUrl = effectiveConfig.toolSettings.mcpServer;
+        (this.app.mcp?.getTools(mcpServerUrl) || Promise.resolve([])).then(tools => {
+            // Re-check if the view is still active before rendering
+            const currentEditorView = document.getElementById('agent-editor-container');
+            if (!currentEditorView || currentEditorView.dataset.agentId !== agentId) {
+                return;
+            }
+            this._renderAgentEditorUI(agent, tools);
+            this.fetchModels(agentId);
+        });
+    }
+
+    _renderAgentEditorUI(agent, tools) {
+        const editorView = document.getElementById('agent-editor-container');
+        if (!editorView) return;
+
+        const agentId = agent.id;
         const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
 
         const modelSettingDefs = [
@@ -362,17 +384,11 @@ class AgentManager {
             { id: 'seed', label: '', type: 'number', placeholder: 'e.g. 12345', dependsOn: 'use_seed', dependsOnValue: true },
         ];
 
-        const effectiveConfig = this.getEffectiveApiConfig(agent.id);
-        const mcpServerUrl = effectiveConfig.toolSettings.mcpServer;
-        const tools = await this.app.mcp?.getTools(mcpServerUrl) || [];
-
-        let settingsDefinition = [];
-
-        settingsDefinition.push(
+        let settingsDefinition = [
             { id: 'description', label: 'Description', type: 'textarea', rows: 2, placeholder: 'A brief description of the agent\'s purpose and capabilities.' },
             { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', required: true },
             { type: 'divider' }
-        );
+        ];
 
         if (!isDefaultAgent) settingsDefinition.push({ id: 'useCustomModelSettings', label: 'Use Custom Model Settings', type: 'checkbox' });
         settingsDefinition.push({
@@ -408,7 +424,6 @@ class AgentManager {
             ],
             ...(isDefaultAgent ? {} : { dependsOn: 'useCustomToolSettings', dependsOnValue: true })
         });
-
         settingsDefinition.push({ type: 'divider' });
 
         const agentCallSettingsChildren = [
@@ -439,8 +454,6 @@ class AgentManager {
 
         editorView.innerHTML = ''; // Clear potential old content
         editorView.appendChild(settingsFragment);
-
-        this.fetchModels(agentId);
     }
 
 }
@@ -452,7 +465,10 @@ pluginManager.register({
         agentManager = new AgentManager(app);
         app.agentManager = agentManager;
         pluginManager.registerView('agent-editor', (id) => agentManager.renderAgentEditor(id));
-        agentManager.fetchModels(DEFAULT_AGENT_ID);
+
+        // Don't fetch models immediately on startup, as this can block rendering
+        // if the API URL isn't configured. Instead, models will be fetched when
+        // the agent editor is actually viewed.
 
         document.body.addEventListener('mcp-tools-updated', (e) => {
             if (app.activeView.type === 'agent-editor' && app.activeView.id) {
@@ -561,6 +577,7 @@ pluginManager.register({
                     if (agentManager.listPane) {
                         agentManager.listPane.renderList();
                     }
+                    app.topPanelManager.render();
                 },
             });
         }

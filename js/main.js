@@ -161,6 +161,7 @@ class App {
     initDOM() {
         this.dom = {
             mainPanel: document.getElementById('main-panel'),
+            mainContent: document.getElementById('main-content'),
             panelTabs: document.getElementById('panel-tabs'),
             panelContent: document.getElementById('panel-content'),
         };
@@ -196,7 +197,7 @@ class App {
 
         if (renderer) {
             // 1. Render the main view's content first.
-            this.dom.mainPanel.innerHTML = renderer(id);
+            this.dom.mainContent.innerHTML = renderer(id);
 
             const activeChat = this.chatManager ? this.chatManager.getActiveChat() : null;
             // 2. Trigger hooks for plugins to attach listeners or modify the rendered content.

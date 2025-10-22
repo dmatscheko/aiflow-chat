@@ -500,6 +500,7 @@ pluginManager.register({
                 if (app.chatManager.listPane) {
                     app.chatManager.listPane.renderList();
                 }
+                app.topPanelManager.render();
             },
         }];
 

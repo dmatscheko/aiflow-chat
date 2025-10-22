@@ -621,6 +621,7 @@ pluginManager.register({
                     if (flowManager.listPane) {
                         flowManager.listPane.renderList();
                     }
+                    app.topPanelManager.render();
                 }
             }];
 
