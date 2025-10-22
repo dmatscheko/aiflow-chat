@@ -118,6 +118,33 @@ export function createTitleBar(titleParts, controls = [], buttons = []) {
 
             button.addEventListener('click', (e) => {
                 e.stopPropagation();
+                const wasShown = dropdownContent.classList.contains('show');
+                // Reset styles first
+                dropdownContent.style.left = 'auto';
+                dropdownContent.style.right = 'auto';
+                if (!wasShown) {
+                    // Temporarily show to measure (off-screen if needed)
+                    dropdownContent.style.visibility = 'hidden';
+                    dropdownContent.classList.add('show');
+                }
+                const buttonRect = button.getBoundingClientRect();
+                const contentRect = dropdownContent.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                // Calculate if preferred right-align (extend left) would clip left
+                const potentialLeft = buttonRect.right - contentRect.width;
+                if (potentialLeft < 0) {
+                    dropdownContent.style.right = 'auto';
+                    dropdownContent.style.left = '0'; // Switch to align left, extend right (avoids left clip)
+                } else {
+                    dropdownContent.style.left = 'auto';
+                    dropdownContent.style.right = '0'; // Default: align right, extend left
+                }
+                if (!wasShown) {
+                    // Reset temporary state
+                    dropdownContent.classList.remove('show');
+                    dropdownContent.style.visibility = 'visible';
+                }
+                // Toggle handles open/close
                 dropdownContent.classList.toggle('show');
             });
 
