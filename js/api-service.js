@@ -135,6 +135,16 @@ export class ApiService {
                 seed: config.use_seed && config.seed !== undefined ? parseInt(config.seed, 10) : undefined,
             };
 
+            const noApiUrlError = new Error("Invalid API URL. Set a valid API URL in the Default Agent Settings.");
+            if (!config.apiUrl) {
+                throw noApiUrlError;
+            }
+            try {
+                new URL('/v1/chat/completions', config.apiUrl);
+            } catch {
+                throw noApiUrlError;
+            }
+
             if (config.use_logit_bias && config.logit_bias) {
                 try {
                     defaults.logit_bias = JSON.parse(config.logit_bias);
