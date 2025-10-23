@@ -227,10 +227,9 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     const requiredMark = setting.required ? ' *' : '';
 
                     if (['checkbox', 'radio'].includes(input.type)) {
-                         label = setting.label
-                            ? createElement('label', { className: `${input.type}-label`, children: [document.createTextNode(`${setting.label}${requiredMark}`), input] })
-                            : null;
-                        container = createElement('div', { className: `setting ${setting.className || ''}`, children: [label || input, helpText, errorSpan].filter(Boolean) });
+                        label = setting.label ? createElement('label', { htmlFor: settingId, className: `${input.type}-label`, textContent: `${setting.label}${requiredMark}` }) : null;
+                        const wrapper = createElement('div', { className: 'checkbox-container', children: [input, label].filter(Boolean) });
+                        container = createElement('div', { className: `setting ${setting.className || ''}`, children: [wrapper, helpText, errorSpan].filter(Boolean) });
                     } else {
                         label = setting.label
                             ? createElement('label', { htmlFor: settingId, textContent: `${setting.label}${requiredMark}` })

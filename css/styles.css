@@ -79,16 +79,33 @@ h2 {
 
 .setting-control-group .setting {
     margin-bottom: 0;
+}
+
+.setting-control-group .setting:first-child {
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+
+.setting-control-group .setting:last-child {
     flex-grow: 1;
 }
 
 .setting-control-group .checkbox-label {
-    flex-shrink: 0;
-    width: 120px; /* Adjust as needed */
+    white-space: nowrap;
 }
 
 .setting-control-group .checkbox-label input {
     margin-right: 0.5rem;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-container label {
+    margin-bottom: 0;
+    margin-left: 0.5rem;
 }
 
 .setting-disabled {
