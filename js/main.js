@@ -75,6 +75,7 @@ class App {
     /**
      * Initializes the application, sets up core services, and kicks off the
      * asynchronous initialization process.
+     * @constructor
      */
     constructor() {
         /**
@@ -169,9 +170,10 @@ class App {
 
     /**
      * Sets the active view for the main panel, saves the state, and triggers a re-render.
-     * @param {string} type - The type of view to set (e.g., 'chat').
-     * @param {string} id - The ID of the content for the view (e.g., a chat ID).
-     * @async
+     * This is the primary method for navigating between different views like chats or editors.
+     * @param {string} type - The type of view to set (e.g., 'chat', 'agent-editor').
+     * @param {string} id - The unique ID of the content for the view (e.g., a chat ID or agent ID).
+     * @returns {Promise<void>} A promise that resolves after the view has been rendered.
      */
     async setView(type, id) {
         this.activeView = { type, id };
@@ -187,9 +189,13 @@ class App {
     }
 
     /**
-     * Renders the main content panel using the renderer function registered for the active view type.
-     * It then triggers the `onViewRendered` hook to allow plugins to modify the rendered view.
-     * @async
+     * Renders the main content panel based on the `activeView`.
+     * It finds the appropriate renderer function registered by a plugin,
+     * executes it to generate the HTML, and injects it into the DOM.
+     * After rendering, it triggers hooks (`onAfterViewRendered`, `onViewRendered`)
+     * to allow plugins to attach event listeners or perform other DOM manipulations.
+     * Finally, it renders the top panel.
+     * @returns {Promise<void>} A promise that resolves after rendering and all hooks have been triggered.
      */
     async renderMainView() {
         const { type, id } = this.activeView;

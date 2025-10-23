@@ -45,10 +45,14 @@ import { createButton } from './ui-elements.js';
  * @property {TitleBarButton[]} buttons - Action buttons to display.
  */
 
-
+/**
+ * Manages the main title bar at the top of the application.
+ * @class
+ */
 export class TopPanelManager {
     /**
      * Creates an instance of TopPanelManager.
+     * @constructor
      * @param {App} app - The main application instance.
      * @param {PluginManager} pluginManager - The application's plugin manager.
      */

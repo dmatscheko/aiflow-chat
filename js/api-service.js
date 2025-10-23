@@ -111,7 +111,9 @@ export class ApiService {
      * It initiates the request, processes the stream, updates the message object
      * in real-time, and handles errors and finalization.
      * @param {object} payload - The request payload for the API.
-     * @param {object} config - The API configuration { apiUrl, apiKey }.
+     * @param {object} config - The API configuration object. See the agent settings for details.
+     * @param {string} config.apiUrl - The base URL for the API.
+     * @param {string} config.apiKey - The API key for authentication.
      * @param {object} message - The message object to be updated with the streamed content.
      * @param {function} notifyUpdate - A callback function to signal that the message has been updated.
      * @param {AbortSignal} abortSignal - The signal to abort the fetch request.
@@ -205,12 +207,14 @@ export class ApiService {
 
     /**
      * Prepares and executes a streaming agent call, handling the entire lifecycle.
-     * @param {object} app - The main application instance.
-     * @param {object} chat - The chat context.
-     * @param {object} messageToUpdate - The message object to be populated with the response.
+     * It sets up the abort controller, gets the agent's configuration, constructs
+     * the final system prompt, and then calls `streamAndProcessResponse`.
+     * @param {object} app - The main application instance, providing access to the agent manager and DOM.
+     * @param {object} chat - The chat instance, used to notify the UI of updates.
+     * @param {object} messageToUpdate - The message object to be populated with the agent's response.
      * @param {Array<object>} messages - The message history to be sent to the API.
-     * @param {string} agentId - The ID of the agent to be called.
-     * @returns {Promise<void>}
+     * @param {string} agentId - The ID of the agent being called.
+     * @returns {Promise<void>} A promise that resolves when the agent call is complete.
      */
     async executeStreamingAgentCall(app, chat, messageToUpdate, messages, agentId) {
         app.dom.stopButton.style.display = 'block';

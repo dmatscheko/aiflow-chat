@@ -66,6 +66,7 @@ export function setPropertyByPath(obj, path, value) {
 export class SettingsManager {
     /**
      * Creates an instance of SettingsManager.
+     * @constructor
      * @param {App} app - The main application instance.
      */
     constructor(app) {
@@ -91,16 +92,16 @@ export class SettingsManager {
  * Creates and manages a settings UI from a declarative array of setting definitions.
  * This powerful function recursively builds a complete HTML form structure based on
  * the provided configuration, handling various input types, dependencies between fields,
- * and data binding.
+ * and data binding. It returns a `DocumentFragment` that can be appended to any element in the DOM.
  *
  * @param {Setting[]} settings - The array of setting definitions that describe the UI to be created.
- * @param {object} currentValues - An object containing the current values for the settings, which will be used to populate the form fields.
+ * @param {object} currentValues - An object containing the current values for the settings, used to populate the form fields. Dot-notation can be used for nested values.
  * @param {SettingChangedCallback} [onChange] - A single callback function that will be invoked whenever any setting's value changes.
- * @param {string} [idPrefix=''] - A prefix to be added to all generated HTML element IDs to ensure uniqueness in complex UIs.
- * @param {string} [context=''] - A context string that is passed through to the `onChange` callback, useful for identifying the source of the change.
- * @param {string} [pathPrefix=''] - (For internal use) A prefix for the dot-notation path used in recursive calls to build nested setting paths.
- * @param {Map<string, any[]>} [dependencyMap] - (For internal use) A map used to track dependencies between settings for visibility toggling.
- * @returns {DocumentFragment} A `DocumentFragment` containing the fully rendered and interactive settings UI. This can be appended to any DOM element.
+ * @param {string} [idPrefix=''] - A prefix to be added to all generated HTML element IDs to ensure uniqueness in complex UIs where multiple settings panels might exist.
+ * @param {string} [context=''] - A context string that is passed through to the `onChange` callback, useful for identifying which settings panel triggered the change.
+ * @param {string} [pathPrefix=''] - For internal recursive use. Builds the dot-notation path for nested settings.
+ * @param {Map<string, any[]>} [dependencyMap] - For internal recursive use. Tracks dependencies between settings for visibility toggling.
+ * @returns {DocumentFragment} A `DocumentFragment` containing the fully rendered and interactive settings UI.
  */
 export function createSettingsUI(settings, currentValues, onChange, idPrefix = '', context = '', pathPrefix = '', dependencyMap = new Map()) {
     const fragment = document.createDocumentFragment();

@@ -84,6 +84,11 @@ let agentManager = null;
  * @class
  */
 class AgentManager {
+    /**
+     * Creates an instance of AgentManager.
+     * @constructor
+     * @param {App} app The main application instance.
+     */
     constructor(app) {
         this.app = app;
         this.listPane = null;
@@ -94,6 +99,11 @@ class AgentManager {
         this._ensureDefaultAgent();
     }
 
+    /**
+     * Ensures that the Default Agent exists, creating it if necessary.
+     * It also guarantees that the Default Agent is always the first item in the agents list.
+     * @private
+     */
     _ensureDefaultAgent() {
         let defaultAgent = this.dataManager.get(DEFAULT_AGENT_ID);
 
@@ -128,10 +138,20 @@ class AgentManager {
         }
     }
 
+    /**
+     * Retrieves an agent by its ID.
+     * @param {string} id The ID of the agent to retrieve.
+     * @returns {Agent|undefined} The agent object, or undefined if not found.
+     */
     getAgent(id) {
         return this.dataManager.get(id);
     }
 
+    /**
+     * Adds a new agent with default properties.
+     * @param {object} [agentData={}] - Optional data to override the defaults for the new agent.
+     * @returns {Agent} The newly created agent.
+     */
     addAgent(agentData) {
         const newAgentDefaults = {
             name: 'New Agent',
@@ -151,6 +171,11 @@ class AgentManager {
         return newAgent;
     }
 
+    /**
+     * Adds an agent from imported data, ensuring a unique ID.
+     * @param {object} agentData The agent data to import.
+     * @returns {Agent} The added agent.
+     */
     addAgentFromData(agentData) {
         const newAgent = this.dataManager.addFromData(agentData);
         if (this.listPane) {
@@ -160,10 +185,20 @@ class AgentManager {
         return newAgent;
     }
 
+    /**
+     * Updates an existing agent.
+     * @param {Agent} agentData The agent data to update.
+     */
     updateAgent(agentData) {
         this.dataManager.update(agentData);
     }
 
+    /**
+     * Updates a specific property of an agent using a dot-notation path.
+     * @param {string} agentId The ID of the agent to update.
+     * @param {string} path The dot-notation path to the property.
+     * @param {*} value The new value for the property.
+     */
     updateAgentProperty(agentId, path, value) {
         const agent = this.getAgent(agentId);
         if (agent) {
@@ -175,6 +210,10 @@ class AgentManager {
         }
     }
 
+    /**
+     * Deletes an agent by its ID.
+     * @param {string} id The ID of the agent to delete.
+     */
     deleteAgent(id) {
         if (id === DEFAULT_AGENT_ID) {
             console.error("Cannot delete the Default Agent.");
@@ -191,6 +230,11 @@ class AgentManager {
         }
     }
 
+    /**
+     * Gets the effective API configuration for an agent, inheriting from the Default Agent.
+     * @param {string|null} [agentId=null] - The ID of the agent. If null, uses the active chat's agent.
+     * @returns {object} The effective API configuration.
+     */
     getEffectiveApiConfig(agentId = null) {
         const activeChat = this.app.chatManager ? this.app.chatManager.getActiveChat() : null;
         const finalAgentId = agentId || activeChat?.agent || DEFAULT_AGENT_ID;
@@ -235,6 +279,11 @@ class AgentManager {
         return effectiveConfig;
     }
 
+    /**
+     * Constructs the final system prompt for an agent, allowing plugins to modify it.
+     * @param {string|null} [agentId=null] - The ID of the agent.
+     * @returns {Promise<string>} The final system prompt.
+     */
     async constructSystemPrompt(agentId = null) {
         const activeChat = this.app.chatManager ? this.app.chatManager.getActiveChat() : null;
         const finalAgentId = agentId || activeChat?.agent || DEFAULT_AGENT_ID;
@@ -252,6 +301,12 @@ class AgentManager {
         return finalSystemPrompt;
     }
 
+    /**
+     * Fetches the list of available models from the API and populates the model select dropdown.
+     * @param {string|null} [agentId=null] - The ID of the agent.
+     * @param {HTMLSelectElement|null} [targetSelectElement=null] - The select element to populate.
+     * @returns {Promise<void>}
+     */
     async fetchModels(agentId = null, targetSelectElement = null) {
         const effectiveConfig = this.getEffectiveApiConfig(agentId);
         const { apiUrl, apiKey, model: currentModelValue } = effectiveConfig;
@@ -283,6 +338,9 @@ class AgentManager {
         }
     }
 
+    /**
+     * Updates the active agent in the list pane.
+     */
     updateActiveAgentInList() {
         if (this.listPane) {
             this.listPane.updateActiveItem();
@@ -336,6 +394,12 @@ class AgentManager {
         });
     }
 
+    /**
+     * Renders the agent editor UI for a given agent.
+     * @param {Agent} agent The agent to render the editor for.
+     * @param {Tool[]} tools The list of available tools.
+     * @private
+     */
     _renderAgentEditorUI(agent, tools) {
         const editorView = document.getElementById('agent-editor-container');
         if (!editorView) return;

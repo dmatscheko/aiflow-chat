@@ -37,9 +37,15 @@ import { DataManager } from '../data-manager.js';
  * @property {(pane: HTMLElement) => void} [onActivate] - A callback to run when the tab is activated, allowing for custom content rendering.
  */
 
+/**
+ * Manages the right-hand panel of the application, including its
+ * tab system and the content panes associated with each tab.
+ * @class
+ */
 export class RightPanelManager {
     /**
      * Creates an instance of RightPanelManager.
+     * @constructor
      * @param {App} app - The main application instance.
      * @param {PluginManager} pluginManager - The application's plugin manager.
      */

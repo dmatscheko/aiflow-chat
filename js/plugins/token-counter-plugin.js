@@ -15,10 +15,20 @@ let currentChatLog = null;
 const tokenCounterPlugin = {
     name: 'TokenCounter',
 
+    /**
+     * Stores a reference to the main app instance.
+     * @param {import('../main.js').App} app - The main application instance.
+     */
     onAppInit(app) {
         appInstance = app;
     },
 
+    /**
+     * Registers the token counter UI in the title bar.
+     * @param {object} config - The title bar configuration object.
+     * @param {import('../main.js').View} view - The active view.
+     * @returns {object} The modified configuration object.
+     */
     onTitleBarRegister(config, view, app) {
         if (view.type !== 'chat') {
             return config;
@@ -47,6 +57,9 @@ const tokenCounterPlugin = {
         return config;
     },
 
+    /**
+     * Subscribes to chat log updates to keep the token count current.
+     */
     onViewRendered() {
         if (!appInstance) return;
 
