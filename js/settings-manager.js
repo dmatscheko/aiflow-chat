@@ -136,6 +136,11 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     container = createElement('fieldset', { id: settingId, children: [legend, childFragment].filter(Boolean) });
                     break;
 
+                case 'control-group':
+                    const groupFragment = createSettingsUI(setting.children, currentValues, onChange, idPrefix, context, pathPrefix, dependencyMap);
+                    container = createElement('div', { id: settingId, className: `setting-control-group ${setting.className || ''}`, children: [groupFragment] });
+                    break;
+
                 case 'checkbox-list':
                 case 'radio-list':
                     const items = (setting.options || []).map(opt => {
@@ -255,6 +260,7 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                 dependencyMap.get(controllerId).push({
                     dependentElement: container,
                     requiredValue: setting.dependsOnValue,
+                    action: setting.dependsOnAction || 'hide',
                 });
             }
 
@@ -274,9 +280,17 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
             if (controllerElement) {
                 const updateDependents = () => {
                     const currentValue = controllerElement.type === 'checkbox' ? controllerElement.checked : controllerElement.value;
-                    dependents.forEach(({ dependentElement, requiredValue }) => {
-                        const shouldBeVisible = currentValue === requiredValue;
-                        dependentElement.style.display = shouldBeVisible ? 'block' : 'none';
+                    dependents.forEach(({ dependentElement, requiredValue, action }) => {
+                        const conditionMet = currentValue === requiredValue;
+                        if (action === 'disable') {
+                            dependentElement.classList.toggle('setting-disabled', !conditionMet);
+                            const inputs = dependentElement.querySelectorAll('input, select, textarea, button');
+                            inputs.forEach(input => {
+                                input.disabled = !conditionMet;
+                            });
+                        } else { // Default to 'hide'
+                            dependentElement.style.display = conditionMet ? '' : 'none';
+                        }
                     });
                 };
                 controllerElement.addEventListener('change', updateDependents);

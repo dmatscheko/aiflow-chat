@@ -70,6 +70,31 @@ h2 {
     margin-top: 0.5rem;
 }
 
+.setting-control-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.setting-control-group .setting {
+    margin-bottom: 0;
+    flex-grow: 1;
+}
+
+.setting-control-group .checkbox-label {
+    flex-shrink: 0;
+    width: 120px; /* Adjust as needed */
+}
+
+.setting-control-group .checkbox-label input {
+    margin-right: 0.5rem;
+}
+
+.setting-disabled {
+    opacity: 0.5;
+}
+
 /* Right Panel Tabs */
 #panel-tabs {
     display: flex;
