@@ -76,6 +76,11 @@ let flowManager = null;
  * @class
  */
 export class FlowManager {
+    /**
+     * Creates an instance of FlowManager.
+     * @constructor
+     * @param {App} app The main application instance.
+     */
     constructor(app) {
         this.app = app;
         this.listPane = null;
@@ -89,18 +94,41 @@ export class FlowManager {
         this._defineSteps();
     }
 
+    /**
+     * Retrieves a flow by its ID.
+     * @param {string} id The ID of the flow to retrieve.
+     * @returns {Flow|undefined} The flow object, or undefined if not found.
+     */
     getFlow(id) { return this.dataManager.get(id); }
 
+    /**
+     * Adds a new flow.
+     * @param {object} flowData The data for the new flow.
+     * @returns {Flow} The newly created flow.
+     */
     addFlow(flowData) {
         const existingNames = this.flows.map(f => f.name);
         const name = generateUniqueName(flowData.name || 'New Flow', existingNames);
         return this.dataManager.add({ ...flowData, name });
     }
 
+    /**
+     * Updates an existing flow.
+     * @param {Flow} flowData The flow data to update.
+     */
     updateFlow(flowData) { this.dataManager.update(flowData); }
 
+    /**
+     * Deletes a flow by its ID.
+     * @param {string} id The ID of the flow to delete.
+     */
     deleteFlow(id) { this.dataManager.delete(id); }
 
+    /**
+     * Adds a flow from imported data.
+     * @param {object} flowData The flow data to import.
+     * @returns {Flow} The added flow.
+     */
     addFlowFromData(flowData) {
         const newFlow = this.dataManager.addFromData(flowData);
         if (this.listPane) {
@@ -109,6 +137,10 @@ export class FlowManager {
         return newFlow;
     }
 
+    /**
+     * Starts the execution of a flow.
+     * @param {string} flowId The ID of the flow to start.
+     */
     startFlow(flowId) {
         const flow = this.getFlow(flowId);
         if (flow) {
@@ -117,12 +149,25 @@ export class FlowManager {
         }
     }
 
+    /**
+     * Defines a new type of flow step.
+     * @param {string} type The type of the step.
+     * @param {FlowStepDefinition} definition The definition of the step.
+     * @private
+     */
     _defineStep(type, definition) { this.stepTypes[type] = { ...definition, type }; }
 
+    /**
+     * Registers all the standard flow step definitions.
+     * @private
+     */
     _defineSteps() {
         registerFlowStepDefinitions(this);
     }
 
+    /**
+     * Updates the active flow in the list pane.
+     */
     updateActiveFlowInList() {
         if (this.listPane) {
             this.listPane.updateActiveItem();

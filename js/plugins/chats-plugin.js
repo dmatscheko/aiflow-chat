@@ -39,6 +39,11 @@ let appInstance = null;
  * @class
  */
 class ChatManager {
+    /**
+     * Creates an instance of ChatManager.
+     * @constructor
+     * @param {App} app The main application instance.
+     */
     constructor(app) {
         this.app = app;
         this.listPane = null;
@@ -58,6 +63,12 @@ class ChatManager {
         }, 500);
     }
 
+    /**
+     * Hydrates a chat object from raw data, ensuring the chat log is a `ChatLog` instance.
+     * @param {object} chatData - The raw chat data.
+     * @returns {Chat} The hydrated chat object.
+     * @private
+     */
     _hydrateChat(chatData) {
         // If the log is already a ChatLog instance, don't re-hydrate.
         const log = chatData.log instanceof ChatLog ? chatData.log : ChatLog.fromJSON(chatData.log);
@@ -75,6 +86,9 @@ class ChatManager {
         return chat;
     }
 
+    /**
+     * Initializes the chat manager, creating a new chat if none exist.
+     */
     init() {
         if (this.chats.length === 0) {
             this.createNewChat();
@@ -83,10 +97,17 @@ class ChatManager {
         this.app.activeView.id = this.activeChatId;
     }
 
+    /**
+     * Saves the active chat ID to local storage.
+     */
     saveActiveChatId() {
         localStorage.setItem('core_active_chat_id', this.activeChatId);
     }
 
+    /**
+     * Creates a new, empty chat session.
+     * @returns {Chat} The newly created chat.
+     */
     createNewChat() {
         const newChatData = {
             title: 'New Chat',
@@ -106,6 +127,10 @@ class ChatManager {
         return this.chats[index];
     }
 
+    /**
+     * Creates a new chat from imported data.
+     * @param {object} chatData The chat data to import.
+     */
     createChatFromData(chatData) {
         const addedItem = this.dataManager.addFromData(chatData);
         const index = this.chats.findIndex(c => c.id === addedItem.id);
@@ -115,12 +140,18 @@ class ChatManager {
         this.app.setView('chat', addedItem.id);
     }
 
+    /**
+     * Updates the active chat in the list pane.
+     */
     updateActiveChatInList() {
         if (this.listPane) {
             this.listPane.updateActiveItem();
         }
     }
 
+    /**
+     * Renders the chat list in the list pane.
+     */
     renderChatList() {
         if (this.listPane) {
             this.listPane.renderList();

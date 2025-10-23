@@ -37,6 +37,7 @@
 class PluginManager {
     /**
      * Creates an instance of the PluginManager.
+     * @constructor
      */
     constructor() {
         /**

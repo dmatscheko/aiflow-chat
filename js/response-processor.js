@@ -27,6 +27,7 @@ import { pluginManager } from './plugin-manager.js';
 class ResponseProcessor {
     /**
      * Creates an instance of the ResponseProcessor.
+     * @constructor
      */
     constructor() {
         /**
@@ -53,9 +54,9 @@ class ResponseProcessor {
 
     /**
      * Schedules a processing check. If the processor is not already running,
-     * it kicks off the main processing loop. This is the primary entry point
-     * for initiating AI responses.
-     * @param {App} app - The main application instance.
+     * this method kicks off the main processing loop. This is the primary entry point
+     * for initiating all AI response generation and subsequent actions.
+     * @param {App} app - The main application instance, which is stored for the duration of the processing cycle.
      */
     scheduleProcessing(app) {
         this.app = app;
@@ -65,10 +66,11 @@ class ResponseProcessor {
     }
 
     /**
-     * Finds the next pending message across all chats managed by the `chatManager`.
-     * A pending message is an assistant or tool message with `null` content.
-     * @returns {{chat: Chat, message: Message} | null} An object containing the chat
-     * and the pending message, or null if no pending messages are found.
+     * Finds the next pending message across all chats.
+     * It iterates through all chats and uses their `findNextPendingMessage` method.
+     * A pending message is defined as one with a role of 'assistant' or 'tool' and `null` content.
+     * @returns {{chat: Chat, message: Message} | null} An object containing the chat instance
+     * and the pending message, or `null` if no pending messages exist in any chat.
      * @private
      */
     _findNextPendingMessage() {

@@ -51,6 +51,7 @@
 class Message {
     /**
      * Creates an instance of a Message.
+     * @constructor
      * @param {MessageValue} value - The core message value, e.g., `{ role: 'user', content: 'Hello' }`.
      * @param {number} [depth=0] - The stack depth of the message, for indenting nested agent calls.
      * @param {string|null} [agent=null] - The ID of the agent responsible for this message.
@@ -120,6 +121,7 @@ class Message {
 class Alternatives {
     /**
      * Creates an instance of Alternatives.
+     * @constructor
      */
     constructor() {
         /**
@@ -181,6 +183,7 @@ class Alternatives {
 export class ChatLog {
     /**
      * Creates an instance of ChatLog.
+     * @constructor
      */
     constructor() {
         /**
