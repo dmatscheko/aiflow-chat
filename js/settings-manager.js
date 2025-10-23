@@ -180,23 +180,36 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
 
                 default:
                     const valueToSet = currentValue ?? setting.default ?? '';
+                    const valueChangeHandler = (e) => {
+                        const target = e.target;
+                        let newValue;
+                        if (target.type === 'checkbox') {
+                            newValue = target.checked;
+                        } else if (target.type === 'select-multiple') {
+                            newValue = Array.from(target.selectedOptions).map(opt => opt.value);
+                        } else if (target.type === 'number' || target.type === 'range') {
+                            newValue = target.value === '' ? null : parseFloat(target.value);
+                        } else {
+                            newValue = target.value;
+                        }
+                        onChange?.(settingPath, newValue, context, target);
+                    };
+
                     const commonInputProps = {
                         id: settingId,
                         dataset: { path: settingPath },
                         required: setting.required,
-                        onChange: (e) => {
-                            const target = e.target;
-                            let newValue;
-                            if (target.type === 'checkbox') newValue = target.checked;
-                            else if (target.type === 'select-multiple') newValue = Array.from(target.selectedOptions).map(opt => opt.value);
-                            else if (target.type === 'number' || target.type === 'range') newValue = parseFloat(target.value);
-                            else newValue = target.value;
-                            onChange?.(settingPath, newValue, context, target);
-                        }
+                        onChange: valueChangeHandler,
                     };
 
+                    const inputType = setting.type || 'text';
+                    if (['text', 'textarea', 'number', 'range', 'password', 'url', 'email'].includes(inputType)) {
+                        commonInputProps.onInput = valueChangeHandler;
+                    }
+
+
                     if (setting.type === 'textarea') {
-                        input = createTextarea({ ...commonInputProps, rows: setting.rows || 4, value: valueToSet, placeholder: setting.placeholder });
+                        input = createTextarea({ ...commonInputProps, rows: setting.rows || 4, textContent: valueToSet, placeholder: setting.placeholder });
                     } else if (setting.type === 'select') {
                         const options = setting.options.map(opt => ({
                             value: typeof opt === 'string' ? opt : opt.value,
@@ -206,7 +219,7 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     } else {
                         input = createInput({
                             ...commonInputProps,
-                            type: setting.type || 'text',
+                            type: inputType,
                             placeholder: setting.placeholder,
                             value: valueToSet,
                             checked: ['checkbox', 'radio'].includes(setting.type) ? !!valueToSet : undefined,

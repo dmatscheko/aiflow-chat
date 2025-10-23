@@ -407,7 +407,7 @@ class AgentManager {
 
         const modelSettingDefs = [
             { id: 'apiUrl', label: 'API URL:', type: 'text', placeholder: 'e.g. https://api.someai.com/' },
-            { id: 'apiKey', label: 'API Key:', type: 'password' },
+            { id: 'apiKey', label: 'API Key:', type: 'password', placeholder: 'Authenticates and authorizes requests to an AI service\'s API. E.g. xai-DmAtsC...' },
             {
                 type: 'control-group', id: 'model_group', children: [
                     { id: 'use_model', type: 'checkbox', label: 'Model:' },
@@ -441,7 +441,7 @@ class AgentManager {
             {
                 type: 'control-group', id: 'top_k_group', children: [
                     { id: 'use_top_k', type: 'checkbox', label: 'Top K:' },
-                    { id: 'top_k', label: '', type: 'number', default: 0, min: 0, step: 1, dependsOn: 'use_top_k', dependsOnValue: true, dependsOnAction: 'disable' },
+                    { id: 'top_k', label: '', type: 'number', default: 0, min: 0, step: 1, placeholder: 'e.g. 5', dependsOn: 'use_top_k', dependsOnValue: true, dependsOnAction: 'disable' },
                 ]
             },
             {
@@ -496,7 +496,7 @@ class AgentManager {
 
         let settingsDefinition = [
             { id: 'description', label: 'Description:', type: 'textarea', rows: 2, placeholder: 'A brief description of the agent\'s purpose and capabilities.' },
-            { id: 'systemPrompt', label: 'System Prompt:', type: 'textarea', required: true },
+            { id: 'systemPrompt', label: 'System Prompt:', type: 'textarea', required: true, placeholder: 'Predefined instructions added at the beginning of a conversation to guide an AI model\'s behavior, role, tone, or response style. E.g. You are a helpful assistant.' },
             { type: 'divider' }
         ];
 
