@@ -406,49 +406,97 @@ class AgentManager {
         const isDefaultAgent = agent.id === DEFAULT_AGENT_ID;
 
         const modelSettingDefs = [
-            { id: 'apiUrl', label: 'API URL', type: 'text', placeholder: 'e.g. https://api.someai.com/' },
-            { id: 'apiKey', label: 'API Key', type: 'password' },
-            { id: 'use_model', type: 'checkbox', label: 'Model', className: 'settings-inline-checkbox' },
+            { id: 'apiUrl', label: 'API URL:', type: 'text', placeholder: 'e.g. https://api.someai.com/' },
+            { id: 'apiKey', label: 'API Key:', type: 'password' },
             {
-                id: 'model', label: '', type: 'select', options: [], dependsOn: 'use_model', dependsOnValue: true, actions: [{
-                    id: 'agent-refresh-models', label: 'Refresh',
-                    onClick: (e, modelInput) => {
-                        const effectiveConfig = this.getEffectiveApiConfig(agentId);
-                        if (effectiveConfig.apiUrl) {
-                            this.fetchModels(agentId, modelInput);
-                        } else {
-                            alert('Please set an API URL for this agent or the Default Agent first.');
-                        }
-                    }
-                }]
+                type: 'control-group', id: 'model_group', children: [
+                    { id: 'use_model', type: 'checkbox', label: 'Model:' },
+                    {
+                        id: 'model', label: '', type: 'select', options: [], dependsOn: 'use_model', dependsOnValue: true, dependsOnAction: 'disable', actions: [{
+                            id: 'agent-refresh-models', label: 'Refresh',
+                            onClick: (e, modelInput) => {
+                                const effectiveConfig = this.getEffectiveApiConfig(agentId);
+                                if (effectiveConfig.apiUrl) {
+                                    this.fetchModels(agentId, modelInput);
+                                } else {
+                                    alert('Please set an API URL for this agent or the Default Agent first.');
+                                }
+                            }
+                        }]
+                    },
+                ]
             },
-            { id: 'use_temperature', type: 'checkbox', label: 'Temperature', className: 'settings-inline-checkbox' },
-            { id: 'temperature', label: '', type: 'range', default: 1, min: 0, max: 2, step: 0.1, dependsOn: 'use_temperature', dependsOnValue: true },
-            { id: 'use_top_p', type: 'checkbox', label: 'Top P', className: 'settings-inline-checkbox' },
-            { id: 'top_p', label: '', type: 'range', default: 1, min: 0, max: 1, step: 0.01, dependsOn: 'use_top_p', dependsOnValue: true },
-            { id: 'use_top_k', type: 'checkbox', label: 'Top K', className: 'settings-inline-checkbox' },
-            { id: 'top_k', label: '', type: 'number', default: 0, min: 0, step: 1, dependsOn: 'use_top_k', dependsOnValue: true },
-            { id: 'use_max_tokens', type: 'checkbox', label: 'Max Tokens', className: 'settings-inline-checkbox' },
-            { id: 'max_tokens', label: '', type: 'number', placeholder: 'e.g. 4096', min: 1, step: 1, dependsOn: 'use_max_tokens', dependsOnValue: true },
-            { id: 'use_stream', type: 'checkbox', label: 'Stream', className: 'settings-inline-checkbox' },
-            { id: 'stream', label: '> Enable streaming', type: 'checkbox', dependsOn: 'use_stream', dependsOnValue: true },
-            { id: 'use_stop', type: 'checkbox', label: 'Stop Sequences', className: 'settings-inline-checkbox' },
-            { id: 'stop', label: '', type: 'text', placeholder: 'e.g. "Human:","AI:"', dependsOn: 'use_stop', dependsOnValue: true },
-            { id: 'use_presence_penalty', type: 'checkbox', label: 'Presence Penalty', className: 'settings-inline-checkbox' },
-            { id: 'presence_penalty', label: '', type: 'range', default: 0, min: -2, max: 2, step: 0.1, dependsOn: 'use_presence_penalty', dependsOnValue: true },
-            { id: 'use_frequency_penalty', type: 'checkbox', label: 'Frequency Penalty', className: 'settings-inline-checkbox' },
-            { id: 'frequency_penalty', label: '', type: 'range', default: 0, min: -2, max: 2, step: 0.1, dependsOn: 'use_frequency_penalty', dependsOnValue: true },
-            { id: 'use_logit_bias', type: 'checkbox', label: 'Logit Bias', className: 'settings-inline-checkbox' },
-            { id: 'logit_bias', label: '', type: 'textarea', placeholder: 'e.g. {"123": -1, "456": 1}', rows: 3, dependsOn: 'use_logit_bias', dependsOnValue: true },
-            { id: 'use_repeat_penalty', type: 'checkbox', label: 'Repeat Penalty', className: 'settings-inline-checkbox' },
-            { id: 'repeat_penalty', label: '', type: 'range', default: 1, min: 0, max: 2, step: 0.01, dependsOn: 'use_repeat_penalty', dependsOnValue: true },
-            { id: 'use_seed', type: 'checkbox', label: 'Seed', className: 'settings-inline-checkbox' },
-            { id: 'seed', label: '', type: 'number', placeholder: 'e.g. 12345', dependsOn: 'use_seed', dependsOnValue: true },
+            {
+                type: 'control-group', id: 'temperature_group', children: [
+                    { id: 'use_temperature', type: 'checkbox', label: 'Temperature:' },
+                    { id: 'temperature', label: '', type: 'range', default: 1, min: 0, max: 2, step: 0.1, dependsOn: 'use_temperature', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
+            {
+                type: 'control-group', id: 'top_p_group', children: [
+                    { id: 'use_top_p', type: 'checkbox', label: 'Top P:' },
+                    { id: 'top_p', label: '', type: 'range', default: 1, min: 0, max: 1, step: 0.01, dependsOn: 'use_top_p', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
+            {
+                type: 'control-group', id: 'top_k_group', children: [
+                    { id: 'use_top_k', type: 'checkbox', label: 'Top K:' },
+                    { id: 'top_k', label: '', type: 'number', default: 0, min: 0, step: 1, dependsOn: 'use_top_k', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
+            {
+                type: 'control-group', id: 'max_tokens_group', children: [
+                    { id: 'use_max_tokens', type: 'checkbox', label: 'Max Tokens:' },
+                    { id: 'max_tokens', label: '', type: 'number', placeholder: 'e.g. 4096', min: 1, step: 1, dependsOn: 'use_max_tokens', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
+            {
+                type: 'control-group', id: 'stream_group', children: [
+                    { id: 'use_stream', type: 'checkbox', label: 'Streaming:' },
+                    { id: 'stream', label: 'Enabled', type: 'checkbox', dependsOn: 'use_stream', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
+            {
+                type: 'control-group', id: 'stop_group', children: [
+                    { id: 'use_stop', type: 'checkbox', label: 'Stop Sequences:' },
+                    { id: 'stop', label: '', type: 'text', placeholder: 'e.g. "Human:","AI:"', dependsOn: 'use_stop', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
+            {
+                type: 'control-group', id: 'presence_penalty_group', children: [
+                    { id: 'use_presence_penalty', type: 'checkbox', label: 'Presence Penalty:' },
+                    { id: 'presence_penalty', label: '', type: 'range', default: 0, min: -2, max: 2, step: 0.1, dependsOn: 'use_presence_penalty', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
+            {
+                type: 'control-group', id: 'frequency_penalty_group', children: [
+                    { id: 'use_frequency_penalty', type: 'checkbox', label: 'Frequency Penalty:' },
+                    { id: 'frequency_penalty', label: '', type: 'range', default: 0, min: -2, max: 2, step: 0.1, dependsOn: 'use_frequency_penalty', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
+            {
+                type: 'control-group', id: 'logit_bias_group', children: [
+                    { id: 'use_logit_bias', type: 'checkbox', label: 'Logit Bias:' },
+                    { id: 'logit_bias', label: '', type: 'textarea', placeholder: 'e.g. {"123": -1, "456": 1}', rows: 3, dependsOn: 'use_logit_bias', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
+            {
+                type: 'control-group', id: 'repeat_penalty_group', children: [
+                    { id: 'use_repeat_penalty', type: 'checkbox', label: 'Repeat Penalty:' },
+                    { id: 'repeat_penalty', label: '', type: 'range', default: 1, min: 0, max: 2, step: 0.01, dependsOn: 'use_repeat_penalty', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
+            {
+                type: 'control-group', id: 'seed_group', children: [
+                    { id: 'use_seed', type: 'checkbox', label: 'Seed:' },
+                    { id: 'seed', label: '', type: 'number', placeholder: 'e.g. 12345', dependsOn: 'use_seed', dependsOnValue: true, dependsOnAction: 'disable' },
+                ]
+            },
         ];
 
         let settingsDefinition = [
-            { id: 'description', label: 'Description', type: 'textarea', rows: 2, placeholder: 'A brief description of the agent\'s purpose and capabilities.' },
-            { id: 'systemPrompt', label: 'System Prompt', type: 'textarea', required: true },
+            { id: 'description', label: 'Description:', type: 'textarea', rows: 2, placeholder: 'A brief description of the agent\'s purpose and capabilities.' },
+            { id: 'systemPrompt', label: 'System Prompt:', type: 'textarea', required: true },
             { type: 'divider' }
         ];
 
@@ -464,7 +512,7 @@ class AgentManager {
             id: 'toolSettings', type: 'fieldset', label: 'Tool Settings',
             children: [
                 {
-                    id: 'mcpServer', label: 'MCP Server URL', type: 'text', placeholder: 'e.g. http://localhost:3000/mcp',
+                    id: 'mcpServer', label: 'MCP Server URL:', type: 'text', placeholder: 'e.g. http://localhost:3000/mcp',
                     actions: [{
                         id: 'agent-refresh-tools', label: 'Refresh',
                         onClick: () => {

@@ -136,6 +136,11 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     container = createElement('fieldset', { id: settingId, children: [legend, childFragment].filter(Boolean) });
                     break;
 
+                case 'control-group':
+                    const groupFragment = createSettingsUI(setting.children, currentValues, onChange, idPrefix, context, pathPrefix, dependencyMap);
+                    container = createElement('div', { id: settingId, className: `setting-control-group ${setting.className || ''}`, children: [groupFragment] });
+                    break;
+
                 case 'checkbox-list':
                 case 'radio-list':
                     const items = (setting.options || []).map(opt => {
@@ -222,10 +227,9 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     const requiredMark = setting.required ? ' *' : '';
 
                     if (['checkbox', 'radio'].includes(input.type)) {
-                         label = setting.label
-                            ? createElement('label', { className: `${input.type}-label`, children: [document.createTextNode(`${setting.label}${requiredMark}`), input] })
-                            : null;
-                        container = createElement('div', { className: `setting ${setting.className || ''}`, children: [label || input, helpText, errorSpan].filter(Boolean) });
+                        label = setting.label ? createElement('label', { htmlFor: settingId, className: `${input.type}-label`, textContent: `${setting.label}${requiredMark}` }) : null;
+                        const wrapper = createElement('div', { className: 'checkbox-container', children: [input, label].filter(Boolean) });
+                        container = createElement('div', { className: `setting ${setting.className || ''}`, children: [wrapper, helpText, errorSpan].filter(Boolean) });
                     } else {
                         label = setting.label
                             ? createElement('label', { htmlFor: settingId, textContent: `${setting.label}${requiredMark}` })
@@ -255,6 +259,7 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                 dependencyMap.get(controllerId).push({
                     dependentElement: container,
                     requiredValue: setting.dependsOnValue,
+                    action: setting.dependsOnAction || 'hide',
                 });
             }
 
@@ -274,9 +279,17 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
             if (controllerElement) {
                 const updateDependents = () => {
                     const currentValue = controllerElement.type === 'checkbox' ? controllerElement.checked : controllerElement.value;
-                    dependents.forEach(({ dependentElement, requiredValue }) => {
-                        const shouldBeVisible = currentValue === requiredValue;
-                        dependentElement.style.display = shouldBeVisible ? 'block' : 'none';
+                    dependents.forEach(({ dependentElement, requiredValue, action }) => {
+                        const conditionMet = currentValue === requiredValue;
+                        if (action === 'disable') {
+                            dependentElement.classList.toggle('setting-disabled', !conditionMet);
+                            const inputs = dependentElement.querySelectorAll('input, select, textarea, button');
+                            inputs.forEach(input => {
+                                input.disabled = !conditionMet;
+                            });
+                        } else { // Default to 'hide'
+                            dependentElement.style.display = conditionMet ? '' : 'none';
+                        }
                     });
                 };
                 controllerElement.addEventListener('change', updateDependents);
