@@ -75,6 +75,7 @@ h2 {
     align-items: center;
     gap: 1rem;
     margin-bottom: 1rem;
+    flex-wrap: wrap;
 }
 
 .setting-control-group .setting {
