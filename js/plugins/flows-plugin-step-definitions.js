@@ -467,6 +467,116 @@ export function registerFlowStepDefinitions(flowManager) {
         },
     });
 
+    flowManager._defineStep('agent-call-from-answer', {
+        label: 'Agent Call from Answer',
+        getDefaults: () => ({
+            prePrompt: '',
+            postPrompt: '',
+            agentId: '',
+            includeLastAnswer: true,
+            onlyLastAnswer: false,
+            fullContext: false,
+        }),
+        render: (step, agentOptions) => `<h4>Agent Call from Answer</h4><div class="flow-step-content">
+                ${getAgentsDropdown(step, agentOptions)}
+                <label>Text before AI answer (optional):</label>
+                <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea>
+                <label>Text after AI answer (optional):</label>
+                <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea>
+                <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-include-last-answer flow-step-input" data-id="${step.id}" data-key="includeLastAnswer" ${step.data.includeLastAnswer ? 'checked' : ''}> Include AI answer in prompt</label>
+                <div class="agent-call-answer-options" style="${!step.data.includeLastAnswer ? 'display: none;' : ''}">
+                    <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}> Only include last AI answer</label>
+                </div>
+                <div class="agent-call-context-options" style="${step.data.includeLastAnswer ? 'display: none;' : ''}">
+                    <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-full-context flow-step-input" data-id="${step.id}" data-key="fullContext" ${step.data.fullContext ? 'checked' : ''}> Prepend full conversation context</label>
+                </div>
+            </div>`,
+        onUpdate: (step, target, renderAndConnect) => {
+            const key = target.dataset.key;
+            const value = target.type === 'checkbox' ? target.checked : target.value;
+            step.data[key] = value;
+
+            if (key === 'includeLastAnswer') {
+                renderAndConnect();
+            }
+        },
+        execute: (step, context) => {
+            const chat = context.app.chatManager.getActiveChat();
+            const chatLog = chat?.log;
+            if (!chatLog) return context.stopFlow('No active chat.');
+
+            const agentId = step.data.agentId;
+            if (!agentId) return context.stopFlow('Agent Call: No agent selected.');
+
+            const turns = _getTurns(chatLog);
+            let contentToInclude = '';
+            if (step.data.includeLastAnswer) {
+                if (turns.length < 1) {
+                    return context.stopFlow('Agent Call: Not enough turns in the chat to include an answer.');
+                }
+                const lastTurn = turns[turns.length - 1];
+                const isLastTurnAi = lastTurn.every(msg => msg.value.role === 'assistant' || msg.value.role === 'tool');
+
+                if (!isLastTurnAi) {
+                    return context.stopFlow('Agent Call: The last turn is not an AI turn, so its answer cannot be included.');
+                }
+
+                if (step.data.onlyLastAnswer) {
+                    const lastMessage = lastTurn[lastTurn.length - 1];
+                    contentToInclude = lastMessage.value.content || '';
+                } else {
+                    contentToInclude = lastTurn.map(msg => {
+                        const role = roleMapping[msg.value.role] || msg.value.role;
+                        return `**${role}:** ${msg.value.content || ''}`;
+                    }).join('\n\n');
+                }
+            }
+
+            const promptText = `${step.data.prePrompt || ''}${contentToInclude}${step.data.postPrompt || ''}`.trim();
+            const isFullContext = !step.data.includeLastAnswer && step.data.fullContext;
+
+            if (!promptText && !isFullContext) {
+                return context.stopFlow('Agent Call: The prompt is empty and no context is included. The agent has nothing to do.');
+            }
+
+            const lastMessage = chatLog.getLastMessage();
+            const lastDepth = lastMessage ? lastMessage.depth : -1;
+            const newDepth = isFullContext ? lastDepth : lastDepth + 1;
+
+            const messageToUpdate = chatLog.addMessage({
+                role: 'tool',
+                content: '', // Will be filled by streaming
+                agent: agentId,
+                is_full_context_call: isFullContext,
+            }, { depth: newDepth });
+
+            const messagesForAgent = chatLog.getHistoryForAgentCall(messageToUpdate, isFullContext);
+            if (!messagesForAgent) {
+                messageToUpdate.value.content = '<error>Could not reconstruct message history for agent call.</error>';
+                chatLog.notify();
+                return;
+            }
+            messagesForAgent.push({ role: 'user', content: promptText });
+
+            context.app.apiService.executeStreamingAgentCall(
+                context.app,
+                chat,
+                messageToUpdate,
+                messagesForAgent,
+                agentId
+            ).then(() => {
+                const nextStep = context.getNextStep(step.id);
+                if (nextStep) {
+                    context.executeStep(nextStep);
+                } else {
+                    context.stopFlow('Flow finished after agent call.');
+                }
+            }).catch(error => {
+                context.stopFlow(`Error during agent call: ${error.message}`);
+            });
+        },
+    });
+
     flowManager._defineStep('manual-mcp-call', {
         label: 'Manual MCP Call',
         getDefaults: () => ({
