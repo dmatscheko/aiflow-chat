@@ -276,18 +276,7 @@ export class FlowManager {
             const outputConnectors = stepDef.renderOutputConnectors
                 ? stepDef.renderOutputConnectors(step)
                 : `<div class="connector-group"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="default"></div></div>`;
-
-            const renderedContent = stepDef.render(step, selectedAgentOptions);
-            const titleMatch = renderedContent.match(/<h4[^>]*>([\s\S]*?)<\/h4>/);
-            let finalContent = renderedContent;
-
-            if (titleMatch) {
-                const originalTitle = titleMatch[0];
-                const newTitle = originalTitle.replace('>', `>${stepDef.icon || ''} `);
-                finalContent = renderedContent.replace(originalTitle, newTitle);
-            }
-
-            node.innerHTML = `<button class="minimize-flow-step-btn" data-id="${step.id}">${step.isMinimized ? '+' : '-'}</button><div class="connector top" data-id="${step.id}" data-type="in"></div>${finalContent}<div class="flow-step-footer"><button class="delete-flow-step-btn" data-id="${step.id}">Delete</button></div>${outputConnectors}`;
+            node.innerHTML = `<button class="minimize-flow-step-btn" data-id="${step.id}">${step.isMinimized ? '+' : '-'}</button><div class="connector top" data-id="${step.id}" data-type="in"></div>${stepDef.render(step, selectedAgentOptions)}<div class="flow-step-footer"><button class="delete-flow-step-btn" data-id="${step.id}">Delete</button></div>${outputConnectors}`;
             nodeContainer.appendChild(node);
 
             if (stepDef.onMount) {

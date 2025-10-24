@@ -202,7 +202,9 @@ export function registerFlowStepDefinitions(flowManager) {
         label: 'Simple Prompt',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
         getDefaults: () => ({ prompt: 'Hello, world!', agentId: '' }),
-        render: (step, agentOptions) => `<h4>Simple Prompt</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea></div>`,
+        render: function(step, agentOptions) {
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea></div>`;
+        },
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
         execute: (step, context) => {
             if (!step.data.prompt) return context.stopFlow('Simple Prompt step not configured.');
@@ -215,7 +217,9 @@ export function registerFlowStepDefinitions(flowManager) {
         label: 'Multi Prompt',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M14 10H6" /><path d="M14 6H6" /></svg>',
         getDefaults: () => ({ prompt: '', count: 2, agentId: '' }),
-        render: (step, agentOptions) => `<h4>Multi Prompt</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea><label>Number of alternatives:</label><input type="number" class="flow-step-count flow-step-input" data-id="${step.id}" data-key="count" value="${step.data.count || 1}" min="1" max="10"></div>`,
+        render: function(step, agentOptions) {
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea><label>Number of alternatives:</label><input type="number" class="flow-step-count flow-step-input" data-id="${step.id}" data-key="count" value="${step.data.count || 1}" min="1" max="10"></div>`;
+        },
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.dataset.key === 'count' ? parseInt(target.value, 10) : target.value; },
         execute: (step, context) => {
             if (!step.data.prompt) return context.stopFlow('Multi Prompt step is not configured.');
@@ -258,7 +262,8 @@ export function registerFlowStepDefinitions(flowManager) {
             clearTo: 1,
             clearToBeginning: true
         }),
-        render: (step, agentOptions) => `<h4>Alternatives Consolidator</h4>
+        render: function(step, agentOptions) {
+            return `<h4>${this.icon} ${this.label}</h4>
             <div class="flow-step-content">
                 ${getAgentsDropdown(step, agentOptions)}
                 <label>Text before alternatives:</label>
@@ -277,7 +282,8 @@ export function registerFlowStepDefinitions(flowManager) {
                 <div class="consolidator-clear-history-container" style="${step.data.clearHistory ? '' : 'display: none;'}">
                     ${getClearHistoryUI(step)}
                 </div>
-            </div>`,
+            </div>`;
+        },
         onUpdate: (step, target, renderAndConnect) => {
             const key = target.dataset.key;
             const isCheckbox = target.type === 'checkbox';
@@ -330,7 +336,8 @@ export function registerFlowStepDefinitions(flowManager) {
             deleteUserMessage: true,
             onlyLastAnswer: false,
         }),
-        render: (step, agentOptions) => `<h4>Echo Answer</h4><div class="flow-step-content">
+        render: function(step, agentOptions) {
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">
                 ${getAgentsDropdown(step, agentOptions)}
                 <label>Text before AI answer:</label>
                 <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea>
@@ -341,7 +348,8 @@ export function registerFlowStepDefinitions(flowManager) {
                 <label>Before sending the message:</label>
                 <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-ai flow-step-input" data-id="${step.id}" data-key="deleteAIAnswer" ${step.data.deleteAIAnswer ? 'checked' : ''}> Delete original AI answer</label>
                 <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-user flow-step-input" data-id="${step.id}" data-key="deleteUserMessage" ${step.data.deleteUserMessage ? 'checked' : ''}> Delete original user message</label>
-            </div>`,
+            </div>`;
+        },
         onUpdate: (step, target, renderAndConnect) => {
             const key = target.dataset.key;
             const value = target.type === 'checkbox' ? target.checked : target.value;
@@ -407,10 +415,12 @@ export function registerFlowStepDefinitions(flowManager) {
         label: 'Clear History',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>',
         getDefaults: () => ({ clearFrom: 2, clearTo: 3, clearToBeginning: true }),
-        render: (step) => `<h4>Clear History</h4>
+        render: function(step) {
+            return `<h4>${this.icon} ${this.label}</h4>
             <div class="flow-step-content">
                 ${getClearHistoryUI(step)}
-            </div>`,
+            </div>`;
+        },
         onUpdate: (step, target, renderAndConnect) => {
             handleClearHistoryUpdate(step, target, renderAndConnect);
         },
@@ -432,7 +442,9 @@ export function registerFlowStepDefinitions(flowManager) {
         label: 'Branch',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12M6 21v-6m0 0h12M6 15H2.5a2.5 2.5 0 0 1 0-5H6m12 0h3.5a2.5 2.5 0 0 0 0-5H18"/></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '' }),
-        render: (step) => `<h4>Branch</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea></div>`,
+        render: function(step) {
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea></div>`;
+        },
         renderOutputConnectors: (step) => `<div class="connector-group"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="pass"><span class="connector-label">Pass</span></div><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="fail"><span class="connector-label">Fail</span></div></div>`,
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
         execute: (step, context) => {
@@ -454,7 +466,9 @@ export function registerFlowStepDefinitions(flowManager) {
         label: 'Conditional Stop',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '', onMatch: 'stop' }),
-        render: (step) => `<h4>Conditional Stop</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea><label>On Match:</label><select class="flow-step-on-match flow-step-input" data-id="${step.id}" data-key="onMatch"><option value="stop" ${step.data.onMatch === 'stop' ? 'selected' : ''}>Stop flow</option><option value="continue" ${step.data.onMatch === 'continue' ? 'selected' : ''}>Must match to continue</option></select></div>`,
+        render: function(step) {
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea><label>On Match:</label><select class="flow-step-on-match flow-step-input" data-id="${step.id}" data-key="onMatch"><option value="stop" ${step.data.onMatch === 'stop' ? 'selected' : ''}>Stop flow</option><option value="continue" ${step.data.onMatch === 'continue' ? 'selected' : ''}>Must match to continue</option></select></div>`;
+        },
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
         execute: (step, context) => {
             const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
@@ -485,7 +499,8 @@ export function registerFlowStepDefinitions(flowManager) {
             onlyLastAnswer: false,
             fullContext: false,
         }),
-        render: (step, agentOptions) => `<h4>Agent Call from Answer</h4><div class="flow-step-content">
+        render: function(step, agentOptions) {
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">
                 ${getAgentsDropdown(step, agentOptions)}
                 <label>Text before AI answer (optional):</label>
                 <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea>
@@ -498,7 +513,8 @@ export function registerFlowStepDefinitions(flowManager) {
                 <div class="agent-call-context-options" style="${step.data.includeLastAnswer ? 'display: none;' : ''}">
                     <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-full-context flow-step-input" data-id="${step.id}" data-key="fullContext" ${step.data.fullContext ? 'checked' : ''}> Prepend full conversation context</label>
                 </div>
-            </div>`,
+            </div>`;
+        },
         onUpdate: (step, target, renderAndConnect) => {
             const key = target.dataset.key;
             const value = target.type === 'checkbox' ? target.checked : target.value;
@@ -596,8 +612,8 @@ export function registerFlowStepDefinitions(flowManager) {
             prePrompt: '',
             postPrompt: ''
         }),
-        render: (step, agentOptions) => `
-            <h4>Manual MCP Call</h4>
+        render: function(step, agentOptions) {
+            return `<h4>${this.icon} ${this.label}</h4>
             <div class="flow-step-content">
                 <label>MCP Server URL (leave blank for Default Agent's MCP Server):</label>
                 <div class="setting__control-wrapper">
@@ -627,8 +643,8 @@ export function registerFlowStepDefinitions(flowManager) {
                     <label>Text after result:</label>
                     <textarea class="flow-step-input" data-key="postPrompt" rows="2">${step.data.postPrompt || ''}</textarea>
                 </div>
-            </div>
-        `,
+            </div>`;
+        },
         onUpdate: (step, target, renderAndConnect) => {
             const key = target.dataset.key;
             const value = target.type === 'checkbox' ? target.checked : target.value;
