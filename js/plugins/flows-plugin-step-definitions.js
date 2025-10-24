@@ -200,6 +200,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('simple-prompt', {
         label: 'Simple Prompt',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
         getDefaults: () => ({ prompt: 'Hello, world!', agentId: '' }),
         render: (step, agentOptions) => `<h4>Simple Prompt</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea></div>`,
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
@@ -212,6 +213,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('multi-prompt', {
         label: 'Multi Prompt',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M14 10H6" /><path d="M14 6H6" /></svg>',
         getDefaults: () => ({ prompt: '', count: 2, agentId: '' }),
         render: (step, agentOptions) => `<h4>Multi Prompt</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea><label>Number of alternatives:</label><input type="number" class="flow-step-count flow-step-input" data-id="${step.id}" data-key="count" value="${step.data.count || 1}" min="1" max="10"></div>`,
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.dataset.key === 'count' ? parseInt(target.value, 10) : target.value; },
@@ -244,6 +246,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('consolidator', {
         label: 'Alt. Consolidator',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>',
         getDefaults: () => ({
             prePrompt: 'Please choose the best of the following answers (or if better than any single answer the best parts of the best answers combined):',
             postPrompt: 'Explain your choice.',
@@ -318,6 +321,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('echo-answer', {
         label: 'Echo Answer',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 12h-2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1zm-6 0H9a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1zm-6 0H3a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1z"/><path d="M22 17v-2a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm-6 0v-2a1 1 0 0 0-1-1h-2a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1zm-6 0v-2a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1z"/><path d="M7 6V5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v1"/><path d="M12 12V4"/><path d="M12 22v-2"/></svg>',
         getDefaults: () => ({
             prePrompt: 'Is this idea and code correct? Be concise.\n\n\n',
             postPrompt: '',
@@ -401,6 +405,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('clear-history', {
         label: 'Clear History',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>',
         getDefaults: () => ({ clearFrom: 2, clearTo: 3, clearToBeginning: true }),
         render: (step) => `<h4>Clear History</h4>
             <div class="flow-step-content">
@@ -425,6 +430,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('branch', {
         label: 'Branch',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12M6 21v-6m0 0h12M6 15H2.5a2.5 2.5 0 0 1 0-5H6m12 0h3.5a2.5 2.5 0 0 0 0-5H18"/></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '' }),
         render: (step) => `<h4>Branch</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea></div>`,
         renderOutputConnectors: (step) => `<div class="connector-group"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="pass"><span class="connector-label">Pass</span></div><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="fail"><span class="connector-label">Fail</span></div></div>`,
@@ -446,6 +452,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('conditional-stop', {
         label: 'Conditional Stop',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '', onMatch: 'stop' }),
         render: (step) => `<h4>Conditional Stop</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea><label>On Match:</label><select class="flow-step-on-match flow-step-input" data-id="${step.id}" data-key="onMatch"><option value="stop" ${step.data.onMatch === 'stop' ? 'selected' : ''}>Stop flow</option><option value="continue" ${step.data.onMatch === 'continue' ? 'selected' : ''}>Must match to continue</option></select></div>`,
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
@@ -469,6 +476,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('agent-call-from-answer', {
         label: 'Agent Call from Answer',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 1-10 10h12a5 5 0 0 0 0-10Z"/></svg>',
         getDefaults: () => ({
             prePrompt: '',
             postPrompt: '',
@@ -579,6 +587,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('manual-mcp-call', {
         label: 'Manual MCP Call',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 1-10 10h12a5 5 0 0 0 0-10Z"/><path d="M12 2a10 10 0 1 1-10 10h12a5 5 0 0 0 0-10Z"/></svg>',
         getDefaults: () => ({
             mcpServer: '',
             toolName: '',
