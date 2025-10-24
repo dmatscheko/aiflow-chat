@@ -26,7 +26,7 @@ import { processToolCalls as genericProcessToolCalls } from '../tool-processor.j
  */
 const toolsHeader = `### MCP Tools:
 
-You can use tool calls. Make sure to follow the following XML-inspired format:
+You can use tool calls. If you call multiple tools in the same message, they will be executed in the same order as you wrote them. Make sure to follow the following XML-inspired format:
 <dma:tool_call name="example_tool_name">
 <parameter name="example_arg_name1">
 example_arg_value1
@@ -363,8 +363,8 @@ class McpPlugin {
                 const defaultStr = arg.default !== undefined ? ` (default: ${JSON.stringify(arg.default)})` : '';
                 return `   - \`${name}\`: ${argDesc} (type: ${argType})${required}${defaultStr}`;
             }).join('\n');
-            return `${idx + 1}. **${displayName}**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${action}\`\n - **Arguments** (parameter name): \n${argsStr}`;
-        }).join('\n');
+            return `${idx + 1}. **${displayName}**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${action}\`\n - **Arguments**${argsStr ? ' (parameter name):\n' + argsStr : ': none'}`;
+        }).join('\n\n');
     }
 
     /**

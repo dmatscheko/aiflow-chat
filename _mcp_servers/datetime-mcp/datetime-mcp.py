@@ -10,7 +10,7 @@ mcp = FastMCP("Date and Time Server")
 
 
 @mcp.tool()
-def get_current_datetime() -> str:
+def get_datetime() -> str:
     """
     Get the current date and time in ISO format.
     """

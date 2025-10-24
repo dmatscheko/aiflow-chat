@@ -201,14 +201,17 @@ def apply_diff(
     diff: Annotated[str, "The simplified diff to apply to the file."],
     dry_run: Annotated[bool, "If true, only check if the patch would apply cleanly, without modifying the file."] = False,
 ) -> str:
-    """Apply a simplified patch format to a file. The format is composed of segments separated by '###'. Each segment starts with a header line like '### ###' or '### line >= x ###'. The 'line >= x' in the header is optional and tells the patch tool to start searching for the patch location from line number x down. Segments must directly follow each other without separating empty lines.
+    """Apply a simplified patch format to a file. The format is composed of segments. Each segment starts with a header line like '### ###' or '### line >= x ###'. The 'line >= x' in the header is optional and tells the patch tool to start searching for the patch location from line number x down. Segments must directly follow each other without separating empty lines.
     Within each segment: Lines starting with '-' are lines to be removed. Lines starting with '+' are lines to be added. Lines starting with ' ' are context lines, which must match the original file.
-    The patch is applied sequentially. Each segment is searched for and applied in order, starting from the end of the previous segments match in the file, or if line >= x is higher than the line number of the end of the previous segment, the next line to replace is searched from that line downwards.
-    Example of a patch segment:
+    The patch is applied sequentially. Each segment is searched for and applied in order, starting from the end position of the previous segments match in the file, or if line >= x is higher than the line number of the end of the previous segment, the next line to replace is searched from that line downwards.
+    Example of a patch segment (without the backticks):
+    ```
     ### line >= 3 ###
-    -Beneath the velvet cloak of night so deep,
-    +Under the velvet cloak of night so deep,
+    -Beneath the velvet cloak of night,
+    +Under the velvet cloak of night,
      Where stars like silver needles stitch the sky,
+    ```
+    This patch replaces one line that must be `Beneath the velvet cloak of night` and must be at or after line 3 and must be followed by the line `Where stars like silver needles stitch the sky,` with `Under the velvet cloak of night,`.
     """
     try:
         real_path = validate_virtual_path(path)

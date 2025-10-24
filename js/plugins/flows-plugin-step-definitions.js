@@ -478,9 +478,9 @@ export function registerFlowStepDefinitions(flowManager) {
         render: (step, agentOptions) => `
             <h4>Manual MCP Call</h4>
             <div class="flow-step-content">
-                <label>MCP Server URL (leave blank for default):</label>
+                <label>MCP Server URL (leave blank for Default Agent's MCP Server):</label>
                 <div class="setting__control-wrapper">
-                    <input type="text" class="flow-step-input" data-key="mcpServer" value="${step.data.mcpServer || ''}" placeholder="Default Agent's MCP Server">
+                    <input type="text" class="flow-step-input" data-key="mcpServer" value="${step.data.mcpServer || ''}" placeholder="MCP Server URL">
                     <button class="mcp-refresh-btn">Refresh</button>
                 </div>
 

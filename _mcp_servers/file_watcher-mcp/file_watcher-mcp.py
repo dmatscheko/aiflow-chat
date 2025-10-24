@@ -22,9 +22,9 @@ mcp = FastMCP(
 
 
 @mcp.tool
-def wait_for_and_read_file(
-    filename: Annotated[str, "The name of the file to wait for in the watched directory."],
-    timeout: Annotated[int, "The maximum number of seconds to wait for the file."] = 60,
+def watch_file(
+    filename: Annotated[str, "The name of the file to wait for."],
+    timeout: Annotated[int, "The maximum number of seconds to wait."] = 60,
 ) -> str:
     """
     Waits for a specific file to appear in the watched directory, reads its content,

@@ -25,7 +25,7 @@ import { parseToolCalls } from '../tool-processor.js';
  */
 const agentCallsHeader = `### Callable Agents:
 
-You can call other specialized agents as tools. The format for calling an agent is the same as a regular tool call. The agent's ID is used as the tool name.
+You can call other specialized agents as tools. The format for calling an agent is the same as a regular tool call. The agent's ID is used as the tool name. Never call an agent and a tool in the same message.
 
 Example of calling an agent with the ID 'agent-598356234':
 <dma:tool_call name="agent-598356234">
@@ -39,7 +39,7 @@ false
 
 Parameter Description:
   - \`prompt\`: The user\'s or assistant\'s request to the agent. (type: string)(required)
-  - \`full_context\`: Whether to provide the full conversational history to the called agent. If false, only the history up to and including the call is seen by the called agent. (type: boolean)(optional, default: false)
+  - \`full_context\`: Whether to provide the full conversational history to the called agent. If false, only the call is seen by the called agent. (type: boolean)(optional, default: false)
 
 #### Available Agents:\n\n`;
 
@@ -92,7 +92,7 @@ class AgentsCallPlugin {
         const agentsSection = callableAgents.map((a, idx) => {
             const desc = a.description || 'No description provided.';
             return `${idx + 1}. **${a.name} (ID: ${a.id})**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${a.id}\`\n - **Arguments** (parameter name): prompt, full_context`;
-        }).join('\n');
+        }).join('\n\n');
 
         if (systemPrompt) {
             systemPrompt += '\n\n';
