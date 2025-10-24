@@ -576,7 +576,11 @@ export function registerFlowStepDefinitions(flowManager) {
 
                     let resultStr = '';
                     if (result.isError) {
-                        resultStr = `Error: ${result.content}`;
+                        if (typeof result.content === 'object' && result.content !== null && result.content.message) {
+                            resultStr = `Error: ${result.content.message}`;
+                        } else {
+                            resultStr = `Error: ${JSON.stringify(result.content)}`;
+                        }
                     } else if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
                         resultStr = result.content[0].text;
                     } else {
@@ -603,7 +607,11 @@ export function registerFlowStepDefinitions(flowManager) {
                     .then(result => {
                         let resultStr = '';
                         if (result.isError) {
-                            resultStr = `Error: ${result.content}`;
+                            if (typeof result.content === 'object' && result.content !== null && result.content.message) {
+                                resultStr = `Error: ${result.content.message}`;
+                            } else {
+                                resultStr = `Error: ${JSON.stringify(result.content)}`;
+                            }
                         } else if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
                             resultStr = result.content[0].text;
                         } else {
