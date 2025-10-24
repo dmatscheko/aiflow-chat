@@ -554,7 +554,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 const toolName = toolSelect.value;
                 const tool = tools.find(t => t.name === toolName);
                 if (tool) {
-                    const params = tool.parameters.properties || {};
+                    const params = tool.parameters?.properties || {};
                     const toolCall = {
                         tool: tool.name,
                         arguments: Object.fromEntries(
