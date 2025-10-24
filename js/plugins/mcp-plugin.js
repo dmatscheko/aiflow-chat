@@ -386,6 +386,18 @@ class McpPlugin {
     executeMcpCall(call, message, mcpUrl) {
         return this.#executeMcpCall(call, message, mcpUrl);
     }
+
+    /**
+     * A public wrapper for the private `#mcpJsonRpc` method.
+     * @param {string} method - The JSON-RPC method name.
+     * @param {object} [params={}] - The JSON-RPC parameters.
+     * @param {string} [url=null] - The MCP server URL. If null, the default will be used.
+     * @returns {Promise<any>} The result of the RPC call.
+     */
+    mcpJsonRpc(method, params = {}, url = null) {
+        const mcpUrl = url || this.#app.agentManager.getEffectiveApiConfig().toolSettings.mcpServer;
+        return this.#mcpJsonRpc(mcpUrl, method, params);
+    }
 }
 
 // --- Singleton Instance ---
@@ -413,7 +425,8 @@ const mcpPluginDefinition = {
     onAppInit(app) {
         mcpPluginSingleton.init(app);
         app.mcp = {
-            getTools: mcpPluginSingleton.getTools.bind(mcpPluginSingleton)
+            getTools: mcpPluginSingleton.getTools.bind(mcpPluginSingleton),
+            rpc: mcpPluginSingleton.mcpJsonRpc.bind(mcpPluginSingleton)
         };
     },
 

@@ -554,7 +554,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 const toolName = toolSelect.value;
                 const tool = tools.find(t => t.name === toolName);
                 if (tool) {
-                    const params = tool.parameters?.properties || {};
+                    const params = tool.inputSchema?.properties || {};
                     const toolCall = {
                         tool: tool.name,
                         arguments: Object.fromEntries(
@@ -572,7 +572,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 const toolCallStr = toolCallTextarea.value.replace(/\${LAST_RESPONSE}/g, lastMessage);
                 try {
                     const toolCall = JSON.parse(toolCallStr);
-                    const result = await app.mcp.makeToolCall(toolCall.tool, toolCall.arguments, step.data.mcpServer);
+                    const result = await app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer);
                     alert(`Tool Result:\n${JSON.stringify(result, null, 2)}`);
                 } catch (error) {
                     alert(`Error testing tool: ${error.message}`);
@@ -589,9 +589,9 @@ export function registerFlowStepDefinitions(flowManager) {
 
             try {
                 const toolCall = JSON.parse(toolCallStr);
-                context.app.mcp.makeToolCall(toolCall.tool, toolCall.arguments, step.data.mcpServer)
+                context.app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer)
                     .then(result => {
-                        const resultStr = JSON.stringify(result, null, 2);
+                        const resultStr = JSON.stringify(result.content, null, 2);
                         if (step.data.createPrompt) {
                             const newPrompt = `${step.data.prePrompt || ''}${resultStr}${step.data.postPrompt || ''}`;
                             context.app.dom.messageInput.value = newPrompt;
