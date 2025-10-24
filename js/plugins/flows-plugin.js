@@ -675,7 +675,7 @@ pluginManager.register({
             }];
 
             const dropdownContent = Object.entries(flowManager.stepTypes)
-                .map(([type, { label }]) => `<a href="#" data-step-type="${type}">${label}</a>`)
+                .map(([type, { label, icon }]) => `<a href="#" data-step-type="${type}">${icon || ''} ${label}</a>`)
                 .join('');
 
             config.buttons = [{
