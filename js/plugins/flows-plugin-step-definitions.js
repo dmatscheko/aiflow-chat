@@ -500,8 +500,11 @@ export function registerFlowStepDefinitions(flowManager) {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
-            const turns = _getTurns(chatLog);
+            if (!step.data.agentId) {
+                return context.stopFlow('Agent Call: No agent selected.');
+            }
 
+            const turns = _getTurns(chatLog);
             let contentToInclude = '';
             if (step.data.includeLastAnswer) {
                 if (turns.length < 1) {
@@ -516,26 +519,24 @@ export function registerFlowStepDefinitions(flowManager) {
                 contentToInclude = lastTurn.map(msg => msg.value.content || '').join('\n\n');
             }
 
-            const newPrompt = `${step.data.prePrompt || ''}${contentToInclude}${step.data.postPrompt || ''}`.trim();
+            const promptText = `${step.data.prePrompt || ''}${contentToInclude}${step.data.postPrompt || ''}`.trim();
             const isFullContext = !step.data.includeLastAnswer && step.data.fullContext;
 
-            if (!newPrompt && !isFullContext) {
-                 return context.stopFlow('Agent Call: The prompt is empty and no context is included. The agent has nothing to do.');
+            if (!promptText && !isFullContext) {
+                return context.stopFlow('Agent Call: The prompt is empty and no context is included. The agent has nothing to do.');
             }
 
-            // Add the user prompt that will trigger the agent.
-            // The actual API call will include history based on is_full_context_call.
-            chatLog.addMessage({ role: 'user', content: newPrompt }, {});
+            const toolCallString = `<dma:tool_call name="${step.data.agentId}">
+<parameter name="prompt">
+${promptText}
+</parameter>
+<parameter name="full_context">
+${isFullContext}
+</parameter>
+</dma:tool_call>`;
 
-            // Add a pending message for the agent to fill in.
-            chatLog.addMessage({
-                role: 'assistant',
-                content: null,
-                agent: step.data.agentId,
-                is_full_context_call: isFullContext
-            }, {});
-
-            context.app.responseProcessor.scheduleProcessing(context.app);
+            context.app.dom.messageInput.value = toolCallString;
+            context.app.chatManager.handleFormSubmit({});
         },
     });
 
