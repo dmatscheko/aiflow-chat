@@ -327,7 +327,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('echo-answer', {
         label: 'Echo Answer',
-        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12a5 5 0 0 0-5-5"/><path d="M12 12a5 5 0 0 1-5-5"/><path d="M7 12a5 5 0 0 0 5 5"/><path d="M12 17a5 5 0 0 0 5-5"/><path d="M12 12a5 5 0 0 1 5 5"/><path d="M17 12a5 5 0 0 0-5-5"/></svg>',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 10h.01"/><path d="M21 10a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2h-6a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2v-2a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2z"/><path d="M7 10h.01"/></svg>',
         getDefaults: () => ({
             prePrompt: 'Is this idea and code correct? Be concise.\n\n\n',
             postPrompt: '',
@@ -440,7 +440,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('branch', {
         label: 'Branch',
-        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V3"/><path d="M9 9h6"/><path d="M9 12h6"/><path d="M9 15h6"/></svg>',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-8"/><path d="M9 13H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-4"/></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '' }),
         render: function(step) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea></div>`;
