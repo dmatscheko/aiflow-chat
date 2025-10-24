@@ -497,12 +497,12 @@ export function registerFlowStepDefinitions(flowManager) {
             }
         },
         execute: (step, context) => {
-            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            const chat = context.app.chatManager.getActiveChat();
+            const chatLog = chat?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
-            if (!step.data.agentId) {
-                return context.stopFlow('Agent Call: No agent selected.');
-            }
+            const agentId = step.data.agentId;
+            if (!agentId) return context.stopFlow('Agent Call: No agent selected.');
 
             const turns = _getTurns(chatLog);
             let contentToInclude = '';
@@ -526,17 +526,41 @@ export function registerFlowStepDefinitions(flowManager) {
                 return context.stopFlow('Agent Call: The prompt is empty and no context is included. The agent has nothing to do.');
             }
 
-            const toolCallString = `<dma:tool_call name="${step.data.agentId}">
-<parameter name="prompt">
-${promptText}
-</parameter>
-<parameter name="full_context">
-${isFullContext}
-</parameter>
-</dma:tool_call>`;
+            const lastMessage = chatLog.getLastMessage();
+            const lastDepth = lastMessage ? lastMessage.depth : -1;
+            const newDepth = isFullContext ? lastDepth : lastDepth + 1;
 
-            context.app.dom.messageInput.value = toolCallString;
-            context.app.chatManager.handleFormSubmit({});
+            const messageToUpdate = chatLog.addMessage({
+                role: 'tool',
+                content: '', // Will be filled by streaming
+                agent: agentId,
+                is_full_context_call: isFullContext,
+            }, { depth: newDepth });
+
+            const messagesForAgent = chatLog.getHistoryForAgentCall(messageToUpdate, isFullContext);
+            if (!messagesForAgent) {
+                messageToUpdate.value.content = '<error>Could not reconstruct message history for agent call.</error>';
+                chatLog.notify();
+                return;
+            }
+            messagesForAgent.push({ role: 'user', content: promptText });
+
+            context.app.apiService.executeStreamingAgentCall(
+                context.app,
+                chat,
+                messageToUpdate,
+                messagesForAgent,
+                agentId
+            ).then(() => {
+                const nextStep = context.getNextStep(step.id);
+                if (nextStep) {
+                    context.executeStep(nextStep);
+                } else {
+                    context.stopFlow('Flow finished after agent call.');
+                }
+            }).catch(error => {
+                context.stopFlow(`Error during agent call: ${error.message}`);
+            });
         },
     });
 
