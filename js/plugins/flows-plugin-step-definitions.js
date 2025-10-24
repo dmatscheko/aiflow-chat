@@ -485,11 +485,9 @@ export function registerFlowStepDefinitions(flowManager) {
                 </div>
 
                 <label>Tool:</label>
-                <div class="custom-dropdown">
-                    <select class="flow-step-input mcp-tool-select" data-key="toolName">
-                        <option value="">Select a tool...</option>
-                    </select>
-                </div>
+                <select class="flow-step-input mcp-tool-select" data-key="toolName">
+                    <option value="">Select a tool...</option>
+                </select>
 
                 <label>Tool Call (use \${LAST_RESPONSE} for substitution):</label>
                 <textarea class="flow-step-input mcp-tool-call" data-key="toolCall" rows="4">${step.data.toolCall || ''}</textarea>
