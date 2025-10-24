@@ -474,6 +474,7 @@ export function registerFlowStepDefinitions(flowManager) {
             postPrompt: '',
             agentId: '',
             includeLastAnswer: true,
+            onlyLastAnswer: false,
             fullContext: false,
         }),
         render: (step, agentOptions) => `<h4>Agent Call from Answer</h4><div class="flow-step-content">
@@ -483,6 +484,9 @@ export function registerFlowStepDefinitions(flowManager) {
                 <label>Text after AI answer (optional):</label>
                 <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea>
                 <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-include-last-answer flow-step-input" data-id="${step.id}" data-key="includeLastAnswer" ${step.data.includeLastAnswer ? 'checked' : ''}> Include last AI answer in prompt</label>
+                <div class="agent-call-answer-options" style="padding-left: 20px; ${!step.data.includeLastAnswer ? 'display: none;' : ''}">
+                    <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}> Only include last AI answer</label>
+                </div>
                 <div class="agent-call-context-options" style="${step.data.includeLastAnswer ? 'display: none;' : ''}">
                     <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-full-context flow-step-input" data-id="${step.id}" data-key="fullContext" ${step.data.fullContext ? 'checked' : ''}> Include full conversation context</label>
                 </div>
@@ -516,7 +520,16 @@ export function registerFlowStepDefinitions(flowManager) {
                 if (!isLastTurnAi) {
                     return context.stopFlow('Agent Call: The last turn is not an AI turn, so its answer cannot be included.');
                 }
-                contentToInclude = lastTurn.map(msg => msg.value.content || '').join('\n\n');
+
+                if (step.data.onlyLastAnswer) {
+                    const lastMessage = lastTurn[lastTurn.length - 1];
+                    contentToInclude = lastMessage.value.content || '';
+                } else {
+                    contentToInclude = lastTurn.map(msg => {
+                        const role = roleMapping[msg.value.role] || msg.value.role;
+                        return `**${role}:** ${msg.value.content || ''}`;
+                    }).join('\n\n');
+                }
             }
 
             const promptText = `${step.data.prePrompt || ''}${contentToInclude}${step.data.postPrompt || ''}`.trim();
