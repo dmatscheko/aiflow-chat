@@ -33,6 +33,7 @@
         }
     }
 
+    const originalWidth = select.offsetWidth;
     select.classList.add("original-select");
 
     // Wrap label and select in a div for better layout control, if a label exists.
@@ -90,32 +91,8 @@
     });
     wrapper.appendChild(list);
 
-    // --- Calculate width based on options ---
-    let maxWidth = 0;
-    const tempSpan = document.createElement('span');
-    // Apply the same styles as the dropdown items for accurate measurement
-    tempSpan.className = 'dropdown-item';
-    // Position it off-screen
-    tempSpan.style.position = 'absolute';
-    tempSpan.style.top = '-9999px';
-    tempSpan.style.left = '-9999px';
-    tempSpan.style.visibility = 'hidden';
-    // It needs to be in the DOM to have a size
-    document.body.appendChild(tempSpan);
-
-    Array.from(select.options).forEach(option => {
-        // Use innerHTML to render entities correctly, but sanitize first if needed
-        tempSpan.textContent = option.text;
-        if (tempSpan.scrollWidth > maxWidth) {
-            maxWidth = tempSpan.scrollWidth;
-        }
-    });
-
-    document.body.removeChild(tempSpan);
-
     // Set the wrapper's min-width. The button is 100% of the wrapper.
-    wrapper.style.minWidth = `${maxWidth + 10}px`;
-
+    wrapper.style.minWidth = `${originalWidth}px`;
 
     // Toggle open/close
     btn.addEventListener("click", (e) => {

@@ -974,6 +974,10 @@ hr.divider {
     background-color: hsla(0, 0%, 15%, 0.8);
 }
 
+.flow-step-manual-mcp-call {
+    background-color: hsla(60, 20%, 35%, 0.8);
+}
+
 /* --- Token-Counter Styles --- */
 
 .token-counter-group {
