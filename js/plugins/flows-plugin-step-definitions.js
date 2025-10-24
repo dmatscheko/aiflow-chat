@@ -569,7 +569,8 @@ export function registerFlowStepDefinitions(flowManager) {
 
             testBtn.addEventListener('click', async () => {
                 const lastMessage = app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
-                const toolCallStr = toolCallTextarea.value.replace(/\${LAST_RESPONSE}/g, lastMessage);
+                const escapedLastMessage = JSON.stringify(lastMessage).slice(1, -1);
+                const toolCallStr = toolCallTextarea.value.replace(/\${LAST_RESPONSE}/g, escapedLastMessage);
                 try {
                     const toolCall = JSON.parse(toolCallStr);
                     const result = await app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer);
@@ -599,7 +600,8 @@ export function registerFlowStepDefinitions(flowManager) {
 
         execute: (step, context) => {
             const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
-            const toolCallStr = step.data.toolCall.replace(/\${LAST_RESPONSE}/g, lastMessage);
+            const escapedLastMessage = JSON.stringify(lastMessage).slice(1, -1);
+            const toolCallStr = step.data.toolCall.replace(/\${LAST_RESPONSE}/g, escapedLastMessage);
 
             try {
                 const toolCall = JSON.parse(toolCallStr);
