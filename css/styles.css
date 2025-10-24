@@ -716,7 +716,7 @@ button:hover {
 }
 
 .connector-group.no-labels .connector {
-    bottom: -10px;
+    bottom: -6px;
 }
 
 .connector-label {
