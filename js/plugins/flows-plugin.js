@@ -278,6 +278,10 @@ export class FlowManager {
                 : `<div class="connector-group"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="default"></div></div>`;
             node.innerHTML = `<button class="minimize-flow-step-btn" data-id="${step.id}">${step.isMinimized ? '+' : '-'}</button><div class="connector top" data-id="${step.id}" data-type="in"></div>${stepDef.render(step, selectedAgentOptions)}<div class="flow-step-footer"><button class="delete-flow-step-btn" data-id="${step.id}">Delete</button></div>${outputConnectors}`;
             nodeContainer.appendChild(node);
+
+            if (stepDef.onMount) {
+                stepDef.onMount(step, node, this.app);
+            }
         });
     }
 

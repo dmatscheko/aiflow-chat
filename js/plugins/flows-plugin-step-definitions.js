@@ -464,4 +464,161 @@ export function registerFlowStepDefinitions(flowManager) {
             if (nextStep) context.executeStep(nextStep); else context.stopFlow();
         },
     });
+
+    flowManager._defineStep('manual-mcp-call', {
+        label: 'Manual MCP Call',
+        getDefaults: () => ({
+            mcpServer: '',
+            toolName: '',
+            toolCall: '',
+            createPrompt: false,
+            prePrompt: '',
+            postPrompt: ''
+        }),
+        render: (step, agentOptions) => `
+            <h4>Manual MCP Call</h4>
+            <div class="flow-step-content">
+                <label>MCP Server URL (leave blank for default):</label>
+                <div class="setting__control-wrapper">
+                    <input type="text" class="flow-step-input" data-key="mcpServer" value="${step.data.mcpServer || ''}" placeholder="Default Agent's MCP Server">
+                    <button class="mcp-refresh-btn">Refresh</button>
+                </div>
+
+                <label>Tool:</label>
+                <select class="flow-step-input mcp-tool-select" data-key="toolName">
+                    <option value="">Select a tool...</option>
+                </select>
+
+                <label>Tool Call (use \${LAST_RESPONSE} for substitution):</label>
+                <textarea class="flow-step-input mcp-tool-call" data-key="toolCall" rows="4">${step.data.toolCall || ''}</textarea>
+                <button class="mcp-test-btn">Test</button>
+
+                <hr class="divider">
+
+                <label class="flow-step-checkbox-label">
+                    <input type="checkbox" class="flow-step-input mcp-create-prompt" data-key="createPrompt" ${step.data.createPrompt ? 'checked' : ''}>
+                    Create new prompt from call result
+                </label>
+
+                <div class="mcp-prompt-options" style="${step.data.createPrompt ? '' : 'display: none;'}">
+                    <label>Text before result:</label>
+                    <textarea class="flow-step-input" data-key="prePrompt" rows="2">${step.data.prePrompt || ''}</textarea>
+                    <label>Text after result:</label>
+                    <textarea class="flow-step-input" data-key="postPrompt" rows="2">${step.data.postPrompt || ''}</textarea>
+                </div>
+            </div>
+        `,
+        onUpdate: (step, target, renderAndConnect) => {
+            const key = target.dataset.key;
+            const value = target.type === 'checkbox' ? target.checked : target.value;
+            step.data[key] = value;
+
+            if (key === 'createPrompt') {
+                renderAndConnect(); // Re-render to show/hide the prompt options
+            }
+        },
+
+        onMount: (step, card, app) => {
+            const mcpServerInput = card.querySelector('[data-key="mcpServer"]');
+            const refreshBtn = card.querySelector('.mcp-refresh-btn');
+            const toolSelect = card.querySelector('.mcp-tool-select');
+            const toolCallTextarea = card.querySelector('.mcp-tool-call');
+            const testBtn = card.querySelector('.mcp-test-btn');
+
+            let tools = [];
+
+            const fetchTools = async () => {
+                const mcpServerUrl = step.data.mcpServer || app.agentManager.getEffectiveApiConfig().toolSettings.mcpServer;
+                if (!mcpServerUrl) {
+                    alert('Please set an MCP Server URL in the Default Agent settings or in this step.');
+                    return;
+                }
+                try {
+                    tools = await app.mcp.getTools(mcpServerUrl, true);
+                    toolSelect.innerHTML = '<option value="">Select a tool...</option>';
+                    tools.forEach(tool => {
+                        const option = document.createElement('option');
+                        option.value = tool.name;
+                        option.textContent = tool.name;
+                        toolSelect.appendChild(option);
+                    });
+                    toolSelect.value = step.data.toolName;
+                } catch (error) {
+                    alert(`Failed to fetch tools: ${error.message}`);
+                }
+            };
+
+            refreshBtn.addEventListener('click', fetchTools);
+
+            toolSelect.addEventListener('change', () => {
+                const toolName = toolSelect.value;
+                const tool = tools.find(t => t.name === toolName);
+                if (tool) {
+                    const params = tool.parameters.properties || {};
+                    const toolCall = {
+                        tool: tool.name,
+                        arguments: Object.fromEntries(
+                            Object.entries(params).map(([key, value]) => [key, value.default || ''])
+                        )
+                    };
+                    toolCallTextarea.value = JSON.stringify(toolCall, null, 2);
+                    step.data.toolCall = toolCallTextarea.value;
+                    step.data.toolName = toolName;
+                }
+            });
+
+            testBtn.addEventListener('click', async () => {
+                const lastMessage = app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
+                const toolCallStr = toolCallTextarea.value.replace(/\${LAST_RESPONSE}/g, lastMessage);
+                try {
+                    const toolCall = JSON.parse(toolCallStr);
+                    const result = await app.mcp.makeToolCall(toolCall.tool, toolCall.arguments, step.data.mcpServer);
+                    alert(`Tool Result:\n${JSON.stringify(result, null, 2)}`);
+                } catch (error) {
+                    alert(`Error testing tool: ${error.message}`);
+                }
+            });
+
+            // Initial fetch
+            fetchTools();
+        },
+
+        execute: (step, context) => {
+            const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
+            const toolCallStr = step.data.toolCall.replace(/\${LAST_RESPONSE}/g, lastMessage);
+
+            try {
+                const toolCall = JSON.parse(toolCallStr);
+                context.app.mcp.makeToolCall(toolCall.tool, toolCall.arguments, step.data.mcpServer)
+                    .then(result => {
+                        const resultStr = JSON.stringify(result, null, 2);
+                        if (step.data.createPrompt) {
+                            const newPrompt = `${step.data.prePrompt || ''}${resultStr}${step.data.postPrompt || ''}`;
+                            context.app.dom.messageInput.value = newPrompt;
+                            context.app.chatManager.handleFormSubmit({});
+                        } else {
+                            const chat = context.app.chatManager.getActiveChat();
+                            if (chat) {
+                                chat.log.addMessage({
+                                    role: 'tool',
+                                    content: resultStr,
+                                    metadata: { tool_call: toolCall }
+                                });
+                            }
+                            const nextStep = context.getNextStep(step.id);
+                            if (nextStep) {
+                                context.executeStep(nextStep);
+                            } else {
+                                context.stopFlow();
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        context.stopFlow(`Error in Manual MCP Call: ${error.message}`);
+                    });
+            } catch (error) {
+                context.stopFlow(`Invalid JSON in tool call: ${error.message}`);
+            }
+        },
+    });
 }
