@@ -264,9 +264,9 @@ export function registerFlowStepDefinitions(flowManager) {
                 <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea>
                 <label class="flow-step-checkbox-label">
                     <input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}>
-                    Only include each last answer
+                    Only include each last AI answer
                 </label>
-                <hr>
+                <hr class="divider">
                 <label class="flow-step-checkbox-label">
                     <input type="checkbox" class="flow-step-clear-history-toggle flow-step-input" data-id="${step.id}" data-key="clearHistory" ${step.data.clearHistory ? 'checked' : ''}>
                     Clear history before consolidating
@@ -332,9 +332,11 @@ export function registerFlowStepDefinitions(flowManager) {
                 <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea>
                 <label>Text after AI answer:</label>
                 <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea>
+                <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}> Only include last AI answer</label>
+                <hr class="divider">
+                <label>Before sending the message:</label>
                 <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-ai flow-step-input" data-id="${step.id}" data-key="deleteAIAnswer" ${step.data.deleteAIAnswer ? 'checked' : ''}> Delete original AI answer</label>
                 <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-user flow-step-input" data-id="${step.id}" data-key="deleteUserMessage" ${step.data.deleteUserMessage ? 'checked' : ''}> Delete original user message</label>
-                <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}> Only include last answer</label>
             </div>`,
         onUpdate: (step, target, renderAndConnect) => {
             const key = target.dataset.key;
