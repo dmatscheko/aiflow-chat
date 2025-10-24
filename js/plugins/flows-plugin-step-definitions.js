@@ -200,6 +200,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('simple-prompt', {
         label: 'Simple Prompt',
+        color: 'hsla(0, 0%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
         getDefaults: () => ({ prompt: 'Hello, world!', agentId: '' }),
         render: function(step, agentOptions) {
@@ -215,6 +216,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('multi-prompt', {
         label: 'Multi Prompt',
+        color: 'hsla(145, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M14 10H6" /><path d="M14 6H6" /></svg>',
         getDefaults: () => ({ prompt: '', count: 2, agentId: '' }),
         render: function(step, agentOptions) {
@@ -250,6 +252,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('consolidator', {
         label: 'Alt. Consolidator',
+        color: 'hsla(280, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>',
         getDefaults: () => ({
             prePrompt: 'Please choose the best of the following answers (or if better than any single answer the best parts of the best answers combined):',
@@ -327,6 +330,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('echo-answer', {
         label: 'Echo Answer',
+        color: 'hsla(200, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2.1l4 4-4 4"/><path d="M3 12.6v-2.1c0-4.4 3.6-8 8-8h7"/><path d="M7 21.9l-4-4 4-4"/><path d="M21 11.4v2.1c0 4.4-3.6 8-8 8H6"/></svg>',
         getDefaults: () => ({
             prePrompt: 'Is this idea and code correct? Be concise.\n\n\n',
@@ -413,6 +417,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('clear-history', {
         label: 'Clear History',
+        color: 'hsla(0, 0%, 15%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>',
         getDefaults: () => ({ clearFrom: 2, clearTo: 3, clearToBeginning: true }),
         render: function(step) {
@@ -440,6 +445,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('branch', {
         label: 'Branch',
+        color: 'hsla(30, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="4" r="2"></circle><circle cx="7" cy="20" r="2"></circle><circle cx="17" cy="20" r="2"></circle><path d="M7 18V6"></path><path d="M7 7c0 1.66 1.34 3 3 3h5c1.1 0 2 .9 2 2v6"></path></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '' }),
         render: function(step) {
@@ -464,6 +470,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('conditional-stop', {
         label: 'Conditional Stop',
+        color: 'hsla(0, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '', onMatch: 'stop' }),
         render: function(step) {
@@ -490,6 +497,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('agent-call-from-answer', {
         label: 'Agent Call from Answer',
+        color: 'hsla(60, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 1-10 10h12a5 5 0 0 0 0-10Z"/></svg>',
         getDefaults: () => ({
             prePrompt: '',
@@ -603,6 +611,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('manual-mcp-call', {
         label: 'Manual MCP Call',
+        color: 'hsla(85, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 1-10 10h12a5 5 0 0 0 0-10Z"/><path d="M12 2a10 10 0 1 1-10 10h12a5 5 0 0 0 0-10Z"/></svg>',
         getDefaults: () => ({
             mcpServer: '',

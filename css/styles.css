@@ -969,42 +969,6 @@ hr.divider {
     flex-grow: 1;
 }
 
-/* --- Special Flow Step Styles --- */
-.flow-step-simple-prompt {
-    background-color: hsla(0, 0%, 35%, 0.8);
-}
-
-.flow-step-conditional-stop {
-    background-color: hsla(0, 20%, 35%, 0.8);
-}
-
-.flow-step-echo-answer {
-    background-color: hsla(200, 20%, 35%, 0.8);
-}
-
-.flow-step-multi-prompt {
-    background-color: hsla(145, 20%, 35%, 0.8);
-}
-
-.flow-step-branch {
-    background-color: hsla(30, 20%, 35%, 0.8);
-}
-
-.flow-step-consolidator {
-    background-color: hsla(280, 20%, 35%, 0.8);
-}
-
-.flow-step-clear-history {
-    background-color: hsla(0, 0%, 15%, 0.8);
-}
-
-.flow-step-manual-mcp-call {
-    background-color: hsla(85, 20%, 35%, 0.8);
-}
-
-.flow-step-agent-call-from-answer {
-    background-color: hsla(60, 20%, 35%, 0.8);
-}
 
 /* --- Token-Counter Styles --- */
 
