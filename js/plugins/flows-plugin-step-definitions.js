@@ -573,7 +573,17 @@ export function registerFlowStepDefinitions(flowManager) {
                 try {
                     const toolCall = JSON.parse(toolCallStr);
                     const result = await app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer);
-                    alert(`Tool Result:\n${JSON.stringify(result, null, 2)}`);
+
+                    let resultStr = '';
+                    if (result.isError) {
+                        resultStr = `Error: ${result.content}`;
+                    } else if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
+                        resultStr = result.content[0].text;
+                    } else {
+                        resultStr = JSON.stringify(result.content, null, 2);
+                    }
+                    alert(`Tool Result:\n${resultStr}`);
+
                 } catch (error) {
                     alert(`Error testing tool: ${error.message}`);
                 }
@@ -591,7 +601,15 @@ export function registerFlowStepDefinitions(flowManager) {
                 const toolCall = JSON.parse(toolCallStr);
                 context.app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer)
                     .then(result => {
-                        const resultStr = JSON.stringify(result.content, null, 2);
+                        let resultStr = '';
+                        if (result.isError) {
+                            resultStr = `Error: ${result.content}`;
+                        } else if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
+                            resultStr = result.content[0].text;
+                        } else {
+                            resultStr = JSON.stringify(result.content, null, 2);
+                        }
+
                         if (step.data.createPrompt) {
                             const newPrompt = `${step.data.prePrompt || ''}${resultStr}${step.data.postPrompt || ''}`;
                             context.app.dom.messageInput.value = newPrompt;
