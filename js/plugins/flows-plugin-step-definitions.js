@@ -327,7 +327,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('echo-answer', {
         label: 'Echo Answer',
-        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0v2a6 6 0 1 0 12 0v-2z"></path><path d="M2 8h2"></path><path d="M20 8h2"></path></svg>',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 12a5 5 0 0 0-5-5"/><path d="M12 12a5 5 0 0 1-5-5"/><path d="M7 12a5 5 0 0 0 5 5"/><path d="M12 17a5 5 0 0 0 5-5"/><path d="M12 12a5 5 0 0 1 5 5"/><path d="M17 12a5 5 0 0 0-5-5"/></svg>',
         getDefaults: () => ({
             prePrompt: 'Is this idea and code correct? Be concise.\n\n\n',
             postPrompt: '',
@@ -440,7 +440,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('branch', {
         label: 'Branch',
-        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12M6 21v-6m0 0h12M6 15H2.5a2.5 2.5 0 0 1 0-5H6m12 0h3.5a2.5 2.5 0 0 0 0-5H18"/></svg>',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v12a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V3"/><path d="M9 9h6"/><path d="M9 12h6"/><path d="M9 15h6"/></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '' }),
         render: function(step) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea></div>`;
