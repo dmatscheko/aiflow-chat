@@ -775,8 +775,10 @@ button:hover {
 
 .flow-step-card.minimized {
     width: 125px;
-    height: 40px;
+    height: auto;
+    min-height: 40px;
     padding-top: 25px;
+    padding-bottom: 10px;
 }
 
 .flow-step-card.minimized .flow-step-content,
@@ -786,11 +788,12 @@ button:hover {
 
 .flow-step-card.minimized h4 {
     font-size: 0.8em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
     margin-bottom: 0;
     border-bottom: none;
+    line-height: 1.2;
 }
 
 
