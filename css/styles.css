@@ -711,6 +711,14 @@ button:hover {
     bottom: -16px;
 }
 
+.connector-group.no-labels {
+    padding-top: 0;
+}
+
+.connector-group.no-labels .connector {
+    bottom: -10px;
+}
+
 .connector-label {
     position: absolute;
     bottom: 15px; /* Position label above connector */
