@@ -166,6 +166,7 @@ export class ApiService {
             );
 
             message.value.content = ''; // Initialize content
+            message.cache = null;
             notifyUpdate();
 
             pluginManager.trigger('onStreamingStart', { message });
@@ -195,6 +196,7 @@ export class ApiService {
                 if (deltas.length > 0) {
                     pluginManager.trigger('onStreamingData', { message, deltas, notifyUpdate });
                     message.value.content += deltas.join('');
+                    message.cache = null;
                     notifyUpdate();
                 }
             }
@@ -211,6 +213,7 @@ export class ApiService {
                     message.value.content = `Error: ${error.message}`;
                 }
             }
+            message.cache = null;
             notifyUpdate(); // Notify one last time for error/abort messages
         }
     }

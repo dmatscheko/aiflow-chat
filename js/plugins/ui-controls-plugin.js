@@ -124,6 +124,7 @@ const uiControlsPlugin = {
                 if (contentEl) {
                     makeEditable(contentEl, message.value.content, (newText) => {
                         message.value.content = newText;
+                        message.cache = null;
                         chatLog.notify();
                     });
                 }

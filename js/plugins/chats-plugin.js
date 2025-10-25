@@ -405,7 +405,7 @@ class ChatUI {
 
         const contentEl = document.createElement('div');
         contentEl.className = 'message-content';
-        contentEl.textContent = message.value.content || '';
+        contentEl.innerHTML = message.value.content || '';
 
         // Allow plugins to modify the content element (e.g., for Markdown formatting).
         pluginManager.trigger('onFormatMessageContent', contentEl, message);
