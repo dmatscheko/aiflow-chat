@@ -630,12 +630,21 @@ button:hover {
 }
 
 .flow-step-card h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     margin-top: 0;
     margin-bottom: 10px;
     padding-bottom: 5px;
     border-bottom: 1px solid var(--border-color);
     font-size: 1rem;
     padding-left: 20px;
+}
+
+.flow-step-card h4 svg {
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
 }
 
 .flow-step-input {
@@ -692,7 +701,7 @@ button:hover {
 .connector-group {
     display: flex;
     justify-content: space-around;
-    padding-top: 10px;
+    padding-top: 0;
 }
 
 .connector-group .connector {
@@ -700,6 +709,10 @@ button:hover {
     top: auto;
     left: auto;
     bottom: -16px;
+}
+
+.connector-group.labels {
+    padding-top: 10px;
 }
 
 .connector-label {
@@ -766,8 +779,10 @@ button:hover {
 
 .flow-step-card.minimized {
     width: 125px;
-    height: 40px;
+    height: auto;
+    min-height: 40px;
     padding-top: 25px;
+    padding-bottom: 10px;
 }
 
 .flow-step-card.minimized .flow-step-content,
@@ -777,11 +792,12 @@ button:hover {
 
 .flow-step-card.minimized h4 {
     font-size: 0.8em;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
     margin-bottom: 0;
     border-bottom: none;
+    line-height: 1.2;
 }
 
 
@@ -809,12 +825,28 @@ button:hover {
     color: var(--text-color);
     padding: 8px 12px;
     text-decoration: none;
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-size: 0.9em;
+}
+
+.dropdown-content a svg {
+    width: 1.2em;
+    height: 1.2em;
+    flex-shrink: 0;
 }
 
 .dropdown-content a:hover {
     background-color: var(--button-hover-bg-color);
+}
+
+.dropdown-content a svg {
+    filter: brightness(1.5);
+}
+
+.dropdown-content a:hover svg {
+    filter: brightness(2.0);
 }
 
 .dropdown-content.show {
@@ -945,38 +977,6 @@ hr.divider {
     flex-grow: 1;
 }
 
-/* --- Special Flow Step Styles --- */
-.flow-step-simple-prompt {
-    background-color: hsla(0, 0%, 35%, 0.8);
-}
-
-.flow-step-conditional-stop {
-    background-color: hsla(0, 20%, 35%, 0.8);
-}
-
-.flow-step-echo-answer {
-    background-color: hsla(200, 20%, 35%, 0.8);
-}
-
-.flow-step-multi-prompt {
-    background-color: hsla(145, 20%, 35%, 0.8);
-}
-
-.flow-step-branch {
-    background-color: hsla(30, 20%, 35%, 0.8);
-}
-
-.flow-step-consolidator {
-    background-color: hsla(280, 20%, 35%, 0.8);
-}
-
-.flow-step-clear-history {
-    background-color: hsla(0, 0%, 15%, 0.8);
-}
-
-.flow-step-manual-mcp-call {
-    background-color: hsla(60, 20%, 35%, 0.8);
-}
 
 /* --- Token-Counter Styles --- */
 

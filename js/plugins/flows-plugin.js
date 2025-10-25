@@ -267,11 +267,14 @@ export class FlowManager {
             const stepDef = this.stepTypes[step.type];
             if (!stepDef) return;
             const node = document.createElement('div');
-            const cardClass = `flow-step-card flow-step-${step.type} ${step.isMinimized ? 'minimized' : ''}`;
+            const cardClass = `flow-step-card ${step.isMinimized ? 'minimized' : ''}`;
             node.className = cardClass.trim();
             node.dataset.id = step.id;
             node.style.left = `${step.x}px`;
             node.style.top = `${step.y}px`;
+            if (stepDef.color) {
+                node.style.backgroundColor = stepDef.color;
+            }
             const selectedAgentOptions = this.app.agentManager.agents.map(a => `<option value="${a.id}" ${step.data.agentId === a.id ? 'selected' : ''}>${a.name}</option>`).join('');
             const outputConnectors = stepDef.renderOutputConnectors
                 ? stepDef.renderOutputConnectors(step)
@@ -675,7 +678,13 @@ pluginManager.register({
             }];
 
             const dropdownContent = Object.entries(flowManager.stepTypes)
-                .map(([type, { label }]) => `<a href="#" data-step-type="${type}">${label}</a>`)
+                .map(([type, { label, icon, color }]) => {
+                    if (icon && color) {
+                        const coloredIcon = icon.replace('<svg', `<svg style="stroke: ${color};"`);
+                        return `<a href="#" data-step-type="${type}">${coloredIcon} ${label}</a>`;
+                    }
+                    return `<a href="#" data-step-type="${type}">${icon || ''} ${label}</a>`;
+                })
                 .join('');
 
             config.buttons = [{
