@@ -10,6 +10,7 @@ import { ChatLog } from '../chat-data.js';
 import { debounce, importJson, exportJson } from '../utils.js';
 import { responseProcessor } from '../response-processor.js';
 import { DataManager } from '../data-manager.js';
+import { formatMessage } from '../ui/message-formatter.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -326,7 +327,7 @@ class ChatUI {
         const messages = this.chatLog.getActiveMessages();
 
         messages.forEach(message => {
-            const messageEl = this.formatMessage(message);
+            const messageEl = formatMessage(message);
             fragment.appendChild(messageEl);
         });
 
@@ -335,89 +336,6 @@ class ChatUI {
         if (shouldScroll) {
             this.scrollToBottom();
         }
-    }
-
-    /**
-     * Creates and formats an HTML element for a single message, including its
-     * role, content, and depth visualization for nested agent calls.
-     * @param {Message} message - The message object to format.
-     * @returns {HTMLElement} The formatted message element, wrapped with depth lines if necessary.
-     * @private
-     */
-    formatMessage(message) {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'message-wrapper';
-
-        const depth = message.value.role !== 'user' ? message.depth : 0;
-
-        // Add vertical lines for depth visualization.
-        if (depth > 0) {
-            const linesContainer = document.createElement('div');
-            linesContainer.className = 'depth-lines';
-            for (let i = 0; i < depth; i++) {
-                const line = document.createElement('div');
-                line.className = 'depth-line';
-                // Offset each line so they appear as parallel lines.
-                line.style.left = `${i * 20 + 10}px`;
-                linesContainer.appendChild(line);
-            }
-            wrapper.appendChild(linesContainer);
-        }
-
-        const el = document.createElement('div');
-        el.classList.add('message', `role-${message.value.role}`);
-
-        if (depth > 0) {
-            // Indent the message bubble to make space for the depth lines.
-            el.style.marginLeft = `${depth * 20}px`;
-        }
-
-        const titleRow = document.createElement('div');
-        titleRow.className = 'message-title';
-
-        const titleTextEl = document.createElement('div');
-        titleTextEl.className = 'message-title-text';
-
-        const roleEl = document.createElement('strong');
-        roleEl.textContent = message.value.role;
-        titleTextEl.appendChild(roleEl);
-
-        // Display agent and model details for assistant/tool messages.
-        if (message.value.role === 'assistant' || message.value.role === 'tool') {
-            const details = [];
-        
-            if (message.agent && this.agentManager) {
-                const agent = this.agentManager.getAgent(message.agent);
-                if (agent?.name) details.push(agent.name);
-            }
-            
-            if (message.value.model) details.push(message.value.model);
-            
-            if (details.length > 0) {
-                const detailsEl = document.createElement('span');
-                detailsEl.className = 'message-details';
-                detailsEl.textContent = details.join(' - ');
-                titleTextEl.appendChild(detailsEl);
-            }
-        }
-
-        titleRow.appendChild(titleTextEl);
-
-        const contentEl = document.createElement('div');
-        contentEl.className = 'message-content';
-        contentEl.innerHTML = message.value.content || '';
-
-        // Allow plugins to modify the content element (e.g., for Markdown formatting).
-        pluginManager.trigger('onFormatMessageContent', contentEl, message);
-
-        el.appendChild(titleRow);
-        el.appendChild(contentEl);
-
-        // Hook for adding controls (e.g., edit/delete buttons) after the message is rendered.
-        pluginManager.trigger('onMessageRendered', el, message);
-
-        wrapper.appendChild(el);
-        return wrapper;
     }
 
     /**

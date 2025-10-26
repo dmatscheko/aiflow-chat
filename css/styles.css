@@ -1070,6 +1070,7 @@ hr.divider {
 }
 
 .message-content .katex-html {
+    /* disable HTML rendering for katex */
     display: none;
     font-size: 0px;
 }

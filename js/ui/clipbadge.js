@@ -112,7 +112,7 @@ export class ClipBadge {
 
     /**
      * Adds a single copy badge to a specified element.
-     * @param {HTMLElement} highlightEl - The element to add the badge to.
+     * @param {HTMLElement} el - The element to add the badge to.
      * @private
      */
     addBadge(el) {

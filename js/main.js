@@ -22,7 +22,6 @@ import './plugins/agents-plugin.js';
 import './plugins/agents-call-plugin.js';
 import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
-import './plugins/formatting-plugin.js';
 import './plugins/mobile-style-plugin.js';
 import './plugins/custom-dropdown-plugin.js';
 import './plugins/ui-controls-plugin.js';

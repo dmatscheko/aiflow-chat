@@ -277,3 +277,21 @@ export function generateUniqueName(baseName, existingNames) {
     }
     return `${baseName} ${i}`;
 }
+
+
+export function decodeHTMLEntities(text) {
+    const entityMap = {
+        '&amp;': '&',
+        '&apos;': '\'',
+        '&#x27;': '\'',
+        '&#x2F;': '/',
+        '&#39;': '\'',
+        '&#47;': '/',
+        '&lt;': '<',
+        '&gt;': '>',
+        '&nbsp;': ' ',
+        '&quot;': '"'
+    };
+
+    return text.replace(/&[#\w]+;/g, match => entityMap[match] || match);
+}
