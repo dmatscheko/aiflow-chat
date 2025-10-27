@@ -20,11 +20,10 @@ import { decodeHTMLEntities } from '../utils.js';
 
 const clipBadge = new ClipBadge({ autoRun: false });
 
-// --- Pre-Markdown Formatting Plugins ---
+// --- Formatting Logic Functions ---
 
 /**
- * Normalizing SVG content before Markdown rendering.
- * It wraps raw SVG tags in ```svg code blocks and ensures data URIs are well-formed.
+ * Normalizes SVG content by wrapping raw SVG tags in ```svg code blocks.
  * @param {string} html - The HTML content to process.
  * @returns {string} The processed HTML.
  */
@@ -48,17 +47,14 @@ function svgNormalization(html) {
     return html;
 }
 
-// --- Core Markdown and HTML Formatting ---
-
 /**
- * Rendering Markdown to HTML using markdown-it.
- * It also applies syntax highlighting to code blocks using highlight.js, and renders math, using katex.
+ * Renders Markdown to HTML using markdown-it, with syntax highlighting and KaTeX for math.
  * @param {string} html - The HTML content to process.
  * @returns {string} The processed HTML.
  */
 function markdown(html) {
     const md = window.markdownit({
-        html: false,             // TODO: If possible set html to false to avoid XSS. At the moment, this breaks <br> in tables.
+        html: false,
         breaks: true,
         linkify: true,
         highlight: function (code, language) {
@@ -86,51 +82,22 @@ function markdown(html) {
             { left: '\\begin{equation}', right: '\\end{equation}', display: true },
         ],
         ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'option', 'table', 'svg', 'dma:tool_call', 'dma:tool_response', 'details'],
-        throwOnError: false,
-        preProcess: math => {
-            return decodeHTMLEntities(math);
-        }
+        preProcess: math => decodeHTMLEntities(math)
     });
     md.use(details_wrapper_plugin, {
         tags: [
-            {
-                tag: "dma:tool_call",
-                className: "tool-call",
-                summary: "Tool Call",
-                attrForTitle: "name",
-                whole: true,
-                contentType: "html",
-                contentWrapper: null,
-            },
-            {
-                tag: "dma:tool_response",
-                className: "tool-response",
-                summary: "Tool Response",
-                attrForTitle: "name",
-                whole: true,
-                contentType: "html",
-                contentWrapper: null,
-            },
-            {
-                tag: "think",
-                className: "think",
-                summary: "Thinking",
-                attrForTitle: null,
-                whole: false,
-                contentType: "text",
-                contentWrapper: 'div class="think-content"',
-            },
+            { tag: "dma:tool_call", className: "tool-call", summary: "Tool Call", attrForTitle: "name", whole: true, contentType: "html", contentWrapper: null },
+            { tag: "dma:tool_response", className: "tool-response", summary: "Tool Response", attrForTitle: "name", whole: true, contentType: "html", contentWrapper: null },
+            { tag: "think", className: "think", summary: "Thinking", attrForTitle: null, whole: false, contentType: "text", contentWrapper: 'div class="think-content"' },
         ],
     });
     md.validateLink = link => !['javascript:', 'dma:'].some(prefix => link.startsWith(prefix));
-    html = md.render(html);
-    return html;
+    return md.render(html);
 }
 
 /**
- * Adding copy-to-clipboard badges to various elements like
- * code blocks, tables, and the entire message.
- * @param {HTMLElement} messageEl - The message element to add badges to.
+ * Adds copy-to-clipboard badges to code blocks, tables, and the entire message.
+ * @param {HTMLElement} messageEl - The root message element.
  * @param {Message} message - The message object.
  */
 function addClipBadge(messageEl, message) {
@@ -143,7 +110,7 @@ function addClipBadge(messageEl, message) {
         const rows = table.querySelectorAll('tr');
         return Array.from(rows).map(row =>
             Array.from(row.querySelectorAll('td, th')).map(col =>
-                `"${col.innerHTML.replace(/(\r\n|\n|\r|<br>)/gm, '\n').replace(/(\s\s)/gm, ' ').replace(/"/g, '""')}"`
+                `"${col.innerHTML.replace(/(\r\n|\n|\r|<br>)/gm,'\n').replace(/(\s\s)/gm, ' ').replace(/"/g, '""')}"`
             ).join(separator)
         ).join('\n');
     };
@@ -153,21 +120,20 @@ function addClipBadge(messageEl, message) {
         div.classList.add('hljs-nobg', 'hljs-table', 'language-table');
         div.dataset.plaintext = encodeURIComponent(tableToCSV(table));
         table.parentElement.insertBefore(div, table);
-        table.parentElement.removeChild(table);
         div.appendChild(table);
     });
 
     clipBadge.addTo(messageEl);
 }
 
+// --- Plugin Definitions ---
+
 /**
  * A plugin that normalizes SVG content before Markdown rendering.
  * @type {Plugin}
  */
 const svgNormalizationPlugin = {
-    onPreprocessMessageContent: (html) => {
-        return svgNormalization(html);
-    }
+    onPreprocessMessageContent: (html) => svgNormalization(html)
 };
 
 /**
@@ -175,32 +141,61 @@ const svgNormalizationPlugin = {
  * @type {Plugin}
  */
 const markdownRenderingPlugin = {
-    onRenderMessageContent: (html) => {
-        return markdown(html);
+    onRenderMessageContent: (html) => markdown(html)
+};
+
+/**
+ * A plugin that performs post-processing on KaTeX DOM elements to add copyable plaintext.
+ * @type {Plugin}
+ */
+const katexPostProcessingPlugin = {
+    onPostprocessMessageContentDOM: (contentEl, message) => {
+        contentEl.querySelectorAll('.katex').forEach((elem) => {
+            const annotation = elem.querySelector('annotation[encoding="application/x-tex"]');
+            if (annotation) {
+                const latex = annotation.textContent.trim();
+                elem.dataset.plaintext = encodeURIComponent(latex);
+                annotation.remove();
+                if (elem.parentElement.classList.contains('katex-display')) {
+                    elem.classList.remove('hljs', 'language-latex', 'katex-display', 'katex');
+                    const div = document.createElement('div');
+                    div.classList.add('hljs', 'language-latex');
+                    div.dataset.plaintext = encodeURIComponent(latex);
+                    const container = elem.parentElement;
+                    container.parentElement.insertBefore(div, container);
+                    container.parentElement.removeChild(container);
+                    div.appendChild(container);
+                }
+            }
+        });
     }
 };
 
 /**
- * A plugin that adds copy-to-clipboard badges to messages.
+ * A plugin that adds copy-to-clipboard badges to the fully rendered message.
  * @type {Plugin}
  */
 const clipBadgePlugin = {
-    onMessageRendered: (messageEl, message) => {
-        addClipBadge(messageEl, message);
-    }
+    onMessageRendered: (messageEl, message) => addClipBadge(messageEl, message)
 };
 
 /**
- * A plugin that formats the entire message, including role, title, and depth lines.
+ * The main orchestrator plugin. It constructs the entire message element,
+ * runs the content through the string-based processing pipeline, injects the
+ * result into a DOM element, and then triggers hooks for DOM-based post-processing.
  * @type {Plugin}
  */
 const messageFramingPlugin = {
     onFormatMessage: (message) => {
+        // Return the cached element if it exists, preventing re-rendering.
+        if (message.cache) {
+            return message.cache;
+        }
+
         const wrapper = document.createElement('div');
         wrapper.className = 'message-wrapper';
 
         const depth = message.value.role !== 'user' ? message.depth : 0;
-
         if (depth > 0) {
             const linesContainer = document.createElement('div');
             linesContainer.className = 'depth-lines';
@@ -221,10 +216,8 @@ const messageFramingPlugin = {
 
         const titleRow = document.createElement('div');
         titleRow.className = 'message-title';
-
         const titleTextEl = document.createElement('div');
         titleTextEl.className = 'message-title-text';
-
         const roleEl = document.createElement('strong');
         roleEl.textContent = message.value.role;
         titleTextEl.appendChild(roleEl);
@@ -243,66 +236,43 @@ const messageFramingPlugin = {
                 titleTextEl.appendChild(detailsEl);
             }
         }
-
         titleRow.appendChild(titleTextEl);
 
-        const contentEl = pluginManager.trigger('onFormatMessageContent', message);
+        // --- Content Formatting Pipeline ---
+        const contentEl = document.createElement('div');
+        contentEl.className = 'message-content';
+
+        // 1. Start with the raw string content.
+        let html = message.value.content || '';
+        // 2. Run through pre-processing hooks (string in, string out).
+        html = pluginManager.trigger('onPreprocessMessageContent', html);
+        // 3. Run through rendering hooks (string in, string out).
+        html = pluginManager.trigger('onRenderMessageContent', html);
+
+        // 4. Set the final HTML to the element's content.
+        contentEl.innerHTML = html;
+
+        // 5. Run DOM post-processing hooks (e.g., for manipulating rendered elements like KaTeX).
+        pluginManager.trigger('onPostprocessMessageContentDOM', contentEl, message);
+        // --- End Pipeline ---
+
         el.appendChild(titleRow);
         el.appendChild(contentEl);
 
+        // Trigger the general 'onMessageRendered' hook for things like adding UI controls.
         pluginManager.trigger('onMessageRendered', el, message);
 
         wrapper.appendChild(el);
+
+        // Cache the fully constructed element.
+        message.cache = wrapper;
         return wrapper;
-    }
-};
-
-/**
- * A plugin that formats the message content.
- * @type {Plugin}
- */
-const messageContentFormattingPlugin = {
-    onFormatMessageContent: (message) => {
-        if (message.cache) {
-            return message.cache;
-        }
-
-        const messageEl = document.createElement('div');
-        messageEl.className = 'message-content';
-
-        let html = message.value.content || '';
-        html = pluginManager.trigger('onPreprocessMessageContent', html);
-        html = pluginManager.trigger('onRenderMessageContent', html);
-
-        messageEl.innerHTML = html;
-
-        messageEl.querySelectorAll('.katex').forEach((elem) => {
-            const annotation = elem.querySelector('annotation[encoding="application/x-tex"]');
-            if (annotation) {
-                const latex = annotation.textContent.trim();
-                elem.dataset.plaintext = encodeURIComponent(latex);
-                annotation.remove();
-                if (elem.parentElement.classList.contains('katex-display')) {
-                    elem.classList.remove('hljs', 'language-latex', 'katex-display', 'katex');
-                    const div = document.createElement('div');
-                    div.classList.add('hljs', 'language-latex');
-                    div.dataset.plaintext = encodeURIComponent(latex);
-                    const container = elem.parentElement;
-                    container.parentElement.insertBefore(div, container);
-                    container.parentElement.removeChild(container);
-                    div.appendChild(container);
-                }
-            }
-        });
-
-        message.cache = messageEl;
-        return messageEl;
     }
 };
 
 // Register all formatting plugins
 pluginManager.register(svgNormalizationPlugin);
 pluginManager.register(markdownRenderingPlugin);
+pluginManager.register(katexPostProcessingPlugin);
 pluginManager.register(clipBadgePlugin);
 pluginManager.register(messageFramingPlugin);
-pluginManager.register(messageContentFormattingPlugin);
