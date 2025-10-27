@@ -10,6 +10,7 @@ import { ChatLog } from '../chat-data.js';
 import { debounce, importJson, exportJson } from '../utils.js';
 import { responseProcessor } from '../response-processor.js';
 import { DataManager } from '../data-manager.js';
+import { formatMessage } from './formatting-plugin.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -326,7 +327,7 @@ class ChatUI {
         const messages = this.chatLog.getActiveMessages();
 
         messages.forEach(message => {
-            const messageEl = pluginManager.trigger('onFormatMessage', message);
+            const messageEl = formatMessage(message);
             fragment.appendChild(messageEl);
         });
 

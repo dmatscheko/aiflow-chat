@@ -1,8 +1,11 @@
 /**
- * @fileoverview A collection of plugins for formatting message content.
- * This file is organized into multiple small, focused plugins that are each
- * registered with the plugin manager. This modular approach allows for a clear
- * separation of concerns and makes the formatting pipeline easier to manage and extend.
+ * @fileoverview A collection of plugins for formatting message content, along with a
+ * central orchestrator function `formatMessage`.
+ *
+ * This file defines a set of small, focused plugins that hook into a multi-stage
+ * content rendering pipeline. The exported `formatMessage` function is the main
+ * entry point; it builds the static HTML frame for a message and then invokes
+ * the plugin pipeline to process the message's content.
  */
 
 'use strict';
@@ -149,7 +152,7 @@ const markdownRenderingPlugin = {
  * @type {Plugin}
  */
 const katexPostProcessingPlugin = {
-    onPostprocessMessageContentDOM: (contentEl, message) => {
+    onPostprocessMessageContentDOM: (contentEl) => {
         contentEl.querySelectorAll('.katex').forEach((elem) => {
             const annotation = elem.querySelector('annotation[encoding="application/x-tex"]');
             if (annotation) {
@@ -179,100 +182,96 @@ const clipBadgePlugin = {
     onMessageRendered: (messageEl, message) => addClipBadge(messageEl, message)
 };
 
+// --- Main Orchestrator Function ---
+
 /**
- * The main orchestrator plugin. It constructs the entire message element,
- * runs the content through the string-based processing pipeline, injects the
- * result into a DOM element, and then triggers hooks for DOM-based post-processing.
- * @type {Plugin}
+ * Creates and formats a complete HTML element for a given message object.
+ * This function orchestrates the entire rendering process. It builds the static
+ * message frame (wrapper, title, etc.) and then invokes the extensible plugin
+ * pipeline to process the message's content.
+ *
+ * @param {Message} message - The message object to format.
+ * @returns {HTMLElement} The fully formatted message element.
  */
-const messageFramingPlugin = {
-    onFormatMessage: (message) => {
-        // Return the cached element if it exists, preventing re-rendering.
-        if (message.cache) {
-            return message.cache;
-        }
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'message-wrapper';
-
-        const depth = message.value.role !== 'user' ? message.depth : 0;
-        if (depth > 0) {
-            const linesContainer = document.createElement('div');
-            linesContainer.className = 'depth-lines';
-            for (let i = 0; i < depth; i++) {
-                const line = document.createElement('div');
-                line.className = 'depth-line';
-                line.style.left = `${i * 20 + 10}px`;
-                linesContainer.appendChild(line);
-            }
-            wrapper.appendChild(linesContainer);
-        }
-
-        const el = document.createElement('div');
-        el.classList.add('message', `role-${message.value.role}`);
-        if (depth > 0) {
-            el.style.marginLeft = `${depth * 20}px`;
-        }
-
-        const titleRow = document.createElement('div');
-        titleRow.className = 'message-title';
-        const titleTextEl = document.createElement('div');
-        titleTextEl.className = 'message-title-text';
-        const roleEl = document.createElement('strong');
-        roleEl.textContent = message.value.role;
-        titleTextEl.appendChild(roleEl);
-
-        if (message.value.role === 'assistant' || message.value.role === 'tool') {
-            const details = [];
-            if (message.agent && pluginManager.app.agentManager) {
-                const agent = pluginManager.app.agentManager.getAgent(message.agent);
-                if (agent?.name) details.push(agent.name);
-            }
-            if (message.value.model) details.push(message.value.model);
-            if (details.length > 0) {
-                const detailsEl = document.createElement('span');
-                detailsEl.className = 'message-details';
-                detailsEl.textContent = details.join(' - ');
-                titleTextEl.appendChild(detailsEl);
-            }
-        }
-        titleRow.appendChild(titleTextEl);
-
-        // --- Content Formatting Pipeline ---
-        const contentEl = document.createElement('div');
-        contentEl.className = 'message-content';
-
-        // 1. Start with the raw string content.
-        let html = message.value.content || '';
-        // 2. Run through pre-processing hooks (string in, string out).
-        html = pluginManager.trigger('onPreprocessMessageContent', html);
-        // 3. Run through rendering hooks (string in, string out).
-        html = pluginManager.trigger('onRenderMessageContent', html);
-
-        // 4. Set the final HTML to the element's content.
-        contentEl.innerHTML = html;
-
-        // 5. Run DOM post-processing hooks (e.g., for manipulating rendered elements like KaTeX).
-        pluginManager.trigger('onPostprocessMessageContentDOM', contentEl, message);
-        // --- End Pipeline ---
-
-        el.appendChild(titleRow);
-        el.appendChild(contentEl);
-
-        // Trigger the general 'onMessageRendered' hook for things like adding UI controls.
-        pluginManager.trigger('onMessageRendered', el, message);
-
-        wrapper.appendChild(el);
-
-        // Cache the fully constructed element.
-        message.cache = wrapper;
-        return wrapper;
+export function formatMessage(message) {
+    // Return the cached element if it exists to prevent re-rendering.
+    if (message.cache) {
+        return message.cache;
     }
-};
 
-// Register all formatting plugins
+    const wrapper = document.createElement('div');
+    wrapper.className = 'message-wrapper';
+
+    const depth = message.value.role !== 'user' ? message.depth : 0;
+    if (depth > 0) {
+        const linesContainer = document.createElement('div');
+        linesContainer.className = 'depth-lines';
+        for (let i = 0; i < depth; i++) {
+            const line = document.createElement('div');
+            line.className = 'depth-line';
+            line.style.left = `${i * 20 + 10}px`;
+            linesContainer.appendChild(line);
+        }
+        wrapper.appendChild(linesContainer);
+    }
+
+    const el = document.createElement('div');
+    el.classList.add('message', `role-${message.value.role}`);
+    if (depth > 0) {
+        el.style.marginLeft = `${depth * 20}px`;
+    }
+
+    const titleRow = document.createElement('div');
+    titleRow.className = 'message-title';
+    const titleTextEl = document.createElement('div');
+    titleTextEl.className = 'message-title-text';
+    const roleEl = document.createElement('strong');
+    roleEl.textContent = message.value.role;
+    titleTextEl.appendChild(roleEl);
+
+    if (message.value.role === 'assistant' || message.value.role === 'tool') {
+        const details = [];
+        if (message.agent && pluginManager.app.agentManager) {
+            const agent = pluginManager.app.agentManager.getAgent(message.agent);
+            if (agent?.name) details.push(agent.name);
+        }
+        if (message.value.model) details.push(message.value.model);
+        if (details.length > 0) {
+            const detailsEl = document.createElement('span');
+            detailsEl.className = 'message-details';
+            detailsEl.textContent = details.join(' - ');
+            titleTextEl.appendChild(detailsEl);
+        }
+    }
+    titleRow.appendChild(titleTextEl);
+
+    // --- Content Formatting Pipeline ---
+    const contentEl = document.createElement('div');
+    contentEl.className = 'message-content';
+
+    let html = message.value.content || '';
+    html = pluginManager.trigger('onPreprocessMessageContent', html);
+    html = pluginManager.trigger('onRenderMessageContent', html);
+    contentEl.innerHTML = html;
+    pluginManager.trigger('onPostprocessMessageContentDOM', contentEl, message);
+    // --- End Pipeline ---
+
+    el.appendChild(titleRow);
+    el.appendChild(contentEl);
+
+    // Trigger the general 'onMessageRendered' hook for things like adding UI controls.
+    pluginManager.trigger('onMessageRendered', el, message);
+
+    wrapper.appendChild(el);
+
+    // Cache the fully constructed element.
+    message.cache = wrapper;
+    return wrapper;
+}
+
+
+// Register all content-processing and finalization plugins
 pluginManager.register(svgNormalizationPlugin);
 pluginManager.register(markdownRenderingPlugin);
 pluginManager.register(katexPostProcessingPlugin);
 pluginManager.register(clipBadgePlugin);
-pluginManager.register(messageFramingPlugin);
