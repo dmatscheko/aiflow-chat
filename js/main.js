@@ -27,6 +27,7 @@ import './plugins/custom-dropdown-plugin.js';
 import './plugins/ui-controls-plugin.js';
 import './plugins/autoresize-textarea-plugin.js';
 import './plugins/token-counter-plugin.js';
+import './plugins/formatting-plugin.js';
 // --- End Plugin Loading ---
 
 /**

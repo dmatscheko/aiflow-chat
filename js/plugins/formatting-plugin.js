@@ -8,9 +8,9 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { ClipBadge } from './clipbadge.js';
+import { ClipBadge } from '../ui/clipbadge.js';
 import math_plugin from '../3rdparty/markdown-it-katex.js';
-import details_wrapper_plugin from './markdown-it-details-wrapper.js';
+import details_wrapper_plugin from '../ui/markdown-it-details-wrapper.js';
 import { decodeHTMLEntities } from '../utils.js';
 
 /**
@@ -25,6 +25,8 @@ const clipBadge = new ClipBadge({ autoRun: false });
 /**
  * Normalizing SVG content before Markdown rendering.
  * It wraps raw SVG tags in ```svg code blocks and ensures data URIs are well-formed.
+ * @param {string} html - The HTML content to process.
+ * @returns {string} The processed HTML.
  */
 function svgNormalization(html) {
     html = html.replace(/((?:```\w*?\s*?)|(?:<render_component[^>]*?>\s*?)|)(<svg[^>]*?>)([\s\S]*?)(<\/svg>(?:\s*?```|\s*?<\/render_component>|)|$)/gi,
@@ -51,6 +53,8 @@ function svgNormalization(html) {
 /**
  * Rendering Markdown to HTML using markdown-it.
  * It also applies syntax highlighting to code blocks using highlight.js, and renders math, using katex.
+ * @param {string} html - The HTML content to process.
+ * @returns {string} The processed HTML.
  */
 function markdown(html) {
     const md = window.markdownit({
@@ -79,13 +83,7 @@ function markdown(html) {
         delimiters: [
             { left: '$$', right: '$$', display: true },
             { left: '$', right: '$', display: false },
-            // { left: '\\(', right: '\\)', display: false },
-            // { left: '\\[', right: '\\]', display: true },
             { left: '\\begin{equation}', right: '\\end{equation}', display: true },
-            // { left: '\\begin{align}', right: '\\end{align}', display: true },
-            // { left: '\\begin{alignat}', right: '\\end{alignat}', display: true },
-            // { left: '\\begin{gather}', right: '\\end{gather}', display: true },
-            // { left: '\\begin{CD}', right: '\\end{CD}', display: true }
         ],
         ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'option', 'table', 'svg', 'dma:tool_call', 'dma:tool_response', 'details'],
         throwOnError: false,
@@ -132,6 +130,8 @@ function markdown(html) {
 /**
  * Adding copy-to-clipboard badges to various elements like
  * code blocks, tables, and the entire message.
+ * @param {HTMLElement} messageEl - The message element to add badges to.
+ * @param {Message} message - The message object.
  */
 function addClipBadge(messageEl, message) {
     messageEl.classList.add('hljs-nobg', 'hljs-message');
@@ -160,124 +160,149 @@ function addClipBadge(messageEl, message) {
     clipBadge.addTo(messageEl);
 }
 
-
-function formatMessageContent(message) {
-    let messageEl;
-    // Note: Caching needs invalidation (message.cache = null;) on each message modification
-    if (message.cache != null) {
-        messageEl = message.cache;
-        return messageEl;
-    } else {
-        messageEl = document.createElement('div');
-        messageEl.className = 'message-content';
+/**
+ * A plugin that normalizes SVG content before Markdown rendering.
+ * @type {Plugin}
+ */
+const svgNormalizationPlugin = {
+    onPreprocessMessageContent: (html) => {
+        return svgNormalization(html);
     }
-
-
-    let html = message.value.content || '';
-    html = svgNormalization(html);
-    html = markdown(html);
-
-    messageEl.innerHTML = html;
-    messageEl.querySelectorAll('.katex').forEach((elem) => {
-        const annotation = elem.querySelector('annotation[encoding="application/x-tex"]');
-        if (annotation) {
-            const latex = annotation.textContent.trim();
-            elem.dataset.plaintext = encodeURIComponent(latex);
-            annotation.remove(); // Remove the original annotation tag
-            if (elem.parentElement.classList.contains('katex-display')) {
-                elem.classList.remove('hljs', 'language-latex', 'katex-display', 'katex');
-                const div = document.createElement('div');
-                div.classList.add('hljs', 'language-latex');
-                div.dataset.plaintext = encodeURIComponent(latex);
-                const container = elem.parentElement;
-                container.parentElement.insertBefore(div, container);
-                container.parentElement.removeChild(container);
-                div.appendChild(container);
-            }
-        }
-    });
-
-    message.cache = messageEl;
-    return messageEl;
-}
+};
 
 /**
- * Creates and formats an HTML element for a single message, including its
- * role, content, and depth visualization for nested agent calls.
- * @param {Message} message - The message object to format.
- * @returns {HTMLElement} The formatted message element, wrapped with depth lines if necessary.
- * @private
+ * A plugin that renders Markdown to HTML.
+ * @type {Plugin}
  */
-export function formatMessage(message) {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'message-wrapper';
-
-    const depth = message.value.role !== 'user' ? message.depth : 0;
-
-    // Add vertical lines for depth visualization.
-    if (depth > 0) {
-        const linesContainer = document.createElement('div');
-        linesContainer.className = 'depth-lines';
-        for (let i = 0; i < depth; i++) {
-            const line = document.createElement('div');
-            line.className = 'depth-line';
-            // Offset each line so they appear as parallel lines.
-            line.style.left = `${i * 20 + 10}px`;
-            linesContainer.appendChild(line);
-        }
-        wrapper.appendChild(linesContainer);
+const markdownRenderingPlugin = {
+    onRenderMessageContent: (html) => {
+        return markdown(html);
     }
+};
 
-    const el = document.createElement('div');
-    el.classList.add('message', `role-${message.value.role}`);
-
-    if (depth > 0) {
-        // Indent the message bubble to make space for the depth lines.
-        el.style.marginLeft = `${depth * 20}px`;
+/**
+ * A plugin that adds copy-to-clipboard badges to messages.
+ * @type {Plugin}
+ */
+const clipBadgePlugin = {
+    onMessageRendered: (messageEl, message) => {
+        addClipBadge(messageEl, message);
     }
+};
 
-    const titleRow = document.createElement('div');
-    titleRow.className = 'message-title';
+/**
+ * A plugin that formats the entire message, including role, title, and depth lines.
+ * @type {Plugin}
+ */
+const messageFramingPlugin = {
+    onFormatMessage: (message) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'message-wrapper';
 
-    const titleTextEl = document.createElement('div');
-    titleTextEl.className = 'message-title-text';
+        const depth = message.value.role !== 'user' ? message.depth : 0;
 
-    const roleEl = document.createElement('strong');
-    roleEl.textContent = message.value.role;
-    titleTextEl.appendChild(roleEl);
-
-    // Display agent and model details for assistant/tool messages.
-    if (message.value.role === 'assistant' || message.value.role === 'tool') {
-        const details = [];
-    
-        if (message.agent && this.agentManager) {
-            const agent = this.agentManager.getAgent(message.agent);
-            if (agent?.name) details.push(agent.name);
+        if (depth > 0) {
+            const linesContainer = document.createElement('div');
+            linesContainer.className = 'depth-lines';
+            for (let i = 0; i < depth; i++) {
+                const line = document.createElement('div');
+                line.className = 'depth-line';
+                line.style.left = `${i * 20 + 10}px`;
+                linesContainer.appendChild(line);
+            }
+            wrapper.appendChild(linesContainer);
         }
-        
-        if (message.value.model) details.push(message.value.model);
-        
-        if (details.length > 0) {
-            const detailsEl = document.createElement('span');
-            detailsEl.className = 'message-details';
-            detailsEl.textContent = details.join(' - ');
-            titleTextEl.appendChild(detailsEl);
+
+        const el = document.createElement('div');
+        el.classList.add('message', `role-${message.value.role}`);
+        if (depth > 0) {
+            el.style.marginLeft = `${depth * 20}px`;
         }
+
+        const titleRow = document.createElement('div');
+        titleRow.className = 'message-title';
+
+        const titleTextEl = document.createElement('div');
+        titleTextEl.className = 'message-title-text';
+
+        const roleEl = document.createElement('strong');
+        roleEl.textContent = message.value.role;
+        titleTextEl.appendChild(roleEl);
+
+        if (message.value.role === 'assistant' || message.value.role === 'tool') {
+            const details = [];
+            if (message.agent && pluginManager.app.agentManager) {
+                const agent = pluginManager.app.agentManager.getAgent(message.agent);
+                if (agent?.name) details.push(agent.name);
+            }
+            if (message.value.model) details.push(message.value.model);
+            if (details.length > 0) {
+                const detailsEl = document.createElement('span');
+                detailsEl.className = 'message-details';
+                detailsEl.textContent = details.join(' - ');
+                titleTextEl.appendChild(detailsEl);
+            }
+        }
+
+        titleRow.appendChild(titleTextEl);
+
+        const contentEl = pluginManager.trigger('onFormatMessageContent', message);
+        el.appendChild(titleRow);
+        el.appendChild(contentEl);
+
+        pluginManager.trigger('onMessageRendered', el, message);
+
+        wrapper.appendChild(el);
+        return wrapper;
     }
+};
 
-    titleRow.appendChild(titleTextEl);
+/**
+ * A plugin that formats the message content.
+ * @type {Plugin}
+ */
+const messageContentFormattingPlugin = {
+    onFormatMessageContent: (message) => {
+        if (message.cache) {
+            return message.cache;
+        }
 
-    const contentEl = formatMessageContent(message);
+        const messageEl = document.createElement('div');
+        messageEl.className = 'message-content';
 
-    el.appendChild(titleRow);
-    el.appendChild(contentEl);
+        let html = message.value.content || '';
+        html = pluginManager.trigger('onPreprocessMessageContent', html);
+        html = pluginManager.trigger('onRenderMessageContent', html);
 
-    // Hook for adding controls (e.g., edit/delete buttons) after the message is rendered.
-    pluginManager.trigger('onMessageRendered', el, message);
+        messageEl.innerHTML = html;
 
-    addClipBadge(el, message);
+        messageEl.querySelectorAll('.katex').forEach((elem) => {
+            const annotation = elem.querySelector('annotation[encoding="application/x-tex"]');
+            if (annotation) {
+                const latex = annotation.textContent.trim();
+                elem.dataset.plaintext = encodeURIComponent(latex);
+                annotation.remove();
+                if (elem.parentElement.classList.contains('katex-display')) {
+                    elem.classList.remove('hljs', 'language-latex', 'katex-display', 'katex');
+                    const div = document.createElement('div');
+                    div.classList.add('hljs', 'language-latex');
+                    div.dataset.plaintext = encodeURIComponent(latex);
+                    const container = elem.parentElement;
+                    container.parentElement.insertBefore(div, container);
+                    container.parentElement.removeChild(container);
+                    div.appendChild(container);
+                }
+            }
+        });
 
-    wrapper.appendChild(el);
+        message.cache = messageEl;
+        return messageEl;
+    }
+};
 
-    return wrapper;
-}
+// Register all formatting plugins
+pluginManager.register(svgNormalizationPlugin);
+pluginManager.register(markdownRenderingPlugin);
+pluginManager.register(clipBadgePlugin);
+pluginManager.register(messageFramingPlugin);
+pluginManager.register(messageContentFormattingPlugin);
