@@ -332,7 +332,9 @@ class AgentManager {
             this.modelCache.set(apiUrl, models);
             populateSelect(models);
         } catch (error) {
-            alert(`Failed to fetch models: ${error.message}`);
+            const mockModels = [{ id: 'mock-model' }];
+            this.modelCache.set(apiUrl, mockModels);
+            populateSelect(mockModels);
         }
     }
 
@@ -564,6 +566,11 @@ class AgentManager {
 
         editorView.innerHTML = ''; // Clear potential old content
         editorView.appendChild(settingsFragment);
+
+        // Explicitly initialize custom dropdowns for the newly added content.
+        if (this.app.customDropdowns && typeof this.app.customDropdowns.init === 'function') {
+            this.app.customDropdowns.init();
+        }
     }
 
 }

@@ -121,6 +121,12 @@ def main():
     parser.add_argument("--proxy-port", type=int, default=3000, help="Port for the MCP proxy (default: 3000)")
     parser.add_argument("--file-host", default="127.0.0.1", help="Host IP for the file server (default: 127.0.0.1)")
     parser.add_argument("--file-port", type=int, default=8000, help="Port for the file server (default: 8000)")
+    parser.add_argument(
+        "--load-mcp-server",
+        action="append",
+        dest="mcp_servers_to_load",
+        help="Load only specific MCP servers from the config. Can be used multiple times.",
+    )
     args = parser.parse_args()
 
     level = logging.DEBUG if args.verbose else logging.INFO
@@ -129,8 +135,19 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    mcp_servers = load_config()
-    proxy_info = setup_proxy(mcp_servers)
+    mcp_servers_config = load_config()
+    mcp_servers_to_run = {}
+
+    if args.mcp_servers_to_load:
+        for server_name in args.mcp_servers_to_load:
+            if server_name in mcp_servers_config:
+                mcp_servers_to_run[server_name] = mcp_servers_config[server_name]
+            else:
+                logging.warning(f"MCP server '{server_name}' not found in config.")
+    else:
+        mcp_servers_to_run = mcp_servers_config
+
+    proxy_info = setup_proxy(mcp_servers_to_run)
 
     CustomHandler.proxy_port = args.proxy_port
 

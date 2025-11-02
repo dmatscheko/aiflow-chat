@@ -1,176 +1,180 @@
 /**
- * @fileoverview A self-contained plugin that automatically converts all native
- * `<select>` elements into custom, styleable dropdowns. This is primarily to
- * work around the poor styling support for `<select>` on mobile devices and to
- * ensure a consistent look and feel across the application.
- *
- * This script is wrapped in an Immediately-Invoked Function Expression (IIFE)
- * to avoid polluting the global scope. It runs automatically upon being loaded,
- * finds all `<select>` elements on the page, and replaces them with custom-styled
- * markup that synchronizes with the original, now-hidden, `<select>` element.
- * A `MutationObserver` is used to also handle any `<select>` elements that are
- * added to the page dynamically after the initial load.
+ * @fileoverview A plugin that converts standard <select> elements into
+ * searchable and styleable custom dropdowns. This enhances usability for long
+ * lists of options. The plugin automatically activates for all single-choice
+ * <select> elements found on the page after a view is rendered.
+ * @version 1.2.0
  */
 
 'use strict';
+import { pluginManager } from '../plugin-manager.js';
 
-(function() {
-  /**
-   * Converts a single native `<select>` element into a custom dropdown component.
-   * It hides the original select, builds a new structure with a button and a list,
-   * and sets up event listeners to keep the original select's value in sync.
-   * If the element has already been converted, it does nothing.
-   * @param {HTMLSelectElement} select The original select element to be converted.
-   */
-  function convertSelect(select) {
-    if (select.classList.contains("original-select")) return; // already converted
-
-    // Defensively remove any orphaned dropdown for this select's ID
-    if (select.id) {
-        const orphan = document.querySelector(`.custom-dropdown[data-for-select="${select.id}"]`);
-        if (orphan) {
-            orphan.remove();
+/**
+ * Scans the DOM for undecorated <select> elements and initializes the
+ * custom dropdown functionality on them. It avoids re-initializing elements
+ * that have already been processed.
+ */
+function initializeCustomDropdowns() {
+    document.querySelectorAll('select:not([multiple])').forEach(select => {
+        // Check a data attribute to prevent re-initialization
+        if (select.dataset.customDropdownInitialized) {
+            return;
         }
-    }
-
-    const originalWidth = select.offsetWidth;
-    select.classList.add("original-select");
-
-    // Wrap label and select in a div for better layout control, if a label exists.
-    if (select.id) {
-        const label = document.querySelector(`label[for="${select.id}"]`);
-        if (label && label.parentNode) {
-            const controlWrapper = document.createElement('div');
-            controlWrapper.className = 'setting__control-wrapper';
-            // Insert the wrapper before the label and move the label and select inside
-            label.parentNode.insertBefore(controlWrapper, label);
-            controlWrapper.appendChild(label);
-            controlWrapper.appendChild(select);
-        }
-    }
-
-    // Create wrapper
-    const wrapper = document.createElement("div");
-    wrapper.className = "custom-dropdown";
-    if (select.id) {
-        wrapper.dataset.forSelect = select.id;
-    }
-
-    // Create button
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "dropdown-btn";
-    btn.textContent = select.options[select.selectedIndex]?.text || "Select...";
-    wrapper.appendChild(btn);
-
-    // Create list
-    const list = document.createElement("div");
-    list.className = "dropdown-list";
-    Array.from(select.options).forEach(option => {
-      const item = document.createElement("div");
-      item.className = "dropdown-item";
-      item.textContent = option.text;
-      item.dataset.value = option.value;
-
-      if (option.selected) {
-          item.classList.add('selected');
-      }
-
-      item.addEventListener("click", () => {
-        // Update selected state in custom dropdown
-        list.querySelectorAll('.dropdown-item').forEach(i => i.classList.remove('selected'));
-        item.classList.add('selected');
-
-        // Update original select and fire change event
-        btn.textContent = option.text;
-        select.value = option.value;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-        list.classList.remove("show");
-      });
-      list.appendChild(item);
+        createCustomDropdown(select);
     });
-    wrapper.appendChild(list);
+}
 
-    // Set the wrapper's min-width. The button is 100% of the wrapper.
-    wrapper.style.minWidth = `${originalWidth}px`;
+pluginManager.register({
+    name: 'Custom Dropdowns',
+    /**
+     * Exposes the initialization function globally so other plugins can call it
+     * after creating dynamic content.
+     */
+    onAppInit(app) {
+        // Ensure a global namespace for our plugin exists
+        app.customDropdowns = app.customDropdowns || {};
+        app.customDropdowns.init = initializeCustomDropdowns;
+    },
+    /**
+     * Initializes dropdowns for the main view when it's first rendered.
+     */
+    onAfterViewRendered(view) {
+        initializeCustomDropdowns();
+    }
+});
 
-    // Toggle open/close
-    btn.addEventListener("click", (e) => {
-        e.stopPropagation(); // Stop click from bubbling to document
-        // Close other dropdowns
-        document.querySelectorAll('.custom-dropdown .dropdown-list.show').forEach(l => {
-            if (l !== list) {
-                l.classList.remove('show');
+
+/**
+ * Creates and manages a custom dropdown element that replaces a standard <select>.
+ * @param {HTMLSelectElement} selectElement The original <select> element to replace.
+ */
+function createCustomDropdown(selectElement) {
+    // Mark as initialized to prevent redundant setup
+    selectElement.dataset.customDropdownInitialized = 'true';
+
+    // Create main container
+    const container = document.createElement('div');
+    container.className = 'custom-dropdown-container';
+
+    // Create the button that shows the selected value and toggles the dropdown
+    const button = document.createElement('button');
+    button.className = 'custom-dropdown-button';
+    button.type = 'button'; // Prevent form submission
+    button.innerHTML = `<span class="custom-dropdown-value"></span><i class="icon arrow-down"></i>`;
+
+    // Create the panel that holds the search box and options
+    const dropdownPanel = document.createElement('div');
+    dropdownPanel.className = 'custom-dropdown-panel';
+
+    // Create a search input for filtering options
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.className = 'custom-dropdown-search';
+    searchInput.placeholder = 'Search...';
+    dropdownPanel.appendChild(searchInput);
+
+    // Create the list that will hold the dropdown items
+    const dropdownList = document.createElement('div');
+    dropdownList.className = 'custom-dropdown-list';
+    dropdownPanel.appendChild(dropdownList);
+
+    container.appendChild(button);
+    container.appendChild(dropdownPanel);
+
+    // Replace the original select element with the new custom dropdown
+    selectElement.style.display = 'none';
+    selectElement.parentNode.insertBefore(container, selectElement.nextSibling);
+
+    const valueElement = button.querySelector('.custom-dropdown-value');
+
+    /**
+     * Synchronizes the custom dropdown's UI with the state of the original
+     * <select> element (its options and selected value).
+     */
+    function syncCustomDropdown() {
+        dropdownList.innerHTML = '';
+        const selectedOption = selectElement.querySelector('option:checked');
+
+        // Update the button text to the selected option, or a placeholder
+        if (selectedOption) {
+            valueElement.textContent = selectedOption.textContent;
+            valueElement.dataset.value = selectedOption.value;
+        } else {
+            valueElement.textContent = selectElement.getAttribute('placeholder') || 'Select an option';
+            valueElement.dataset.value = '';
+        }
+
+        // Create a list item for each option in the original select
+        selectElement.querySelectorAll('option').forEach(option => {
+            const item = document.createElement('div');
+            item.className = 'custom-dropdown-item';
+            item.textContent = option.textContent;
+            item.dataset.value = option.value;
+
+            if (option.selected) {
+                item.classList.add('selected');
             }
+
+            // Handle clicks on an item
+            item.addEventListener('click', () => {
+                selectElement.value = option.value;
+                const changeEvent = new Event('change', { bubbles: true });
+                selectElement.dispatchEvent(changeEvent);
+                syncCustomDropdown();
+                closeDropdown();
+            });
+            dropdownList.appendChild(item);
         });
-        list.classList.toggle("show");
+    }
+
+    /** Toggles the visibility of the dropdown panel. */
+    function toggleDropdown() {
+        container.classList.toggle('open');
+    }
+
+    /** Closes the dropdown panel. */
+    function closeDropdown() {
+        container.classList.remove('open');
+    }
+
+    // Initial population of the custom dropdown
+    syncCustomDropdown();
+
+    // Event listener to toggle the dropdown when the button is clicked
+    button.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleDropdown();
     });
 
-
-    // Insert into DOM and hide original select
-    select.parentNode.insertBefore(wrapper, select);
-    wrapper.appendChild(select); // Move original select into wrapper
-  }
-
-  // A global click listener to close any open dropdowns when the user clicks elsewhere.
-  document.addEventListener("click", () => {
-      document.querySelectorAll('.custom-dropdown .dropdown-list.show').forEach(list => {
-        list.classList.remove("show");
-      });
-  });
-
-
-  /**
-   * Initializes the custom dropdown functionality. It performs an initial conversion
-   * of all `<select>` elements currently in the DOM and then sets up a
-   * `MutationObserver` to automatically convert any `<select>` elements that are
-   * dynamically added later. It also handles reconversion if an existing
-   * select's options are modified.
-   */
-  function init() {
-    // Convert all selects on page
-    document.querySelectorAll("select").forEach(convertSelect);
-
-    // Watch for new selects being added or options changing in existing ones
-    const observer = new MutationObserver(mutations => {
-      for (const m of mutations) {
-        // Case 1: A new <select> element is added to the DOM
-        for (const node of m.addedNodes) {
-          if (node.nodeType === 1) { // ELEMENT_NODE
-            if (node.tagName === "SELECT") {
-              convertSelect(node);
-            } else if (node.querySelectorAll) {
-              node.querySelectorAll("select").forEach(convertSelect);
-            }
-          }
-        }
-
-        // Case 2: The options of a converted <select> have changed
-        if (m.type === 'childList' && m.target.tagName === 'SELECT' && m.target.classList.contains('original-select')) {
-            const select = m.target;
-            const customDropdownWrapper = select.closest('.custom-dropdown');
-            if (customDropdownWrapper && customDropdownWrapper.parentNode) {
-                // The select is inside the custom dropdown. Move it out before removing the wrapper.
-                customDropdownWrapper.parentNode.insertBefore(select, customDropdownWrapper);
-                customDropdownWrapper.remove();
-
-                // Re-run the conversion. First, remove the class so the guard clause passes.
-                select.classList.remove('original-select');
-                convertSelect(select);
-            }
-        }
-      }
+    // Event listener for the search input to filter options
+    searchInput.addEventListener('input', () => {
+        const searchTerm = searchInput.value.toLowerCase();
+        dropdownList.querySelectorAll('.custom-dropdown-item').forEach(item => {
+            const text = item.textContent.toLowerCase();
+            item.style.display = text.includes(searchTerm) ? '' : 'none';
+        });
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
-  }
+    // Use MutationObserver to watch for changes in the original select element
+    const observer = new MutationObserver((mutationsList) => {
+        for (const mutation of mutationsList) {
+            // Re-sync if options are added/removed or attributes change
+            if (mutation.type === 'childList' || mutation.type === 'attributes') {
+                syncCustomDropdown();
+            }
+        }
+    });
 
-  // Since this script is loaded as a module and main.js waits for DOMContentLoaded,
-  // we can reasonably expect the body to be present.
-  if (document.body) {
-    init();
-  } else {
-    document.addEventListener('DOMContentLoaded', init);
-  }
+    observer.observe(selectElement, {
+        childList: true,
+        attributes: true,
+        subtree: true // For changes on option elements
+    });
 
-})();
+    // Close the dropdown if a click occurs outside of it
+    document.addEventListener('click', (e) => {
+        if (!container.contains(e.target)) {
+            closeDropdown();
+        }
+    });
+}

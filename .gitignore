@@ -5,3 +5,5 @@ __pycache__/
 _test/
 
 .DS_Store
+
+verification/
