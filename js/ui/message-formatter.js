@@ -1,8 +1,5 @@
 /**
- * @fileoverview A collection of plugins for formatting message content.
- * This file is organized into multiple small, focused plugins that are each
- * registered with the plugin manager. This modular approach allows for a clear
- * separation of concerns and makes the formatting pipeline easier to manage and extend.
+ * @fileoverview A collection of message formatter.
  */
 
 'use strict';
@@ -20,7 +17,7 @@ import { decodeHTMLEntities } from '../utils.js';
 
 const clipBadge = new ClipBadge({ autoRun: false });
 
-// --- Pre-Markdown Formatting Plugins ---
+// --- Pre-Markdown Formatting ---
 
 /**
  * Normalizing SVG content before Markdown rendering.
