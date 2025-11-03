@@ -23,26 +23,18 @@ class MockAIHandler(http.server.SimpleHTTPRequestHandler):
             content_length = int(self.headers['Content-Length'])
             post_data = self.rfile.read(content_length)
             request_body = json.loads(post_data.decode('utf-8'))
-            print(f"Request body: {request_body}", flush=True)
+            print(f"Request body: {request_body}")
 
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self._set_headers()
             self.end_headers()
 
-            # Default response
             response_text = f"AI response to request: {json.dumps(request_body)}"
-
-            # More sophisticated logic to handle the conversation flow
-            last_message = request_body["messages"][-1]
-
-            # Simplified logic for testing: if the last message is from a user,
-            # assume it's the date/time question and respond with a tool call.
-            # Otherwise, if it's a tool response, give the final answer.
-            if last_message.get("role") == "tool":
-                response_text = "The current date and time has been provided by the tool."
-            else: # Assume it's a user message
-                response_text = '<dma:tool_call name="get_datetime"/>'
+            for message in request_body["messages"]:
+                if "what's the current date and time?" in message["content"].lower():
+                    response_text = '<dma:tool_call name="dt_get_current_datetime"/>'
+                    break
 
             if self.max_len is not None and len(response_text) > self.max_len:
                 response_text = response_text[:self.max_len] + "..."
@@ -56,7 +48,7 @@ class MockAIHandler(http.server.SimpleHTTPRequestHandler):
                     }
                 ]
             }
-            time.sleep(0.1)
+            time.sleep(0.1) # Add a small delay to prevent race conditions
             self.wfile.write(f"data: {json.dumps(delta)}\n\n".encode('utf-8'))
             self.wfile.write(b"data: [DONE]\n\n")
             self.wfile.flush()
@@ -90,8 +82,6 @@ def main():
 
     MockAIHandler.max_len = args.max_len
 
-    # This allows reusing the address, preventing the "Address already in use" error
-    socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("", args.port), MockAIHandler) as httpd:
         print(f"Serving at port {args.port}")
         httpd.serve_forever()

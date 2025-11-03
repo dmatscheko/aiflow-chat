@@ -8,7 +8,7 @@ def test_tool_chaining_and_final_response(page: Page):
     It performs the following steps:
     1. Navigates to the application.
     2. Configures the "Default Agent" to use the mock AI backend and the local MCP server.
-    3. Switches back to the a new chat to ensure a clean state.
+    3. Switches back to the chat view and starts a new conversation.
     4. Sends a message that is expected to trigger a tool call ('datetime_get_current_datetime').
     5. Verifies that the chat history correctly displays:
         a. The initial user message.
@@ -27,19 +27,22 @@ def test_tool_chaining_and_final_response(page: Page):
     page.get_by_role("listitem").filter(has_text="Default Agent").click()
 
     # Wait for the agent editor to fully load.
-    page.wait_for_timeout(5000)
-
-    # Use evaluate to call the internal updateAgentProperty function directly
-    page.evaluate("window.app.agentManager.updateAgentProperty('agent-default', 'modelSettings.apiUrl', 'http://127.0.0.1:8080')")
-
-    # Now that the API URL is set, call fetchModels directly
-    page.evaluate("window.app.agentManager.fetchModels('agent-default')")
-
-    # Wait for the MutationObserver in custom-dropdown-plugin.js to update the UI
     page.wait_for_timeout(1000)
+
+    # Fill in the API URL for the mock AI backend.
+    page.get_by_label("API URL").fill("http://127.0.0.1:8080")
+
+    # Check the "Model" checkbox to enable the refresh button
+    page.get_by_label("Model:").check()
+
+    # Click the "Refresh" button to load the models from the mock backend.
+    page.get_by_role("button", name="Refresh").first.click()
 
     # Open the "Model" dropdown.
     page.locator("button.dropdown-btn").first.click()
+
+    # Wait for the model list to be populated and visible.
+    page.wait_for_selector('div.dropdown-item[data-value="qwen/qwen3-30b-a3b-2507"]')
 
     # Select the desired model from the dropdown.
     page.locator('div.dropdown-item[data-value="qwen/qwen3-30b-a3b-2507"]').click()
@@ -66,7 +69,7 @@ def test_tool_chaining_and_final_response(page: Page):
 
     # Wait for and verify the assistant's tool call message.
     assistant_tool_call_message = page.locator(".message.assistant .content").last
-    expect(assistant_tool_call_message).to_contain_text('<dma:tool_call name="dt_get_current_datetime"', timeout=10000)
+    expect(assistant_tool_call_message).to_contain_text('<dma:tool_call name="get_datetime"', timeout=10000)
 
     # Wait for and verify the tool's response message.
     tool_response_message = page.locator(".message.role-tool .content").last
@@ -74,8 +77,8 @@ def test_tool_chaining_and_final_response(page: Page):
 
     # Wait for and verify the final assistant response.
     final_assistant_response = page.locator(".message.role-assistant .content").last
-    # The mock response is generic, so we check for its signature text.
-    expect(final_assistant_response).to_contain_text("AI response to request:", timeout=10000)
+    # The mock response is now specific, so we check for its signature text.
+    expect(final_assistant_response).to_contain_text("The current date and time has been provided by the tool.", timeout=10000)
 
     # 4. Screenshot: Capture the final state for visual verification.
     page.screenshot(path="verification.png")

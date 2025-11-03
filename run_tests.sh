@@ -6,19 +6,22 @@ set -e
 # Define a cleanup function to be called on exit
 cleanup() {
     echo "Cleaning up..."
-    # Kill the background processes using their PIDs
-    if [ -n "$MOCK_PID" ]; then
-        kill $MOCK_PID
-    fi
-    if [ -n "$MAIN_PID" ]; then
-        kill $MAIN_PID
-    fi
+    # Kill servers by process name, which is more robust
+    pkill -f "python mock_ai_backend.py" || true
+    pkill -f "uv run main.py" || true
+
     # Remove the temporary test configuration file
     if [ -f "mcp_config.test.json" ]; then
         rm mcp_config.test.json
     fi
     echo "Cleanup complete."
 }
+
+# Ensure servers from previous runs are stopped
+pkill -f "python mock_ai_backend.py" || true
+pkill -f "uv run main.py" || true
+# Add a small delay to allow ports to be released
+sleep 1
 
 # Register the cleanup function to be called on script exit or interruption
 trap cleanup EXIT
@@ -44,7 +47,8 @@ sleep 5
 
 # 4. Run the Playwright test script
 echo "Running Playwright test..."
-python playwright_test.py
+python playwright_test.py || (cat mock_backend.log && exit 1)
+
 
 # The script will exit here, and the 'trap' will call the cleanup function.
 echo "Test script finished."
