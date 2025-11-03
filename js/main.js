@@ -302,5 +302,6 @@ class App {
 
 // Instantiate the App class once the DOM is fully loaded.
 document.addEventListener('DOMContentLoaded', () => {
-    new App();
+    const app = new App();
+    window.app = app; // Expose app for debugging and testing
 });
