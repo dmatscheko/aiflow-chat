@@ -1,0 +1,2 @@
+127.0.0.1 - - [03/Nov/2025 15:59:09] code 501, message Unsupported method ('OPTIONS')
+127.0.0.1 - - [03/Nov/2025 15:59:09] "OPTIONS /v1/models HTTP/1.1" 501 -
