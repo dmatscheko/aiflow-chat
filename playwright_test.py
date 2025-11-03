@@ -71,22 +71,22 @@ def test_tool_chaining_and_final_response(page: Page):
     chat_input.press("Enter")
 
     # 3. Assert: Verify the sequence of messages in the chat history.
+    # The mock backend is very fast, so we wait for the final message and then verify the sequence.
 
-    # Wait for and verify the initial user message.
-    expect(page.locator(".message.role-user .message-content").last).to_have_text("What's the current date and time?", timeout=5000)
+    # Wait for the final assistant text response to ensure the entire sequence is complete.
+    final_assistant_response = page.locator(".message.role-assistant .content").last
+    expect(final_assistant_response).to_contain_text("The current date and time has been provided by the tool.", timeout=10000)
 
-    # Wait for and verify the assistant's tool call message.
-    assistant_tool_call_message = page.locator(".message.assistant .content").last
+    # Verify the tool's JSON response (second-to-last message).
+    tool_response_message = page.locator(".message.role-tool .content").last
+    expect(tool_response_message).to_contain_text('"text": "', timeout=5000)
+
+    # Verify the assistant's tool call message (the first assistant message).
+    assistant_tool_call_message = page.locator(".message.role-assistant .content").first
     expect(assistant_tool_call_message).to_contain_text('<dma:tool_call name="dt_get_datetime"', timeout=10000)
 
-    # Wait for and verify the tool's response message.
-    tool_response_message = page.locator(".message.role-tool .content").last
-    expect(tool_response_message).to_contain_text('"text": "', timeout=5000) # Check for the JSON structure.
-
-    # Wait for and verify the final assistant response.
-    final_assistant_response = page.locator(".message.role-assistant .content").last
-    # The mock response is now specific, so we check for its signature text.
-    expect(final_assistant_response).to_contain_text("The current date and time has been provided by the tool.", timeout=10000)
+    # Verify the initial user message.
+    expect(page.locator(".message.role-user .message-content").last).to_have_text("What's the current date and time?", timeout=5000)
 
     # 4. Screenshot: Capture the final state for visual verification.
     page.screenshot(path="verification.png")
