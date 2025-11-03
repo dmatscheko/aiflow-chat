@@ -50,6 +50,14 @@ def test_tool_chaining_and_final_response(page: Page):
     # Fill in the MCP Server URL.
     page.get_by_label("MCP Server URL").fill("http://127.0.0.1:3000/mcp")
 
+    # CRITICAL: Click the second "Refresh" button to load the tool definitions from the MCP server.
+    page.get_by_role("button", name="Refresh").last.click()
+
+    # Wait for the tool list to be populated by looking for the specific tool label within its container.
+    tool_label_selector = '#agent-agent-default-toolSettings-allowed label:has-text("dt_get_datetime")'
+    expect(page.locator(tool_label_selector)).to_be_visible(timeout=10000)
+    page.screenshot(path="verification_debug_tools.png") # For verification
+
     # Click the "Chats" tab to return to the main chat view.
     page.get_by_role("button", name="Chats").click()
 
@@ -69,7 +77,7 @@ def test_tool_chaining_and_final_response(page: Page):
 
     # Wait for and verify the assistant's tool call message.
     assistant_tool_call_message = page.locator(".message.assistant .content").last
-    expect(assistant_tool_call_message).to_contain_text('<dma:tool_call name="get_datetime"', timeout=10000)
+    expect(assistant_tool_call_message).to_contain_text('<dma:tool_call name="dt_get_datetime"', timeout=10000)
 
     # Wait for and verify the tool's response message.
     tool_response_message = page.locator(".message.role-tool .content").last

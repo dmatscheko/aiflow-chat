@@ -42,7 +42,7 @@ class MockAIHandler(http.server.SimpleHTTPRequestHandler):
             if last_message.get("role") == "tool":
                 response_text = "The current date and time has been provided by the tool."
             else: # Assume it's a user message
-                response_text = '<dma:tool_call name="get_datetime"/>'
+                response_text = '<dma:tool_call name="dt_get_datetime"/>'
 
             if self.max_len is not None and len(response_text) > self.max_len:
                 response_text = response_text[:self.max_len] + "..."

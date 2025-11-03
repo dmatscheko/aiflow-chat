@@ -1,5 +1,5 @@
-2025-11-03 20:25:52,740 - INFO - WEB: Serving static files at http://127.0.0.1:8000
-(B)0[?1049h[1;24r[m[4l[?1h=[?1h=[39;49m[39;49m[37m[40m[1;1H                                                                                [2;1H                                                                                [3;1H                                                                                [4;1H                                                                                [5;1H                                                                                [6;1H                                                                                [7;1H                                                                                [8;1H                                                                                [9;1H                                                                                [10;1H                                                                                [11;1H                                                                                [12;1H                                                                                [13;1H                                                                                [14;1H                                                                                [15;1H                                                                                [16;1H                                                                                [17;1H                                                                                [18;1H                                                                                [19;1H                                                                                [20;1H                                                                                [21;1H                                                                                [22;1H                                                                                [23;1H                                                                                [24;1H                                                                                [1@[37m[40m [H[m[39;49m[37m[40m[39;49m[37m[40m                                                                                [2;1H                                                                                [3;1H                                                                                [4;1H                                                                                [5;1H                                                                                [6;1H                                                                                [7;1H                                                                                [8;1H                                                                                [9;1H                                                                                [10;1H                                                                                [11;1H                                                                                [12;1H                                                                                [13;1H                                                                                [14;1H                                                                                [15;1H                                                                                [16;1H                                                                                [17;1H                                                                                [18;1H                                                                                [19;1H                                                                                [20;1H                                                                                [21;1H                                                                                [22;1H                                                                                [23;1H                                                                                [24;1H                                                                                [1@ [H[39;49m[m[22d[93m[44mGetting http://127.0.0.1:8000/                                                  [22;31H[39;49m[m[93m[44mLooking up 127.0.0.1:8000     [26G[39;49m[m[93m[44mMaking HTTP connection to 127.0.0.1:8000[39;49m[m[24d[24;1H[?1049l[?1l>2025-11-03 20:25:52,774 - INFO - MCP: Starting proxy at http://127.0.0.1:3000/mcp
+2025-11-03 21:02:08,166 - INFO - WEB: Serving static files at http://127.0.0.1:8000
+(B)0[?1049h[1;24r[m[4l[?1h=[?1h=[39;49m[39;49m[37m[40m[1;1H                                                                                [2;1H                                                                                [3;1H                                                                                [4;1H                                                                                [5;1H                                                                                [6;1H                                                                                [7;1H                                                                                [8;1H                                                                                [9;1H                                                                                [10;1H                                                                                [11;1H                                                                                [12;1H                                                                                [13;1H                                                                                [14;1H                                                                                [15;1H                                                                                [16;1H                                                                                [17;1H                                                                                [18;1H                                                                                [19;1H                                                                                [20;1H                                                                                [21;1H                                                                                [22;1H                                                                                [23;1H                                                                                [24;1H                                                                                [1@[37m[40m [H[m[39;49m[37m[40m[39;49m[37m[40m                                                                                [2;1H                                                                                [3;1H                                                                                [4;1H                                                                                [5;1H                                                                                [6;1H                                                                                [7;1H                                                                                [8;1H                                                                                [9;1H                                                                                [10;1H                                                                                [11;1H                                                                                [12;1H                                                                                [13;1H                                                                                [14;1H                                                                                [15;1H                                                                                [16;1H                                                                                [17;1H                                                                                [18;1H                                                                                [19;1H                                                                                [20;1H                                                                                [21;1H                                                                                [22;1H                                                                                [23;1H                                                                                [24;1H                                                                                [1@ [H[39;49m[m[22d[93m[44mGetting http://127.0.0.1:8000/                                                  [22;31H[39;49m[m[93m[44mLooking up 127.0.0.1:8000     [26G[39;49m[m[93m[44mMaking HTTP connection to 127.0.0.1:8000[39;49m[m[24d[24;1H[?1049l[?1l>2025-11-03 21:02:08,204 - INFO - MCP: Starting proxy at http://127.0.0.1:3000/mcp
 
 
 ╭──────────────────────────────────────────────────────────────────────────────╮
@@ -21,57 +21,57 @@
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
 
-[11/03/25 20:25:52] INFO     Starting MCP server 'Composite       server.py:2050
+[11/03/25 21:02:08] INFO     Starting MCP server 'Composite       server.py:2050
                              Proxy' with transport 'http' on
                              http://127.0.0.1:3000/mcp
-INFO:     Started server process [24215]
+INFO:     Started server process [27498]
 INFO:     Waiting for application startup.
-2025-11-03 20:25:52,847 - INFO - StreamableHTTP session manager started
+2025-11-03 21:02:08,248 - INFO - StreamableHTTP session manager started
 INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:3000 (Press CTRL+C to quit)
-2025-11-03 20:25:57,626 - INFO - WEB: "GET / HTTP/1.1" 200 -
-2025-11-03 20:25:57,647 - INFO - WEB: "GET /css/3rdparty/hljs_androidstudio.min.css HTTP/1.1" 200 -
-2025-11-03 20:25:57,648 - INFO - WEB: "GET /css/styles.css HTTP/1.1" 200 -
-2025-11-03 20:25:57,648 - INFO - WEB: "GET /css/mobile.css HTTP/1.1" 200 -
-2025-11-03 20:25:57,649 - INFO - WEB: "GET /js/3rdparty/katex.min.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,650 - INFO - WEB: "GET /js/3rdparty/auto-render.min.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,651 - INFO - WEB: "GET /js/3rdparty/markdown-it.min.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,654 - INFO - WEB: "GET /js/3rdparty/highlight.min.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,660 - INFO - WEB: "GET /js/3rdparty/gpt-tokenizer_3.2.0.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,668 - INFO - WEB: "GET /js/main.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,982 - INFO - WEB: "GET /js/api-service.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,983 - INFO - WEB: "GET /js/plugin-manager.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,983 - INFO - WEB: "GET /js/settings-manager.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,984 - INFO - WEB: "GET /js/response-processor.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,984 - INFO - WEB: "GET /js/ui/right-panel-manager.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,985 - INFO - WEB: "GET /js/ui/top-panel-manager.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,988 - INFO - WEB: "GET /js/plugins/chats-plugin.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,990 - INFO - WEB: "GET /js/plugins/agents-plugin.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,991 - INFO - WEB: "GET /js/plugins/agents-call-plugin.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,991 - INFO - WEB: "GET /js/plugins/flows-plugin.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,992 - INFO - WEB: "GET /js/plugins/mcp-plugin.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,992 - INFO - WEB: "GET /js/plugins/mobile-style-plugin.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,997 - INFO - WEB: "GET /js/plugins/custom-dropdown-plugin.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,998 - INFO - WEB: "GET /js/plugins/ui-controls-plugin.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,999 - INFO - WEB: "GET /js/plugins/autoresize-textarea-plugin.js HTTP/1.1" 200 -
-2025-11-03 20:25:57,999 - INFO - WEB: "GET /js/plugins/token-counter-plugin.js HTTP/1.1" 200 -
-2025-11-03 20:25:58,000 - INFO - WEB: "GET /js/ui/ui-elements.js HTTP/1.1" 200 -
-2025-11-03 20:25:58,001 - INFO - WEB: "GET /js/data-manager.js HTTP/1.1" 200 -
-2025-11-03 20:25:58,005 - INFO - WEB: "GET /js/utils.js HTTP/1.1" 200 -
-2025-11-03 20:25:58,005 - INFO - WEB: "GET /js/chat-data.js HTTP/1.1" 200 -
-2025-11-03 20:25:58,006 - INFO - WEB: "GET /js/ui/message-formatter.js HTTP/1.1" 200 -
-2025-11-03 20:25:58,006 - INFO - WEB: "GET /js/tool-processor.js HTTP/1.1" 200 -
-2025-11-03 20:25:58,006 - INFO - WEB: "GET /js/plugins/flows-plugin-step-definitions.js HTTP/1.1" 200 -
-2025-11-03 20:25:58,013 - INFO - WEB: "GET /js/ui/clipbadge.js HTTP/1.1" 200 -
-2025-11-03 20:25:58,014 - INFO - WEB: "GET /js/3rdparty/markdown-it-katex.js HTTP/1.1" 200 -
-2025-11-03 20:25:58,014 - INFO - WEB: "GET /js/ui/markdown-it-details-wrapper.js HTTP/1.1" 200 -
-INFO:     127.0.0.1:58530 - "OPTIONS /mcp HTTP/1.1" 200 OK
-2025-11-03 20:25:59,660 - INFO - Created new transport with session ID: 7ad5961d2d114a63942c2e866cc06535
-INFO:     127.0.0.1:58538 - "POST /mcp HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58538 - "OPTIONS /mcp HTTP/1.1" 200 OK
-INFO:     127.0.0.1:58530 - "POST /mcp HTTP/1.1" 202 Accepted
-INFO:     127.0.0.1:58530 - "POST /mcp HTTP/1.1" 200 OK
-2025-11-03 20:25:59,672 - INFO - Processing request of type ListToolsRequest
+2025-11-03 21:02:13,209 - INFO - WEB: "GET / HTTP/1.1" 200 -
+2025-11-03 21:02:13,225 - INFO - WEB: "GET /css/3rdparty/hljs_androidstudio.min.css HTTP/1.1" 200 -
+2025-11-03 21:02:13,226 - INFO - WEB: "GET /css/styles.css HTTP/1.1" 200 -
+2025-11-03 21:02:13,227 - INFO - WEB: "GET /css/mobile.css HTTP/1.1" 200 -
+2025-11-03 21:02:13,228 - INFO - WEB: "GET /js/3rdparty/katex.min.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,231 - INFO - WEB: "GET /js/3rdparty/auto-render.min.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,231 - INFO - WEB: "GET /js/3rdparty/markdown-it.min.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,232 - INFO - WEB: "GET /js/3rdparty/highlight.min.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,240 - INFO - WEB: "GET /js/3rdparty/gpt-tokenizer_3.2.0.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,258 - INFO - WEB: "GET /js/main.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,677 - INFO - WEB: "GET /js/api-service.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,678 - INFO - WEB: "GET /js/plugin-manager.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,678 - INFO - WEB: "GET /js/settings-manager.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,679 - INFO - WEB: "GET /js/response-processor.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,679 - INFO - WEB: "GET /js/ui/right-panel-manager.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,680 - INFO - WEB: "GET /js/ui/top-panel-manager.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,688 - INFO - WEB: "GET /js/plugins/chats-plugin.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,690 - INFO - WEB: "GET /js/plugins/agents-plugin.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,691 - INFO - WEB: "GET /js/plugins/agents-call-plugin.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,692 - INFO - WEB: "GET /js/plugins/flows-plugin.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,693 - INFO - WEB: "GET /js/plugins/mcp-plugin.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,695 - INFO - WEB: "GET /js/plugins/mobile-style-plugin.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,700 - INFO - WEB: "GET /js/plugins/custom-dropdown-plugin.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,704 - INFO - WEB: "GET /js/plugins/ui-controls-plugin.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,706 - INFO - WEB: "GET /js/plugins/autoresize-textarea-plugin.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,707 - INFO - WEB: "GET /js/plugins/token-counter-plugin.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,707 - INFO - WEB: "GET /js/ui/ui-elements.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,709 - INFO - WEB: "GET /js/utils.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,713 - INFO - WEB: "GET /js/data-manager.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,716 - INFO - WEB: "GET /js/chat-data.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,716 - INFO - WEB: "GET /js/ui/message-formatter.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,717 - INFO - WEB: "GET /js/tool-processor.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,717 - INFO - WEB: "GET /js/plugins/flows-plugin-step-definitions.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,726 - INFO - WEB: "GET /js/ui/clipbadge.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,726 - INFO - WEB: "GET /js/3rdparty/markdown-it-katex.js HTTP/1.1" 200 -
+2025-11-03 21:02:13,727 - INFO - WEB: "GET /js/ui/markdown-it-details-wrapper.js HTTP/1.1" 200 -
+INFO:     127.0.0.1:38808 - "OPTIONS /mcp HTTP/1.1" 200 OK
+2025-11-03 21:02:15,298 - INFO - Created new transport with session ID: 7cb0dfa6170e4e0e8a893e6afba5e2b5
+INFO:     127.0.0.1:38818 - "POST /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38818 - "OPTIONS /mcp HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38808 - "POST /mcp HTTP/1.1" 202 Accepted
+INFO:     127.0.0.1:38808 - "POST /mcp HTTP/1.1" 200 OK
+2025-11-03 21:02:15,311 - INFO - Processing request of type ListToolsRequest
 
 
 ╭──────────────────────────────────────────────────────────────────────────────╮
@@ -92,14 +92,12 @@ INFO:     127.0.0.1:58530 - "POST /mcp HTTP/1.1" 200 OK
 ╰──────────────────────────────────────────────────────────────────────────────╯
 
 
-[11/03/25 20:26:03] INFO     Starting MCP server 'Date and Time   server.py:1966
+[11/03/25 21:02:16] INFO     Starting MCP server 'Date and Time   server.py:1966
                              Server' with transport 'stdio'
-INFO:     127.0.0.1:58530 - "POST /mcp HTTP/1.1" 200 OK
-2025-11-03 20:26:03,357 - INFO - Processing request of type CallToolRequest
 INFO:     Shutting down
 ERROR:    Cancel 0 running task(s), timeout graceful shutdown exceeded
 INFO:     Waiting for application shutdown.
-2025-11-03 20:26:10,068 - INFO - StreamableHTTP session manager shutting down
+2025-11-03 21:02:25,613 - INFO - StreamableHTTP session manager shutting down
 INFO:     Application shutdown complete.
-INFO:     Finished server process [24215]
-2025-11-03 20:26:10,068 - INFO - Shutting down gracefully
+INFO:     Finished server process [27498]
+2025-11-03 21:02:25,614 - INFO - Shutting down gracefully
