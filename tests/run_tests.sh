@@ -6,6 +6,14 @@ set -e
 # Change to the project root directory
 cd "$(dirname "$0")/.."
 
+# 1. Install test dependencies
+echo "Installing test dependencies from tests/requirements.txt..."
+pip install -r tests/requirements.txt
+
+# 2. Install Playwright browsers
+echo "Installing Playwright browsers..."
+playwright install
+
 # Define a cleanup function to be called on exit
 cleanup() {
     echo "Cleaning up..."

@@ -42,18 +42,21 @@ A (sometimes outdated) version is available for testing at: [https://huggingface
 
 ## Testing
 
-The project includes an end-to-end test suite using Playwright. To run the tests, execute the following command from the project root:
+The project includes a fully automated end-to-end test suite using Playwright.
+
+To run the entire test suite, simply execute the following command from any directory within the project:
 
 ```bash
 ./tests/run_tests.sh
 ```
 
-This script will:
-1.  Start a mock AI backend.
-2.  Start the main application server.
-3.  Run the Playwright tests.
-4.  Store all logs and test results (including screenshots) in the `test-results/` directory.
-5.  Clean up all running processes when the tests are complete.
+This script will handle everything for you:
+1.  **Install Dependencies**: It automatically installs `playwright` and any other required testing libraries from `tests/requirements.txt`.
+2.  **Setup Browsers**: It runs `playwright install` to download the necessary browser binaries for testing.
+3.  **Run Services**: It starts the mock AI backend and the main application server in the background.
+4.  **Execute Tests**: It runs the Playwright test script.
+5.  **Collect Results**: All logs, screenshots, and test outputs are saved to the `test-results/` directory.
+6.  **Cleanup**: It automatically shuts down all the background processes when the tests are finished.
 
 ## User Controls
 
