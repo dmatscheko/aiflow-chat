@@ -40,6 +40,21 @@ A (sometimes outdated) version is available for testing at: [https://huggingface
 3.  **Open the application**:
     Open `http://127.0.0.1:8000` in your web browser.
 
+## Testing
+
+The project includes an end-to-end test suite using Playwright. To run the tests, execute the following command from the project root:
+
+```bash
+./tests/run_tests.sh
+```
+
+This script will:
+1.  Start a mock AI backend.
+2.  Start the main application server.
+3.  Run the Playwright tests.
+4.  Store all logs and test results (including screenshots) in the `test-results/` directory.
+5.  Clean up all running processes when the tests are complete.
+
 ## User Controls
 
 -   **Chat Input**: Type your message in the text area at the bottom. Press `Enter` to send, or `Shift+Enter` to add a new line.

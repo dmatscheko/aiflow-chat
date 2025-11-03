@@ -89,7 +89,7 @@ def test_tool_chaining_and_final_response(page: Page):
     # Allow get_datetime
     page.get_by_label("get_datetime").check()
 
-    page.screenshot(path="verification_debug_tools.png")  # For verification
+    page.screenshot(path="test-results/verification_debug_tools.png")  # For verification
 
     # Click the "Chats" tab to return to the main chat view.
     page.get_by_role("button", name="Chats").click()
@@ -126,7 +126,7 @@ def test_tool_chaining_and_final_response(page: Page):
     expect(page.locator(".message.role-user .message-content").last).to_have_text("What's the current date and time?", timeout=3000)
 
     # 4. Screenshot: Capture the final state for visual verification.
-    page.screenshot(path="verification.png")
+    page.screenshot(path="test-results/verification.png")
 
 
 # Boilerplate to run the test from the command line.
@@ -138,11 +138,11 @@ if __name__ == "__main__":
         try:
             test_tool_chaining_and_final_response(page)
             print("Verification script finished successfully.")
-            print("Screenshot saved to 'verification.png'.")
+            print("Screenshot saved to 'test-results/verification.png'.")
         except Exception as e:
             print(f"An error occurred during the test: {e}")
-            page.screenshot(path="verification_error.png")
-            print("Error screenshot saved to 'verification_error.png'.")
+            page.screenshot(path="test-results/verification_error.png")
+            print("Error screenshot saved to 'test-results/verification_error.png'.")
             # input("Press Enter to close the browser...")  # Keeps window open
         finally:
             browser.close()

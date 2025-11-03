@@ -3,5 +3,6 @@ uv.lock
 __pycache__/
 
 _test/
+test-results/
 
 .DS_Store
