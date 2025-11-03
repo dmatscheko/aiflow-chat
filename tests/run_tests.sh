@@ -43,7 +43,7 @@ echo "Mock AI backend started with PID: $MOCK_PID"
 
 # 3. Start the main application server with the test MCP config using 'uv run'
 echo "Starting main application server..."
-MCP_CONFIG=test-results/mcp_config.test.json uv run main.py > test-results/main_server.log 2>&1 &
+MCP_CONFIG=test-results/mcp_config.test.json uv run main.py --no-browser > test-results/main_server.log 2>&1 &
 MAIN_PID=$!
 echo "Main server started with PID: $MAIN_PID"
 
