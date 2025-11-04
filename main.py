@@ -121,6 +121,7 @@ def main():
     parser.add_argument("--proxy-port", type=int, default=3000, help="Port for the MCP proxy (default: 3000)")
     parser.add_argument("--file-host", default="127.0.0.1", help="Host IP for the file server (default: 127.0.0.1)")
     parser.add_argument("--file-port", type=int, default=8000, help="Port for the file server (default: 8000)")
+    parser.add_argument("--no-browser", action="store_true", help="Do not open a web browser on startup")
     args = parser.parse_args()
 
     level = logging.DEBUG if args.verbose else logging.INFO
@@ -139,7 +140,8 @@ def main():
 
     threading.Thread(target=run_file_server, args=(args.file_host, args.file_port), daemon=True).start()
 
-    webbrowser.open(f"http://{file_log_host}:{args.file_port}")
+    if not args.no_browser:
+        webbrowser.open(f"http://{file_log_host}:{args.file_port}")
 
     if proxy_info:
         proxy, cors = proxy_info
