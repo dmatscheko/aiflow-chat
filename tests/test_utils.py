@@ -4,8 +4,7 @@ from playwright.sync_api import Page, expect
 def configure_agent(page: Page):
     """Configure the Default Agent with mock AI backend and local MCP server."""
     # Navigate to Agents tab
-    page.get_by_role("button", name="Agents").click()
-    expect(page.locator("#agents-pane.active")).to_be_visible(timeout=5000)
+    select_tab(page, "agent")
 
     # Select Default Agent
     page.get_by_role("listitem").filter(has_text="Default Agent").click()
@@ -55,3 +54,11 @@ def send_message(page: Page, message: str):
     expect(chat_input).to_be_visible(timeout=5000)
     chat_input.fill(message)
     chat_input.press("Enter")
+
+
+def select_tab(page: Page, tab_name: str):
+    """Click on a tab in the right panel."""
+    page.get_by_role("button", name=tab_name.capitalize() + "s").click()
+    pane_locator = page.locator(f"#{tab_name}s-pane.active")
+    expect(pane_locator).to_be_visible(timeout=5000)
+    expect(pane_locator.locator(".list-pane-footer button:has-text('Add New " + tab_name.capitalize() + "')")).to_be_visible(timeout=5000)
