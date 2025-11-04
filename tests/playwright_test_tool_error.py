@@ -16,20 +16,19 @@ def test_tool_error_response(page: Page):
 
     # Setup the agent to use the mock backend
     page.get_by_role("button", name="Agents").click()
-    page.wait_for_timeout(1000)
+    expect(page.locator("#agents-pane.active")).to_be_visible()
     page.get_by_role("listitem").filter(has_text="Default Agent").click()
-    page.wait_for_timeout(1000)
+    expect(page.locator("#agent-editor-container")).to_be_visible()
     page.get_by_label("API URL").fill("http://127.0.0.1:8080")
     page.get_by_label("Model:").check()
-    page.wait_for_timeout(100)
-    page.get_by_role("button", name="Refresh").first.click()
-    page.wait_for_timeout(1000)
+    refresh_button = page.get_by_role("button", name="Refresh").first
+    expect(refresh_button).to_be_enabled()
+    refresh_button.click()
     page.locator("button.dropdown-btn").first.click()
     page.wait_for_selector('div.dropdown-item[data-value="mock-model-1"]')
     page.locator('div.dropdown-item[data-value="mock-model-1"]').click()
     page.get_by_label("MCP Server URL").fill("http://127.0.0.1:3000/mcp")
     page.get_by_role("button", name="Refresh").last.click()
-    page.wait_for_timeout(1000)
     page.get_by_label("Allow all available tools").uncheck()
     tool_label_selector = '#agent-agent-default-toolSettings-allowed label:has-text("get_datetime")'
     expect(page.locator(tool_label_selector)).to_be_visible(timeout=10000)

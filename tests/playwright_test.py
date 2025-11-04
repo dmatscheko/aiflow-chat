@@ -34,32 +34,24 @@ def test_tool_chaining_and_final_response(page: Page):
     # 1. Arrange: Go to the chat application.
     # page.goto("http://127.0.0.1:8000", wait_until="domcontentloaded", timeout=5000)
 
-    # Click the "Agents" tab in the right panel.
+    # Click the "Agents" tab and wait for the panel to be visible.
     page.get_by_role("button", name="Agents").click()
+    expect(page.locator("#agents-pane.active")).to_be_visible()
 
-    # Wait for the agent editor to fully load.
-    page.wait_for_timeout(1000)
-
-    # Click the "Default Agent" to open its editor.
+    # Click the "Default Agent" and wait for the editor to appear.
     page.get_by_role("listitem").filter(has_text="Default Agent").click()
-
-    # Wait for the Default Agent to fully load.
-    page.wait_for_timeout(1000)
+    expect(page.locator("#agent-editor-container")).to_be_visible()
 
     # Fill in the API URL for the mock AI backend.
     page.get_by_label("API URL").fill("http://127.0.0.1:8080")
 
-    # Check the "Model" checkbox to enable the refresh button
+    # Check the "Model" checkbox to enable the refresh button.
     page.get_by_label("Model:").check()
 
-    # Wait for the Model dropdown to fully load.
-    page.wait_for_timeout(100)
-
-    # Click the "Refresh" button to load the models from the mock backend.
-    page.get_by_role("button", name="Refresh").first.click()
-
-    # Wait for the models to fully load.
-    page.wait_for_timeout(1000)
+    # Click the "Refresh" button and wait for the dropdown to be enabled.
+    refresh_button = page.get_by_role("button", name="Refresh").first
+    expect(refresh_button).to_be_enabled()
+    refresh_button.click()
 
     # Open the "Model" dropdown.
     page.locator("button.dropdown-btn").first.click()
@@ -78,10 +70,7 @@ def test_tool_chaining_and_final_response(page: Page):
     # CRITICAL: Click the second "Refresh" button to load the tool definitions from the MCP server.
     page.get_by_role("button", name="Refresh").last.click()
 
-    # Wait for the tools to fully load.
-    page.wait_for_timeout(1000)
-
-    # Uncheck allow all tools to show single tools
+    # Uncheck "Allow all available tools" to show the tool list.
     page.get_by_label("Allow all available tools").uncheck()
 
     # Wait for the tool list to be populated by looking for the specific tool label within its container.
