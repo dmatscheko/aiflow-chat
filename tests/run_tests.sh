@@ -14,7 +14,7 @@ echo "Installing Playwright browsers..."
 uv run playwright install
 
 # Delete old test results
-rm test-results/main_server.log test-results/mock_backend.log test-results/verification.png test-results/verification_debug_tools.png test-results/verification_error.png test-results/verification_debug_model.png 2>/dev/null || true
+rm test-results/main_server.log test-results/mock_backend.log test-results/verification.png test-results/verification_debug_tools.png test-results/verification_error.png test-results/verification_debug_model.png test-results/verification_tool_error.png 2>/dev/null || true
 
 # Define a cleanup function to be called on exit
 cleanup() {
@@ -60,9 +60,12 @@ echo "Main server started with PID: $MAIN_PID"
 echo "Waiting for servers to initialize..."
 sleep 3
 
-# 4. Run the Playwright test script
-echo "Running Playwright test..."
+# 4. Run the Playwright test scripts
+echo "Running Playwright test for tool chaining..."
 uv run tests/playwright_test.py || (cat test-results/mock_backend.log && exit 1)
+
+echo "Running Playwright test for tool error..."
+uv run tests/playwright_test_tool_error.py || (cat test-results/mock_backend.log && exit 1)
 
 
 # The script will exit here, and the 'trap' will call the cleanup function.

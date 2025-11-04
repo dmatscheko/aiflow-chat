@@ -36,13 +36,24 @@ class MockAIHandler(http.server.SimpleHTTPRequestHandler):
             # Handle the conversation flow
             last_message = request_body["messages"][-1]
 
-            # Logic for testing: if the last message is from a user,
-            # assume it's the date/time question and respond with a tool call.
-            # Otherwise, if it's a tool response, give the final answer.
+            # Handle the conversation flow
+            last_message = request_body["messages"][-1]
+            last_message_content = last_message.get("content", "")
+
+            # Logic for testing
             if last_message.get("role") == "tool":
+                # If the last message is a tool response, give the final answer.
                 response_text = "The current date and time has been provided by the tool."
-            else:  # Assume it's a user message
-                response_text = '<dma:tool_call name="get_datetime"/>'
+            elif last_message.get("role") == "user":
+                # If the user asks to trigger an error, call a non-existent tool.
+                if "Trigger a tool error" in last_message_content:
+                    response_text = '<dma:tool_call name="non_existent_tool"/>'
+                else:
+                    # Otherwise, call the datetime tool as normal.
+                    response_text = '<dma:tool_call name="get_datetime"/>'
+            else:
+                # Fallback for any other message types
+                response_text = f"AI response to request: {json.dumps(request_body)}"
 
             if self.max_len is not None and len(response_text) > self.max_len:
                 response_text = response_text[: self.max_len] + "..."
