@@ -8,3 +8,8 @@ dependencies = [
     "fastmcp>=2.0.0",
     "fastapi>=0.116.1",
 ]
+
+[project.optional-dependencies]
+test = [
+    "playwright>=1.55.0",
+]
