@@ -4,6 +4,7 @@ from test_01_tool_success import test_tool_success
 from test_02_tool_error import test_tool_error
 from test_03_simple_flow import test_simple_flow
 from test_04_agent_management import test_agent_management
+from test_05_flow_ui import test_flow_ui
 
 if __name__ == "__main__":
     with sync_playwright() as p:
@@ -32,11 +33,16 @@ if __name__ == "__main__":
 
             # Test 4
             test_agent_management(page)
-            print("test_agent_management_suite passed.")
+            print("test_agent_management passed.")
+
+            # Test 5
+            test_flow_ui(page)
+            print("test_flow_ui passed.")
 
             print("All tests finished successfully.")
         except Exception as e:
             print(f"Error in tests: {e}")
+            page.screenshot(path="test-results/verification_error.png")
             # raise
         finally:
             # input("Press Enter to close the browser...")  # Keeps window open. For debug

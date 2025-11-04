@@ -44,7 +44,7 @@ def test_agent_management(page):
     # Verify the prompt was saved
     expect(system_prompt_input).to_have_value("You are a test agent.")
 
-    page.screenshot(path="test-results/verification_agent_management_a.png")
+    page.screenshot(path="test-results/verification_agent_management.png")
 
     # 3. Test deleting the agent
     active_item = page.locator("#agents-pane .list-item.active")
@@ -58,5 +58,3 @@ def test_agent_management(page):
 
     # Verify the agent is no longer in the list
     expect(page.locator("#agents-pane .list-item:has-text('My Test Agent')")).not_to_be_visible()
-
-    page.screenshot(path="test-results/verification_agent_management_b.png")
