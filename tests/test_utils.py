@@ -55,3 +55,12 @@ def send_message(page: Page, message: str):
     expect(chat_input).to_be_visible(timeout=5000)
     chat_input.fill(message)
     chat_input.press("Enter")
+
+
+def select_tab(page: Page, tab_name: str):
+    """Click on a tab in the right panel."""
+    page.get_by_role("button", name=tab_name.capitalize()).click()
+    pane_locator = page.locator(f"#{tab_name}-pane.active")
+    expect(pane_locator).to_be_visible(timeout=5000)
+    if tab_name == "agents":
+        expect(pane_locator.locator(".list-pane-footer button:has-text('Add New Agent')")).to_be_visible(timeout=5000)
