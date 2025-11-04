@@ -468,6 +468,39 @@ export function registerFlowStepDefinitions(flowManager) {
         },
     });
 
+    flowManager._defineStep('token-count-branch', {
+        label: 'Token Count Branch',
+        color: 'hsla(30, 20%, 35%, 0.8)',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="4" r="2"></circle><circle cx="7" cy="20" r="2"></circle><circle cx="17" cy="20" r="2"></circle><path d="M7 18V6"></path><path d="M7 7c0 1.66 1.34 3 3 3h5c1.1 0 2 .9 2 2v6"></path></svg>',
+        getDefaults: () => ({ tokenCount: 500 }),
+        render: function(step) {
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content"><label>If token count is over:</label><input type="number" class="flow-step-token-count flow-step-input" data-id="${step.id}" data-key="tokenCount" value="${step.data.tokenCount || 500}" min="0"></div>`;
+        },
+        renderOutputConnectors: (step) => `<div class="connector-group labels"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="pass"><span class="connector-label">Over</span></div><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="fail"><span class="connector-label">Under</span></div></div>`,
+        onUpdate: (step, target) => { step.data[target.dataset.key] = parseInt(target.value, 10); },
+        execute: (step, context) => {
+            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            if (!chatLog) return context.stopFlow('No active chat.');
+
+            if (typeof GPTTokenizer_cl100k_base === 'undefined') {
+                console.error('GPT-Tokenizer not found. Make sure the library is loaded.');
+                return context.stopFlow('Tokenizer library not available.');
+            }
+
+            const allMessagesContent = chatLog.getActiveMessages().map(msg => msg.value.content || '').join('\n');
+            const tokenCount = GPTTokenizer_cl100k_base.encode(allMessagesContent).length;
+
+            const isOverThreshold = tokenCount > (step.data.tokenCount || 500);
+
+            const nextStep = context.getNextStep(step.id, isOverThreshold ? 'pass' : 'fail');
+            if (nextStep) {
+                context.executeStep(nextStep);
+            } else {
+                context.stopFlow();
+            }
+        },
+    });
+
     flowManager._defineStep('conditional-stop', {
         label: 'Conditional Stop',
         color: 'hsla(0, 20%, 35%, 0.8)',
