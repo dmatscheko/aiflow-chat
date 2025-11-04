@@ -62,3 +62,54 @@ def select_tab(page: Page, tab_name: str):
     pane_locator = page.locator(f"#{tab_name}s-pane.active")
     expect(pane_locator).to_be_visible(timeout=5000)
     expect(pane_locator.locator(".list-pane-footer button:has-text('Add New " + tab_name.capitalize() + "')")).to_be_visible(timeout=5000)
+
+
+# ------------ Flow helper functions ------------:
+
+
+# A function for moving steps
+def move_step(page, step_id, target_left, target_top):
+    step = page.locator(f'#flow-node-container .flow-step-card[data-id="{step_id}"]')
+    # Use low-level mouse API for dragging the step, as drag_to may not trigger due to event handling or sub-element interference
+    box = step.bounding_box()
+    # Drag from near the top-center to avoid potential inputs/buttons in the card body
+    start_x = box["x"] + box["width"] / 2
+    start_y = box["y"] + 10  # Offset from top to likely hit a draggable area
+    current_left = step.evaluate("el => el.offsetLeft")
+    current_top = step.evaluate("el => el.offsetTop")
+    target_mouse_x = start_x + (target_left - current_left)
+    target_mouse_y = start_y + (target_top - current_top)
+
+    page.mouse.move(start_x, start_y)
+    page.mouse.down()
+    page.mouse.move(target_mouse_x, target_mouse_y)
+    page.mouse.up()
+
+
+# A function for connecting steps
+def connect_steps(page, output_element, input_element):
+    """Helper function to connect two steps by simulating drag from output to input connector."""
+    connection_line_locator = page.locator("#flow-svg-layer line")
+    current_count = connection_line_locator.count()
+
+    output_box = output_element.bounding_box()
+    input_box = input_element.bounding_box()
+    output_center_x = output_box["x"] + output_box["width"] / 2
+    output_center_y = output_box["y"] + output_box["height"] / 2
+    input_center_x = input_box["x"] + input_box["width"] / 2
+    input_center_y = input_box["y"] + input_box["height"] / 2
+
+    # Optional: Move mouse to output for hover effect
+    page.mouse.move(output_center_x, output_center_y)
+
+    # Dispatch mousedown on output connector
+    output_element.dispatch_event("mousedown", {"bubbles": True, "clientX": output_center_x, "clientY": output_center_y, "button": 0})
+
+    # Wait for the temporary line to appear
+    expect(connection_line_locator).to_have_count(current_count + 1, timeout=1000)
+
+    # Dispatch mouseup on input connector
+    input_element.dispatch_event("mouseup", {"bubbles": True, "clientX": input_center_x, "clientY": input_center_y, "button": 0})
+
+    # Verify the connection was added (count remains increased by 1, as temp becomes permanent)
+    expect(connection_line_locator).to_have_count(current_count + 1, timeout=5000)
