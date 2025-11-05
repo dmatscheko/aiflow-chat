@@ -1,0 +1,249 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200">
+  <script type="text/javascript"><![CDATA[
+    // In this modified Ulam spiral plotting only odd numbers (incrementing by 2 along the path), primes are
+    // marked, and lines highlight sequences of >=3 consecutive primes in horizontal, vertical, or diagonal
+    // directions.
+    //
+    // Among three consecutive odd numbers >7, at least one is divisible by 3 or 5 (hence composite), preventing
+    // such prime triplets except for 3-5-7. Thus, no >=3 prime sequences can form along spiral segments where
+    // numbers are placed consecutively.
+    //
+    // The spiral's path alternates directions per layer:
+    //  - Horizontal moves (leftward on top, rightward on bottom) place consecutive odds horizontally, forbidding
+    //    horizontal prime lines in top and bottom triangular sectors from center to edges.
+    //  - Vertical moves (upward on right, downward on left) place consecutive odds vertically, forbidding
+    //    vertical prime lines in left and right triangular sectors.
+    //
+    // This restriction, combined with the spiral's layered expansion, confines horizontal lines to the left/right
+    // triangles and vertical lines to the top/bottom triangles. Diagonals remain unrestricted throughout.
+
+    const imageSize = 1200; // Total width and height of the SVG
+    const pixelSize = 1; // Size of each cell in pixels
+    const numStep = 2; // Only draw every n-th number each cell-step around the spiral
+    const drawLines = true; // If lines should be drawn over each connected >= 3 pixel line
+
+    function isPrime(n) {
+      if (n <= 1) return false;
+      if (n <= 3) return true;
+      if (n % 2 === 0 || n % 3 === 0) return false;
+      for (let i = 5; i * i <= n; i += 6) {
+        if (n % i === 0 || n % (i + 2) === 0) return false;
+      }
+      return true;
+    }
+
+    const svg = document.currentScript.parentElement;
+    const ns = "http://www.w3.org/2000/svg";
+
+    let gridSize = Math.floor(imageSize / pixelSize);
+    if (gridSize % 2 === 0) gridSize -= 1; // Ensure odd for centered spiral
+    const r = (gridSize - 1) / 2;
+    const maxnum = (gridSize ** 2) * numStep;
+    const cell = pixelSize;
+    const offset = (imageSize - gridSize * pixelSize) / 2;
+
+    const dx = [1, 0, -1, 0];
+    const dy = [0, 1, 0, -1]; // right, up, left, down (y+ up)
+
+    const grid = Array.from({length: gridSize}, () => Array(gridSize).fill(false));
+
+    function createRect(sx, sy, color = '#AAA') {
+      let rect = document.createElementNS(ns, 'rect');
+      rect.setAttribute('x', sx);
+      rect.setAttribute('y', sy);
+      rect.setAttribute('width', cell);
+      rect.setAttribute('height', cell);
+      rect.setAttribute('fill', color);
+      svg.appendChild(rect);
+    }
+
+    let x = 0, y = 0, num = 1, dir = 0;
+
+    // Place the first pixel (1) in cyan
+    {
+      let sx = offset + (x + r) * cell;
+      let sy = offset + (r - y) * cell;
+      createRect(sx, sy, '#0FF');
+    }
+
+    let step = 1;
+    while (num < maxnum) {
+      for (let turn = 0; turn < 2; turn++) {
+        for (let s = 0; s < step; s++) {
+          x += dx[dir];
+          y += dy[dir];
+          num += numStep;
+          if (num > maxnum) break;
+          if (isPrime(num)) {
+            let sx = offset + (x + r) * cell;
+            let sy = offset + (r - y) * cell;
+            createRect(sx, sy);
+            grid[x + r][r - y] = true;
+          }
+        }
+        if (num > maxnum) break;
+        dir = (dir + 1) % 4;
+      }
+      if (num > maxnum) break;
+      step++;
+    }
+
+    // Add thin lines over each >= 3 pixel line
+    if (drawLines) {
+
+      function createLine(x1, y1, x2, y2, color = '#F0F') {
+        let line = document.createElementNS(ns, 'line');
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y1);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y2);
+        line.setAttribute('stroke', color);
+        line.setAttribute('stroke-width', '0.5');
+        svg.appendChild(line);
+      }
+
+      const gs = gridSize;
+
+      // Horizontal lines
+      for (let gy = 0; gy < gs; gy++) {
+        let start = -1;
+        for (let gx = 0; gx < gs; gx++) {
+          if (grid[gx][gy]) {
+            if (start === -1) start = gx;
+          } else {
+            if (start !== -1) {
+              let len = gx - start;
+              if (len > 2) {
+                let x1 = offset + (start - 1 + 0.5) * cell;
+                let x2 = offset + (gx + 0.5) * cell;
+                let y1 = offset + (gy + 0.5) * cell;
+                let y2 = y1;
+                createLine(x1, y1, x2, y2, '#F00');
+              }
+              start = -1;
+            }
+          }
+        }
+        if (start !== -1) {
+          let len = gs - start;
+          if (len > 2) {
+            let x1 = offset + (start - 1 + 0.5) * cell;
+            let x2 = offset + (gs + 0.5) * cell;
+            let y1 = offset + (gy + 0.5) * cell;
+            let y2 = y1;
+            createLine(x1, y1, x2, y2, '#F00');
+          }
+        }
+      }
+
+      // Vertical lines
+      for (let gx = 0; gx < gs; gx++) {
+        let start = -1;
+        for (let gy = 0; gy < gs; gy++) {
+          if (grid[gx][gy]) {
+            if (start === -1) start = gy;
+          } else {
+            if (start !== -1) {
+              let len = gy - start;
+              if (len > 2) {
+                let y1 = offset + (start - 1 + 0.5) * cell;
+                let y2 = offset + (gy + 0.5) * cell;
+                let x1 = offset + (gx + 0.5) * cell;
+                let x2 = x1;
+                createLine(x1, y1, x2, y2, '#00F');
+              }
+              start = -1;
+            }
+          }
+        }
+        if (start !== -1) {
+          let len = gs - start;
+          if (len > 2) {
+            let y1 = offset + (start - 1 + 0.5) * cell;
+            let y2 = offset + (gs + 0.5) * cell;
+            let x1 = offset + (gx + 0.5) * cell;
+            let x2 = x1;
+            createLine(x1, y1, x2, y2, '#00F');
+          }
+        }
+      }
+
+      // Diagonal \ (top-left to bottom-right, gx - gy = d)
+      for (let d = -(gs - 1); d <= (gs - 1); d++) {
+        let min_gx = Math.max(0, d);
+        let max_gx = Math.min(gs - 1, gs - 1 + d);
+        if (max_gx - min_gx < 2) continue;
+        let start = -1;
+        for (let gx = min_gx; gx <= max_gx; gx++) {
+          let gy = gx - d;
+          if (grid[gx][gy]) {
+            if (start === -1) start = gx;
+          } else {
+            if (start !== -1) {
+              let len = gx - start;
+              if (len > 2) {
+                let end = gx - 1;
+                let x1 = offset + (start - 1 + 0.5) * cell;
+                let y1 = offset + ((start - 1 - d) + 0.5) * cell;
+                let x2 = offset + (end + 1 + 0.5) * cell;
+                let y2 = offset + ((end + 1 - d) + 0.5) * cell;
+                createLine(x1, y1, x2, y2);
+              }
+              start = -1;
+            }
+          }
+        }
+        if (start !== -1) {
+          let len = max_gx - start + 1;
+          if (len > 2) {
+            let end = max_gx;
+            let x1 = offset + (start - 1 + 0.5) * cell;
+            let y1 = offset + ((start - 1 - d) + 0.5) * cell;
+            let x2 = offset + (end + 1 + 0.5) * cell;
+            let y2 = offset + ((end + 1 - d) + 0.5) * cell;
+            createLine(x1, y1, x2, y2);
+          }
+        }
+      }
+
+      // Diagonal / (top-right to bottom-left, gx + gy = s)
+      for (let s = 0; s <= 2 * (gs - 1); s++) {
+        let min_gx = Math.max(0, s - (gs - 1));
+        let max_gx = Math.min(s, gs - 1);
+        if (max_gx - min_gx < 2) continue;
+        let start = -1;
+        for (let gx = min_gx; gx <= max_gx; gx++) {
+          let gy = s - gx;
+          if (grid[gx][gy]) {
+            if (start === -1) start = gx;
+          } else {
+            if (start !== -1) {
+              let len = gx - start;
+              if (len > 2) {
+                let end = gx - 1;
+                let x1 = offset + (start - 1 + 0.5) * cell;
+                let y1 = offset + (s - (start - 1) + 0.5) * cell;
+                let x2 = offset + (end + 1 + 0.5) * cell;
+                let y2 = offset + (s - (end + 1) + 0.5) * cell;
+                createLine(x1, y1, x2, y2);
+              }
+              start = -1;
+            }
+          }
+        }
+        if (start !== -1) {
+          let len = max_gx - start + 1;
+          if (len > 2) {
+            let end = max_gx;
+            let x1 = offset + (start - 1 + 0.5) * cell;
+            let y1 = offset + (s - (start - 1) + 0.5) * cell;
+            let x2 = offset + (end + 1 + 0.5) * cell;
+            let y2 = offset + (s - (end + 1) + 0.5) * cell;
+            createLine(x1, y1, x2, y2);
+          }
+        }
+      }
+
+    }
+  ]]></script>
+</svg>
