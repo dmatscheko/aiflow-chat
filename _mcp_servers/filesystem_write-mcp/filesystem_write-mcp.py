@@ -20,22 +20,30 @@ _real_to_virtual: dict[str, str] = {}  # Real path -> Virtual path
 
 
 def set_allowed_dirs(real_dirs: list[str]) -> None:
-    """Configure allowed real directories and map them to virtual paths (e.g., /data/a)."""
+    """Configure allowed real directories and map them to virtual paths (e.g., /a)."""
     global _allowed_real_dirs, _virtual_to_real, _real_to_virtual
     _allowed_real_dirs = [os.path.abspath(os.path.expanduser(d)) for d in real_dirs]
-    _virtual_to_real = {f"/data/{chr(97 + i)}": real_dir for i, real_dir in enumerate(_allowed_real_dirs)}
+    _virtual_to_real = {f"/{chr(97 + i)}": real_dir for i, real_dir in enumerate(_allowed_real_dirs)}
     _real_to_virtual = {real_dir: virtual_dir for virtual_dir, real_dir in _virtual_to_real.items()}
 
 
 def validate_virtual_path(virtual_path: str) -> str:
     """Convert a virtual path to a real path, ensuring it’s within allowed directories."""
+    if not virtual_path:
+        virtual_path = "/"
+    if not virtual_path.startswith("/"):
+        virtual_path = "/" + virtual_path
+
+    if virtual_path == "/":
+        raise IsADirectoryError("Virtual root directory")
+
     for virtual_dir, real_dir in _virtual_to_real.items():
         if virtual_path.startswith(virtual_dir + "/") or virtual_path == virtual_dir:
             relative = virtual_path[len(virtual_dir) :].lstrip("/")
             real_path = os.path.join(real_dir, relative) if relative else real_dir
             break
     else:
-        raise CustomError(f"Not a valid path (List allowed directories for valid paths): {virtual_path}")
+        raise CustomError(f"Not a valid path (List / for valid paths): {virtual_path}")
 
     real_path = os.path.normpath(os.path.abspath(real_path))
     try:
@@ -80,8 +88,23 @@ def get_error_message(message, virtual_path: str, e: Exception) -> str:
 # Server setup
 mcp = FastMCP(
     name="File System Server",
-    instructions="A server that provides tools for interacting with a file system. Only some paths are accessible, therefore the allowed directores must be listed initially.",
+    instructions="A server that provides tools for interacting with a file system. Only some paths are accessible. List the root directory / to see allowed directories.",
 )
+
+
+@mcp.tool
+def list_directory(path: Annotated[str, "The path of the directory to list."]) -> str:
+    """List the files and directories within a given directory."""
+    try:
+        if not path or path == "/":
+            listing = [f"[DIR] {k.lstrip('/')}" for k in sorted(_virtual_to_real.keys())]
+            return "\n".join(listing)
+        real_path = validate_virtual_path(path)
+        entries = os.listdir(real_path)
+        listing = [f"[{'DIR' if os.path.isdir(os.path.join(real_path, e)) else 'FILE'}] {e}" for e in entries]
+        return "\n".join(listing)
+    except Exception as e:
+        return get_error_message("Error listing", path, e)
 
 
 @mcp.tool
@@ -246,19 +269,18 @@ def move_file(
         return get_error_message("Error moving", source, e)
 
 
-# Run the server with allowed directories from command-line arguments.
-if len(sys.argv) < 2:
-    print("Usage: filesystem <allowed-directory> [additional-directories...]")
-    sys.exit(1)
-real_dirs = sys.argv[1:]
-for real_dir in real_dirs:
-    if not os.path.isdir(real_dir):
-        print(f"Error: {real_dir} is not a directory")
-        sys.exit(1)
-set_allowed_dirs(real_dirs)
-virtual_dirs_mapping = "\n".join(f"{v} -> {r}" for v, r in _virtual_to_real.items())
-print(f"MCP Filesystem Server running on stdio\nVirtual to real directory mappings:\n{virtual_dirs_mapping}")
-
-
 if __name__ == "__main__":
+    # Run the server with allowed directories from command-line arguments.
+    if len(sys.argv) < 2:
+        print("Usage: filesystem <allowed-directory> [additional-directories...]")
+        sys.exit(1)
+    real_dirs = sys.argv[1:]
+    for real_dir in real_dirs:
+        if not os.path.isdir(real_dir):
+            print(f"Error: {real_dir} is not a directory")
+            sys.exit(1)
+    set_allowed_dirs(real_dirs)
+    virtual_dirs_mapping = "\n".join(f"{v} -> {r}" for v, r in _virtual_to_real.items())
+    print(f"MCP Filesystem Server running on stdio\nVirtual to real directory mappings:\n{virtual_dirs_mapping}")
+
     mcp.run()
