@@ -417,6 +417,7 @@ class FlowRunner {
         this.manager = manager;
         this.currentStepId = null;
         this.isRunning = false;
+        this.isExecutingStep = false;
         this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
     }
 
@@ -453,12 +454,17 @@ class FlowRunner {
         this.currentStepId = step.id;
         const stepDef = this.manager.stepTypes[step.type];
         if (stepDef?.execute) {
-            stepDef.execute(step, {
-                app: this.app,
-                getNextStep: (id, out) => this.getNextStep(id, out),
-                executeStep: (next) => this.executeStep(next),
-                stopFlow: (msg) => this.stop(msg),
-            });
+            this.isExecutingStep = true;
+            try {
+                stepDef.execute(step, {
+                    app: this.app,
+                    getNextStep: (id, out) => this.getNextStep(id, out),
+                    executeStep: (next) => this.executeStep(next),
+                    stopFlow: (msg) => this.stop(msg),
+                });
+            } finally {
+                this.isExecutingStep = false;
+            }
         } else {
             this.stop(`Unknown step type: ${step.type}`);
         }
@@ -484,7 +490,7 @@ class FlowRunner {
      */
     continue(message, chat) {
          // Only act when a flow is running, a step is selected, and the AI is idle.
-        if (!this.isRunning || !this.currentStepId || message !== null) return false;
+        if (!this.isRunning || !this.currentStepId || message !== null || this.isExecutingStep) return false;
 
         if (this.multiPromptInfo.active) {
             // --- Multi-Prompt Handling ---
@@ -512,7 +518,8 @@ class FlowRunner {
             }
         } else {
             // --- Normal Prompt Handling ---
-            const stepDef = this.manager.stepTypes[this.flow.steps.find(s => s.id === this.currentStepId)?.type];
+            const step = this.flow.steps.find(s => s.id === this.currentStepId);
+            const stepDef = this.manager.stepTypes[step?.type];
             if (stepDef?.execute?.toString().includes('handleFormSubmit')) {
                 const nextStep = this.getNextStep(this.currentStepId);
                 if (nextStep) {
