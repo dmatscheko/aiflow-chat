@@ -20,22 +20,38 @@ _real_to_virtual: dict[str, str] = {}  # Real path -> Virtual path
 
 
 def set_allowed_dirs(real_dirs: list[str]) -> None:
-    """Configure allowed real directories and map them to virtual paths (e.g., /data/a)."""
+    """Configure allowed real directories and map them to virtual paths (e.g., /a)."""
     global _allowed_real_dirs, _virtual_to_real, _real_to_virtual
     _allowed_real_dirs = [os.path.abspath(os.path.expanduser(d)) for d in real_dirs]
-    _virtual_to_real = {f"/data/{chr(97 + i)}": real_dir for i, real_dir in enumerate(_allowed_real_dirs)}
+    _virtual_to_real = {f"/{chr(97 + i)}": real_dir for i, real_dir in enumerate(_allowed_real_dirs)}
     _real_to_virtual = {real_dir: virtual_dir for virtual_dir, real_dir in _virtual_to_real.items()}
+
+
+def normalize_virtual_path(virtual_path: str) -> str:
+    """Normalize a virtual path for consistent formatting."""
+    if not virtual_path or virtual_path == ".":
+        virtual_path = "/"
+    if virtual_path.startswith("./"):
+        virtual_path = virtual_path[1:]
+    if not virtual_path.startswith("/"):
+        virtual_path = "/" + virtual_path
+    return virtual_path
 
 
 def validate_virtual_path(virtual_path: str) -> str:
     """Convert a virtual path to a real path, ensuring it’s within allowed directories."""
+    virtual_path = normalize_virtual_path(virtual_path)
+
+    if virtual_path == "/":
+        raise IsADirectoryError("Root directory (R/O)")
+
     for virtual_dir, real_dir in _virtual_to_real.items():
         if virtual_path.startswith(virtual_dir + "/") or virtual_path == virtual_dir:
             relative = virtual_path[len(virtual_dir) :].lstrip("/")
             real_path = os.path.join(real_dir, relative) if relative else real_dir
             break
     else:
-        raise CustomError(f"Not a valid path (List allowed directories for valid paths): {virtual_path}")
+        raise CustomError(f"Not a valid path (List / for valid paths): {virtual_path}")
 
     real_path = os.path.normpath(os.path.abspath(real_path))
     try:
@@ -79,8 +95,8 @@ def get_error_message(message, virtual_path: str, e: Exception) -> str:
 
 # Server setup
 mcp = FastMCP(
-    name="File System Server",
-    instructions="A server that provides tools for interacting with a file system. Only some paths are accessible, therefore the allowed directores must be listed initially.",
+    name="File System Server (Write)",
+    instructions="A server that provides tools for interacting with a file system.",
 )
 
 
@@ -100,7 +116,7 @@ def write_file(
 
 
 @mcp.tool
-def create_directory(path: Annotated[str, "The path of the directory to create. It can be nested (e.g., /data/a/new/dir)."]) -> str:
+def create_directory(path: Annotated[str, "The path of the directory to create. It can be nested (e.g., /a/new/dir)."]) -> str:
     """Create a directory, including any necessary parent directories."""
     try:
         real_path = validate_virtual_path(path)
