@@ -22,22 +22,38 @@ _real_to_virtual: dict[str, str] = {}  # Real path -> Virtual path
 
 
 def set_allowed_dirs(real_dirs: list[str]) -> None:
-    """Configure allowed real directories and map them to virtual paths (e.g., /data/a)."""
+    """Configure allowed real directories and map them to virtual paths (e.g., /a)."""
     global _allowed_real_dirs, _virtual_to_real, _real_to_virtual
     _allowed_real_dirs = [os.path.abspath(os.path.expanduser(d)) for d in real_dirs]
-    _virtual_to_real = {f"/data/{chr(97 + i)}": real_dir for i, real_dir in enumerate(_allowed_real_dirs)}
+    _virtual_to_real = {f"/{chr(97 + i)}": real_dir for i, real_dir in enumerate(_allowed_real_dirs)}
     _real_to_virtual = {real_dir: virtual_dir for virtual_dir, real_dir in _virtual_to_real.items()}
 
 
-def validate_virtual_path(virtual_path: str) -> str:
+def normalize_virtual_path(virtual_path: str) -> str:
+    """Normalize a virtual path for consistent formatting."""
+    if not virtual_path or virtual_path == ".":
+        virtual_path = "/"
+    if virtual_path.startswith("./"):
+        virtual_path = virtual_path[1:]
+    if not virtual_path.startswith("/"):
+        virtual_path = "/" + virtual_path
+    return virtual_path
+
+
+def virtual_to_real_path(virtual_path: str) -> str:
     """Convert a virtual path to a real path, ensuring it’s within allowed directories."""
+    virtual_path = normalize_virtual_path(virtual_path)
+
+    if virtual_path == "/":
+        raise IsADirectoryError("Root directory (R/O)")
+
     for virtual_dir, real_dir in _virtual_to_real.items():
         if virtual_path.startswith(virtual_dir + "/") or virtual_path == virtual_dir:
             relative = virtual_path[len(virtual_dir) :].lstrip("/")
             real_path = os.path.join(real_dir, relative) if relative else real_dir
             break
     else:
-        raise CustomError(f"Not a valid path (List allowed directories for valid paths): {virtual_path}")
+        raise CustomError(f"Not a valid path (List / for valid paths): {virtual_path}")
 
     real_path = os.path.normpath(os.path.abspath(real_path))
     try:
@@ -94,7 +110,32 @@ def tail_file(real_path: str, lines: int) -> str:
 
 def list_files_recursive(virtual_path: str, pattern: str = None, exclude_patterns: list[str] = None) -> str:
     """List files and directories recursively, optionally filtering by pattern."""
-    real_path = validate_virtual_path(virtual_path)
+    virtual_path = normalize_virtual_path(virtual_path)
+    if virtual_path == "/":
+        matches = []
+        for v_dir, r_dir in sorted(_virtual_to_real.items()):
+            v_name = v_dir.lstrip("/")
+            for root, dirs, files in os.walk(r_dir):
+                if exclude_patterns:
+                    dirs[:] = [d for d in dirs if not any(fnmatch.fnmatch(d, p) for p in exclude_patterns)]
+                    files = [f for f in files if not any(fnmatch.fnmatch(f, p) for p in exclude_patterns)]
+
+                rel_root = os.path.relpath(root, r_dir)
+                if rel_root == ".":
+                    rel_root = ""
+
+                for name in dirs + files:
+                    if pattern is None or fnmatch.fnmatch(name.lower(), pattern.lower()):
+                        rel_path = os.path.join(v_name, rel_root, name).replace(os.sep, "/")
+                        if os.path.isdir(os.path.join(root, name)):
+                            rel_path += "/"
+                        matches.append(rel_path)
+            # Add the virtual dir itself if it matches pattern
+            if pattern is None or fnmatch.fnmatch(v_name.lower(), pattern.lower()):
+                matches.append(v_name + "/")
+        return "\n".join([f"### Contents of /:"] + sorted(matches))
+
+    real_path = virtual_to_real_path(virtual_path)
     matches = []
     for root, dirs, files in os.walk(real_path):
         if exclude_patterns:
@@ -112,8 +153,8 @@ def list_files_recursive(virtual_path: str, pattern: str = None, exclude_pattern
 
 # Server setup
 mcp = FastMCP(
-    name="File System Server",
-    instructions="A server that provides tools for interacting with a file system. Only some paths are accessible, therefore the allowed directores must be listed initially.",
+    name="File System Server (Read)",
+    instructions="A server that provides tools for interacting with a file system.",
 )
 
 
@@ -125,7 +166,7 @@ def read_file(
 ) -> str:
     """Read file contents from the file system. Allows reading the whole file, or just the head or tail."""
     try:
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         if head is not None and tail is not None:
             raise CustomError("Specify either head or tail, not both")
         if head is not None:
@@ -151,7 +192,7 @@ def read_files(paths: Annotated[str, "A list of paths of the files to read, one 
             if virtual_path not in seen:
                 try:
                     seen.add(virtual_path)
-                    real_path = validate_virtual_path(virtual_path)
+                    real_path = virtual_to_real_path(virtual_path)
                     content = open(real_path, "r", encoding="utf-8").read()
                     results.append(f"### {virtual_path}:\n```\n{content}\n```\n")
                 except Exception as e:
@@ -165,7 +206,11 @@ def read_files(paths: Annotated[str, "A list of paths of the files to read, one 
 def list_directory(path: Annotated[str, "The path of the directory to list."]) -> str:
     """List the files and directories within a given directory."""
     try:
-        real_path = validate_virtual_path(path)
+        path = normalize_virtual_path(path)
+        if path == "/":
+            listing = [f"[DIR] {k.lstrip('/')}" for k in sorted(_virtual_to_real.keys())]
+            return "\n".join(listing)
+        real_path = virtual_to_real_path(path)
         entries = os.listdir(real_path)
         listing = [f"[{'DIR' if os.path.isdir(os.path.join(real_path, e)) else 'FILE'}] {e}" for e in entries]
         return "\n".join(listing)
@@ -199,11 +244,23 @@ def search_files(
 def get_file_info(path: Annotated[str, "The path of the file or directory to get information about."]) -> str:
     """Get metadata for a file or directory, such as size, modification times, and permissions."""
     try:
+        if not path or path == "/":
+            info = {
+                "path": "/",
+                "size": 0,
+                "created": "N/A",
+                "modified": "N/A",
+                "accessed": "N/A",
+                "isDirectory": True,
+                "isFile": False,
+                "permissions": "755",
+            }
+            return "\n".join(f"{k}: {v}" for k, v in info.items())
 
         def format_time(timestamp):
             return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
 
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         stats = os.stat(real_path)
         info = {
             "path": path,
@@ -218,12 +275,6 @@ def get_file_info(path: Annotated[str, "The path of the file or directory to get
         return "\n".join(f"{k}: {v}" for k, v in info.items())
     except Exception as e:
         return get_error_message("Error getting info", path, e)
-
-
-@mcp.tool
-def list_allowed_directories() -> str:
-    """List the top-level directories that are accessible."""
-    return "### Allowed directories:\n" + "\n".join(_virtual_to_real.keys())
 
 
 # Run the server with allowed directories from command-line arguments.

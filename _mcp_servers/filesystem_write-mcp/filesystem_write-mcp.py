@@ -20,22 +20,38 @@ _real_to_virtual: dict[str, str] = {}  # Real path -> Virtual path
 
 
 def set_allowed_dirs(real_dirs: list[str]) -> None:
-    """Configure allowed real directories and map them to virtual paths (e.g., /data/a)."""
+    """Configure allowed real directories and map them to virtual paths (e.g., /a)."""
     global _allowed_real_dirs, _virtual_to_real, _real_to_virtual
     _allowed_real_dirs = [os.path.abspath(os.path.expanduser(d)) for d in real_dirs]
-    _virtual_to_real = {f"/data/{chr(97 + i)}": real_dir for i, real_dir in enumerate(_allowed_real_dirs)}
+    _virtual_to_real = {f"/{chr(97 + i)}": real_dir for i, real_dir in enumerate(_allowed_real_dirs)}
     _real_to_virtual = {real_dir: virtual_dir for virtual_dir, real_dir in _virtual_to_real.items()}
 
 
-def validate_virtual_path(virtual_path: str) -> str:
+def normalize_virtual_path(virtual_path: str) -> str:
+    """Normalize a virtual path for consistent formatting."""
+    if not virtual_path or virtual_path == ".":
+        virtual_path = "/"
+    if virtual_path.startswith("./"):
+        virtual_path = virtual_path[1:]
+    if not virtual_path.startswith("/"):
+        virtual_path = "/" + virtual_path
+    return virtual_path
+
+
+def virtual_to_real_path(virtual_path: str) -> str:
     """Convert a virtual path to a real path, ensuring it’s within allowed directories."""
+    virtual_path = normalize_virtual_path(virtual_path)
+
+    if virtual_path == "/":
+        raise IsADirectoryError("Root directory (R/O)")
+
     for virtual_dir, real_dir in _virtual_to_real.items():
         if virtual_path.startswith(virtual_dir + "/") or virtual_path == virtual_dir:
             relative = virtual_path[len(virtual_dir) :].lstrip("/")
             real_path = os.path.join(real_dir, relative) if relative else real_dir
             break
     else:
-        raise CustomError(f"Not a valid path (List allowed directories for valid paths): {virtual_path}")
+        raise CustomError(f"Not a valid path (List / for valid paths): {virtual_path}")
 
     real_path = os.path.normpath(os.path.abspath(real_path))
     try:
@@ -79,8 +95,8 @@ def get_error_message(message, virtual_path: str, e: Exception) -> str:
 
 # Server setup
 mcp = FastMCP(
-    name="File System Server",
-    instructions="A server that provides tools for interacting with a file system. Only some paths are accessible, therefore the allowed directores must be listed initially.",
+    name="File System Server (Write)",
+    instructions="A server that provides tools for interacting with a file system.",
 )
 
 
@@ -91,7 +107,7 @@ def write_file(
 ) -> str:
     """Write or overwrite a file with the given text content."""
     try:
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         with open(real_path, "w", encoding="utf-8") as f:
             f.write(content)
         return f"Wrote to {path}"
@@ -100,10 +116,10 @@ def write_file(
 
 
 @mcp.tool
-def create_directory(path: Annotated[str, "The path of the directory to create. It can be nested (e.g., /data/a/new/dir)."]) -> str:
+def create_directory(path: Annotated[str, "The path of the directory to create. It can be nested (e.g., /a/new/dir)."]) -> str:
     """Create a directory, including any necessary parent directories."""
     try:
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         os.makedirs(real_path, exist_ok=True)
         return f"Created {path}"
     except Exception as e:
@@ -214,7 +230,7 @@ def apply_diff(
     This patch replaces one line that must be `Beneath the velvet cloak of night` and must be at or after line 3 and must be followed by the line `Where stars like silver needles stitch the sky,` with `Under the velvet cloak of night,`.
     """
     try:
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         with open(real_path, "r", encoding="utf-8") as f:
             original_content = f.read()
 
@@ -238,8 +254,8 @@ def move_file(
 ) -> str:
     """Move or rename a file or directory. This operation will fail if the destination already exists."""
     try:
-        real_source = validate_virtual_path(source)
-        real_destination = validate_virtual_path(destination)
+        real_source = virtual_to_real_path(source)
+        real_destination = virtual_to_real_path(destination)
         os.rename(real_source, real_destination)
         return f"Moved {source} to {destination}"
     except Exception as e:
