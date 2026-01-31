@@ -828,4 +828,33 @@ export function registerFlowStepDefinitions(flowManager) {
             }
         },
     });
+
+    flowManager._defineStep('pop-from-stack', {
+        label: 'Pop from Stack',
+        color: 'hsla(160, 20%, 35%, 0.8)',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8H3V6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2zM21 14H3v-2a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2zM21 20H3v-2a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2z"/></svg>',
+        getDefaults: () => ({ agentId: '' }),
+        render: function(step, agentOptions) {
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<p><small>Pops the latest entry from the MCP stack and uses it as a prompt.</small></p></div>`;
+        },
+        onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
+        execute: (step, context) => {
+            context.app.mcp.rpc('resources/read', { uri: 'stack://latest' })
+                .then(result => {
+                    if (result && result.contents && result.contents.length > 0) {
+                        const content = result.contents[0].text;
+                        if (content === "Stack is empty") {
+                            return context.stopFlow('Stack is empty.');
+                        }
+                        context.app.dom.messageInput.value = content;
+                        context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+                    } else {
+                        context.stopFlow('Stack is empty.');
+                    }
+                })
+                .catch(err => {
+                    context.stopFlow('Error popping from stack: ' + err.message);
+                });
+        },
+    });
 }
