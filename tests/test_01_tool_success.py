@@ -22,7 +22,7 @@ def test_tool_success(page):
 
     # Verify assistant's tool call
     assistant_tool_call_message = page.locator(".message.role-assistant .message-content").first
-    expect(assistant_tool_call_message).to_contain_text('<dma:tool_call name="get_datetime"', timeout=3000)
+    expect(assistant_tool_call_message).to_contain_text('<dma:tool_call name="dt_get_datetime"', timeout=3000)
 
     # Verify the initial user message
     expect(page.locator(".message.role-user .message-content").last).to_have_text(message, timeout=3000)

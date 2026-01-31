@@ -34,8 +34,8 @@ def configure_agent(page: Page):
 
     # Configure tools: Uncheck 'Allow all' and enable specific tool
     page.get_by_label("Allow all available tools").uncheck()
-    expect(page.locator('#agent-agent-default-toolSettings-allowed label:has-text("get_datetime")')).to_be_visible(timeout=10000)
-    page.get_by_label("get_datetime").check()
+    expect(page.locator('#agent-agent-default-toolSettings-allowed label:has-text("dt_get_datetime")')).to_be_visible(timeout=10000)
+    page.get_by_label("dt_get_datetime").check()
 
     # For debugging: Screenshot after tool configuration
     # page.screenshot(path="test-results/debug_tools.png")
