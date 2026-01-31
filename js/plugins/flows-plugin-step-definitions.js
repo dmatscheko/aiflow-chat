@@ -214,6 +214,38 @@ export function registerFlowStepDefinitions(flowManager) {
         },
     });
 
+    flowManager._defineStep('pop-from-stack', {
+        label: 'Pop from Stack',
+        color: 'hsla(160, 20%, 35%, 0.8)',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15l5 5 5-5"/><path d="M12 20V4"/></svg>',
+        getDefaults: () => ({ agentId: '' }),
+        render: function(step, agentOptions) {
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}</div>`;
+        },
+        onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
+        execute: (step, context) => {
+            context.app.mcp.rpc('tools/call', { name: 'pop_from_stack', arguments: {} })
+                .then(result => {
+                    let prompt = '';
+                    if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
+                        prompt = result.content[0].text;
+                    } else if (typeof result.content === 'string') {
+                        prompt = result.content;
+                    }
+
+                    if (!prompt || prompt.startsWith('Error:')) {
+                        return context.stopFlow('Stack is empty or error: ' + (prompt || 'unknown error'));
+                    }
+
+                    context.app.dom.messageInput.value = prompt;
+                    context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+                })
+                .catch(error => {
+                    context.stopFlow('Failed to pop from stack: ' + error.message);
+                });
+        },
+    });
+
     flowManager._defineStep('multi-prompt', {
         label: 'Multi Prompt',
         color: 'hsla(145, 20%, 35%, 0.8)',
