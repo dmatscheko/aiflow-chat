@@ -41,12 +41,12 @@ class MockAIHandler(http.server.SimpleHTTPRequestHandler):
             # Logic for testing
             if last_message_role == "user" and "What's the current date and time?" in last_message_content:
                 # If the user asks for the current date and time, call the datetime tool.
-                response_text = '<dma:tool_call name="get_datetime"/>'
+                response_text = '<dma:tool_call name="dt_get_datetime"/>'
             elif last_message_role == "user" and "Trigger a tool error." in last_message_content:
                 # If the user asks to trigger an error, call a non-existent tool.
                 response_text = '<dma:tool_call name="non_existent_tool"/>'
-            elif last_message_role == "tool" and '<dma:tool_response name="get_datetime"' in last_message_content and '"text": "' in last_message_content:
-                # If the last message is a successful get_datetime tool response, give the final answer.
+            elif last_message_role == "tool" and '<dma:tool_response name="dt_get_datetime"' in last_message_content and '"text": "' in last_message_content:
+                # If the last message is a successful dt_get_datetime tool response, give the final answer.
                 response_text = "The current date and time has been provided by the tool."
             elif last_message_role == "tool" and "</content>\n</dma:tool_response>" in last_message_content:
                 # If the last message is a successful tool response, say so.
