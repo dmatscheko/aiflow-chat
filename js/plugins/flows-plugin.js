@@ -141,11 +141,11 @@ export class FlowManager {
      * Starts the execution of a flow.
      * @param {string} flowId The ID of the flow to start.
      */
-    startFlow(flowId) {
+    async startFlow(flowId) {
         const flow = this.getFlow(flowId);
         if (flow) {
             this.activeFlowRunner = new FlowRunner(flow, this.app, this);
-            this.activeFlowRunner.start();
+            await this.activeFlowRunner.start();
         }
     }
 
@@ -424,12 +424,12 @@ class FlowRunner {
      * Starts the execution of the flow. It finds the starting node (one with no
      * incoming connections) and begins execution from there.
      */
-    start() {
+    async start() {
         if (this.isRunning) return;
         const startNode = this.flow.steps.find(s => !this.flow.connections.some(c => c.to === s.id));
         if (!startNode) return alert('Flow has no starting node!');
         this.isRunning = true;
-        this.executeStep(startNode);
+        await this.executeStep(startNode);
     }
 
     /**
@@ -448,15 +448,15 @@ class FlowRunner {
      * Executes a single step of the flow.
      * @param {FlowStep} step - The step to execute.
      */
-    executeStep(step) {
+    async executeStep(step) {
         if (!this.isRunning) return;
         this.currentStepId = step.id;
         const stepDef = this.manager.stepTypes[step.type];
         if (stepDef?.execute) {
-            stepDef.execute(step, {
+            await stepDef.execute(step, {
                 app: this.app,
                 getNextStep: (id, out) => this.getNextStep(id, out),
-                executeStep: (next) => this.executeStep(next),
+                executeStep: async (next) => await this.executeStep(next),
                 stopFlow: (msg) => this.stop(msg),
             });
         } else {
@@ -482,7 +482,7 @@ class FlowRunner {
      * @param {Chat} chat - The active chat instance.
      * @returns {boolean} `true` if the flow proceeded and scheduled new work, `false` otherwise.
      */
-    continue(message, chat) {
+    async continue(message, chat) {
          // Only act when a flow is running, a step is selected, and the AI is idle.
         if (!this.isRunning || !this.currentStepId || message !== null) return false;
 
@@ -503,7 +503,7 @@ class FlowRunner {
                 this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
                 const nextStep = this.getNextStep(step.id);
                 if (nextStep) {
-                    this.executeStep(nextStep);
+                    await this.executeStep(nextStep);
                     return true; // A new step was executed.
                 } else {
                     this.stop('Flow execution complete.');
@@ -516,7 +516,7 @@ class FlowRunner {
             if (stepDef?.execute?.toString().includes('handleFormSubmit')) {
                 const nextStep = this.getNextStep(this.currentStepId);
                 if (nextStep) {
-                    this.executeStep(nextStep);
+                    await this.executeStep(nextStep);
                     return true; // A new step was executed.
                 } else {
                     this.stop('Flow execution complete.');
@@ -602,11 +602,11 @@ pluginManager.register({
         }
     },
 
-    onResponseComplete(message, chat) {
+    async onResponseComplete(message, chat) {
         if (!flowManager.activeFlowRunner) {
             return false;
         }
-        return flowManager.activeFlowRunner.continue(message, chat);
+        return await flowManager.activeFlowRunner.continue(message, chat);
     },
 
     onRightPanelRegister(rightPanelManager) {
