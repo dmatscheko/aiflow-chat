@@ -44,5 +44,13 @@
       "--",
       "./_mcp_filesystem/watcher"
     ]
+  },
+  "stack": {
+    "command": "uvx",
+    "args": [
+      "fastmcp",
+      "run",
+      "./_mcp_servers/stack-mcp/stack-mcp.py"
+    ]
   }
 }
