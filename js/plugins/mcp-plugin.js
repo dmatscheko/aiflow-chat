@@ -124,13 +124,13 @@ class McpPlugin {
         if (!isNotification) {
             body.id = Math.floor(Math.random() * 1000000);
         }
-        const headers = {
+        const headers = new Headers({
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream'
-        };
+        });
         const sessionId = this.#sessionCache.get(url);
         if (sessionId && method !== 'initialize') {
-            headers['mcp-session-id'] = sessionId;
+            headers.set('mcp-session-id', sessionId);
         }
 
         const controller = new AbortController();
@@ -142,8 +142,11 @@ class McpPlugin {
 
             if (!resp.ok) {
                 const errorText = await resp.text();
-                throw new Error(`MCP error: ${resp.statusText} - ${errorText}`);
+                throw new Error(`MCP error: ${resp.status} ${resp.statusText} - ${errorText}`);
             }
+
+            // Always consume the body to release the connection
+            const rawText = await resp.text();
 
             if (returnHeaders) {
                 return resp.headers;
@@ -151,7 +154,6 @@ class McpPlugin {
 
             if (isNotification) return null;
 
-            const rawText = await resp.text();
             console.log(`DEBUG: Raw response from ${url} for method ${method}:`, rawText);
 
             try {
@@ -159,22 +161,31 @@ class McpPlugin {
                 if (data.error) throw new Error(data.error.message || 'MCP call failed');
                 return data.result;
             } catch (error) {
-                // Fallback for servers that might incorrectly return a stream for a non-stream request.
-                if (error instanceof SyntaxError && rawText.includes('data:')) {
-                    console.warn('MCP: JSON parsing failed, attempting to parse as event-stream.');
+                // Fallback for servers that might incorrectly return a stream for a non-stream request,
+                // or for errors wrapped in an event-stream.
+                if (rawText.includes('data:')) {
+                    console.warn('MCP: JSON parsing failed or server returned error in event-stream, attempting to parse as event-stream.');
                     let result = null;
+                    let mcpError = null;
                     const lines = rawText.split('\n');
                     for (const line of lines) {
                         if (line.startsWith('data: ')) {
                             try {
                                 const partial = JSON.parse(line.slice(6));
-                                if (partial.jsonrpc) result = partial.result;
+                                if (partial.jsonrpc) {
+                                    if (partial.error) {
+                                        mcpError = new Error(partial.error.message || 'MCP call failed');
+                                    } else {
+                                        result = partial.result;
+                                    }
+                                }
                             } catch (e) {
                                 console.warn("MCP: Could not parse event-stream data chunk as JSON.", line.slice(6));
                             }
                         }
                     }
-                    if (result) return result;
+                    if (mcpError) throw mcpError;
+                    if (result !== null) return result;
                 }
                 throw error;
             }
@@ -240,10 +251,13 @@ class McpPlugin {
             return await this.#sendMcpRequest(url, method, params);
         } catch (error) {
             console.error('MCP: JSON-RPC failure', error);
-            if (error.message.includes('session') && !retry) {
+            const isSessionError = error.message.includes('session') || error.message.includes('Session');
+            const isNotAcceptable = error.message.includes('Not Acceptable') || error.message.includes('406');
+
+            if ((isSessionError || isNotAcceptable) && !retry) {
                 this.#sessionCache.delete(url);
                 this.#initPromises.delete(url);
-                console.log('MCP: Retrying MCP call after session re-init');
+                console.log(`MCP: Retrying MCP call after ${isNotAcceptable ? '406 error' : 'session error'}`);
                 return this.#mcpJsonRpc(url, method, params, true);
             }
             throw new AggregateError([error], `Failed to perform MCP JSON-RPC call to ${url}.`);
