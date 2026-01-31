@@ -631,7 +631,7 @@ export function registerFlowStepDefinitions(flowManager) {
             }
             messagesForAgent.push({ role: 'user', content: promptText });
 
-            context.app.apiService.executeStreamingAgentCall(
+            return context.app.apiService.executeStreamingAgentCall(
                 context.app,
                 chat,
                 messageToUpdate,
@@ -793,7 +793,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
             try {
                 const toolCall = JSON.parse(toolCallStr);
-                context.app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer)
+                return context.app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer)
                     .then(result => {
                         let resultStr = '';
                         if (result.isError) {
