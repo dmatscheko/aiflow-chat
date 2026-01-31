@@ -38,7 +38,7 @@ def normalize_virtual_path(virtual_path: str) -> str:
     return virtual_path
 
 
-def validate_virtual_path(virtual_path: str) -> str:
+def virtual_to_real_path(virtual_path: str) -> str:
     """Convert a virtual path to a real path, ensuring it’s within allowed directories."""
     virtual_path = normalize_virtual_path(virtual_path)
 
@@ -107,7 +107,7 @@ def write_file(
 ) -> str:
     """Write or overwrite a file with the given text content."""
     try:
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         with open(real_path, "w", encoding="utf-8") as f:
             f.write(content)
         return f"Wrote to {path}"
@@ -119,7 +119,7 @@ def write_file(
 def create_directory(path: Annotated[str, "The path of the directory to create. It can be nested (e.g., /a/new/dir)."]) -> str:
     """Create a directory, including any necessary parent directories."""
     try:
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         os.makedirs(real_path, exist_ok=True)
         return f"Created {path}"
     except Exception as e:
@@ -230,7 +230,7 @@ def apply_diff(
     This patch replaces one line that must be `Beneath the velvet cloak of night` and must be at or after line 3 and must be followed by the line `Where stars like silver needles stitch the sky,` with `Under the velvet cloak of night,`.
     """
     try:
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         with open(real_path, "r", encoding="utf-8") as f:
             original_content = f.read()
 
@@ -254,8 +254,8 @@ def move_file(
 ) -> str:
     """Move or rename a file or directory. This operation will fail if the destination already exists."""
     try:
-        real_source = validate_virtual_path(source)
-        real_destination = validate_virtual_path(destination)
+        real_source = virtual_to_real_path(source)
+        real_destination = virtual_to_real_path(destination)
         os.rename(real_source, real_destination)
         return f"Moved {source} to {destination}"
     except Exception as e:

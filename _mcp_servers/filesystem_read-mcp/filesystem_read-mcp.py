@@ -40,7 +40,7 @@ def normalize_virtual_path(virtual_path: str) -> str:
     return virtual_path
 
 
-def validate_virtual_path(virtual_path: str) -> str:
+def virtual_to_real_path(virtual_path: str) -> str:
     """Convert a virtual path to a real path, ensuring it’s within allowed directories."""
     virtual_path = normalize_virtual_path(virtual_path)
 
@@ -135,7 +135,7 @@ def list_files_recursive(virtual_path: str, pattern: str = None, exclude_pattern
                 matches.append(v_name + "/")
         return "\n".join([f"### Contents of /:"] + sorted(matches))
 
-    real_path = validate_virtual_path(virtual_path)
+    real_path = virtual_to_real_path(virtual_path)
     matches = []
     for root, dirs, files in os.walk(real_path):
         if exclude_patterns:
@@ -166,7 +166,7 @@ def read_file(
 ) -> str:
     """Read file contents from the file system. Allows reading the whole file, or just the head or tail."""
     try:
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         if head is not None and tail is not None:
             raise CustomError("Specify either head or tail, not both")
         if head is not None:
@@ -192,7 +192,7 @@ def read_files(paths: Annotated[str, "A list of paths of the files to read, one 
             if virtual_path not in seen:
                 try:
                     seen.add(virtual_path)
-                    real_path = validate_virtual_path(virtual_path)
+                    real_path = virtual_to_real_path(virtual_path)
                     content = open(real_path, "r", encoding="utf-8").read()
                     results.append(f"### {virtual_path}:\n```\n{content}\n```\n")
                 except Exception as e:
@@ -210,7 +210,7 @@ def list_directory(path: Annotated[str, "The path of the directory to list."]) -
         if path == "/":
             listing = [f"[DIR] {k.lstrip('/')}" for k in sorted(_virtual_to_real.keys())]
             return "\n".join(listing)
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         entries = os.listdir(real_path)
         listing = [f"[{'DIR' if os.path.isdir(os.path.join(real_path, e)) else 'FILE'}] {e}" for e in entries]
         return "\n".join(listing)
@@ -260,7 +260,7 @@ def get_file_info(path: Annotated[str, "The path of the file or directory to get
         def format_time(timestamp):
             return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
 
-        real_path = validate_virtual_path(path)
+        real_path = virtual_to_real_path(path)
         stats = os.stat(real_path)
         info = {
             "path": path,
