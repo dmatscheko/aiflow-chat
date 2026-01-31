@@ -247,8 +247,9 @@ export function formatMessage(message) {
     if (message.value.role === 'assistant' || message.value.role === 'tool') {
         const details = [];
     
-        if (message.agent && this.agentManager) {
-            const agent = this.agentManager.getAgent(message.agent);
+        const agentManager = pluginManager.app?.agentManager;
+        if (message.agent && agentManager) {
+            const agent = agentManager.getAgent(message.agent);
             if (agent?.name) details.push(agent.name);
         }
         
