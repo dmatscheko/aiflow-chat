@@ -425,12 +425,12 @@ class FlowRunner {
      * Starts the execution of the flow. It finds the starting node (one with no
      * incoming connections) and begins execution from there.
      */
-    start() {
+    async start() {
         if (this.isRunning) return;
         const startNode = this.flow.steps.find(s => !this.flow.connections.some(c => c.to === s.id));
         if (!startNode) return alert('Flow has no starting node!');
         this.isRunning = true;
-        this.executeStep(startNode);
+        await this.executeStep(startNode);
     }
 
     /**
@@ -449,17 +449,17 @@ class FlowRunner {
      * Executes a single step of the flow.
      * @param {FlowStep} step - The step to execute.
      */
-    executeStep(step) {
+    async executeStep(step) {
         if (!this.isRunning) return;
         this.currentStepId = step.id;
         const stepDef = this.manager.stepTypes[step.type];
         if (stepDef?.execute) {
             this.isExecutingStep = true;
             try {
-                stepDef.execute(step, {
+                await stepDef.execute(step, {
                     app: this.app,
                     getNextStep: (id, out) => this.getNextStep(id, out),
-                    executeStep: (next) => this.executeStep(next),
+                    executeStep: async (next) => await this.executeStep(next),
                     stopFlow: (msg) => this.stop(msg),
                 });
             } finally {

@@ -126,7 +126,7 @@ class McpPlugin {
         }
         const headers = {
             'Content-Type': 'application/json',
-            'Accept': 'application/json, text/event-stream'
+            'Accept': 'text/event-stream, application/json'
         };
         const sessionId = this.#sessionCache.get(url);
         if (sessionId && method !== 'initialize') {
@@ -168,9 +168,16 @@ class McpPlugin {
                         if (line.startsWith('data: ')) {
                             try {
                                 const partial = JSON.parse(line.slice(6));
-                                if (partial.jsonrpc) result = partial.result;
+                                if (partial.jsonrpc) {
+                                    if (partial.error) throw new Error(partial.error.message || 'MCP call failed');
+                                    result = partial.result;
+                                }
                             } catch (e) {
-                                console.warn("MCP: Could not parse event-stream data chunk as JSON.", line.slice(6));
+                                if (e instanceof SyntaxError) {
+                                    console.warn("MCP: Could not parse event-stream data chunk as JSON.", line.slice(6));
+                                } else {
+                                    throw e;
+                                }
                             }
                         }
                     }
