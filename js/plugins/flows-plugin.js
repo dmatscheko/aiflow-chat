@@ -417,8 +417,16 @@ class FlowRunner {
         this.manager = manager;
         this.currentStepId = null;
         this.isRunning = false;
-        this.isExecutingStep = false;
+        this.executingStepsCount = 0;
         this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
+    }
+
+    /**
+     * Whether any flow step is currently being executed.
+     * @type {boolean}
+     */
+    get isExecutingStep() {
+        return this.executingStepsCount > 0;
     }
 
     /**
@@ -440,6 +448,7 @@ class FlowRunner {
     stop(message = 'Flow stopped.') {
         this.isRunning = false;
         this.currentStepId = null;
+        this.executingStepsCount = 0;
         this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
         console.log(message);
         this.manager.activeFlowRunner = null;
@@ -454,7 +463,7 @@ class FlowRunner {
         this.currentStepId = step.id;
         const stepDef = this.manager.stepTypes[step.type];
         if (stepDef?.execute) {
-            this.isExecutingStep = true;
+            this.executingStepsCount++;
             try {
                 await stepDef.execute(step, {
                     app: this.app,
@@ -463,7 +472,7 @@ class FlowRunner {
                     stopFlow: (msg) => this.stop(msg),
                 });
             } finally {
-                this.isExecutingStep = false;
+                this.executingStepsCount--;
             }
         } else {
             this.stop(`Unknown step type: ${step.type}`);

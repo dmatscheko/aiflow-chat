@@ -207,10 +207,10 @@ export function registerFlowStepDefinitions(flowManager) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea></div>`;
         },
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
-        execute: (step, context) => {
+        execute: async (step, context) => {
             if (!step.data.prompt) return context.stopFlow('Simple Prompt step not configured.');
             context.app.dom.messageInput.value = step.data.prompt;
-            context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+            await context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
         },
     });
 
@@ -224,7 +224,7 @@ export function registerFlowStepDefinitions(flowManager) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea><label>Number of alternatives:</label><input type="number" class="flow-step-count flow-step-input" data-id="${step.id}" data-key="count" value="${step.data.count || 1}" min="1" max="10"></div>`;
         },
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.dataset.key === 'count' ? parseInt(target.value, 10) : target.value; },
-        execute: (step, context) => {
+        execute: async (step, context) => {
             if (!step.data.prompt) return context.stopFlow('Multi Prompt step is not configured.');
 
             const runner = flowManager.activeFlowRunner;
@@ -247,7 +247,7 @@ export function registerFlowStepDefinitions(flowManager) {
             };
 
             // Trigger the processing of the pending message
-            context.app.responseProcessor.scheduleProcessing(context.app);
+            await context.app.responseProcessor.scheduleProcessing(context.app);
         },
     });
 
@@ -302,7 +302,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 handleClearHistoryUpdate(step, target, renderAndConnect);
             }
         },
-        execute: (step, context) => {
+        execute: async (step, context) => {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
@@ -326,7 +326,7 @@ export function registerFlowStepDefinitions(flowManager) {
             }
 
             context.app.dom.messageInput.value = finalPrompt;
-            context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+            await context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
         },
     });
 
@@ -373,7 +373,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 renderAndConnect();
             }
         },
-        execute: (step, context) => {
+        execute: async (step, context) => {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
@@ -414,7 +414,7 @@ export function registerFlowStepDefinitions(flowManager) {
             }
 
             context.app.dom.messageInput.value = newPrompt;
-            context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+            await context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
         },
     });
 
@@ -433,7 +433,7 @@ export function registerFlowStepDefinitions(flowManager) {
         onUpdate: (step, target, renderAndConnect) => {
             handleClearHistoryUpdate(step, target, renderAndConnect);
         },
-        execute: (step, context) => {
+        execute: async (step, context) => {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
@@ -443,7 +443,7 @@ export function registerFlowStepDefinitions(flowManager) {
             }
 
             const nextStep = context.getNextStep(step.id);
-            if (nextStep) context.executeStep(nextStep); else context.stopFlow();
+            if (nextStep) await context.executeStep(nextStep); else context.stopFlow();
         },
     });
 
@@ -458,7 +458,7 @@ export function registerFlowStepDefinitions(flowManager) {
         },
         renderOutputConnectors: (step) => `<div class="connector-group labels"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="pass"><span class="connector-label">Pass</span></div><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="fail"><span class="connector-label">Fail</span></div></div>`,
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
-        execute: (step, context) => {
+        execute: async (step, context) => {
             const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
             let isMatch = false;
             try {
@@ -469,7 +469,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 }
             } catch (e) { return context.stopFlow('Invalid regex in branching step.'); }
             const nextStep = context.getNextStep(step.id, isMatch ? 'pass' : 'fail');
-            if (nextStep) context.executeStep(nextStep); else context.stopFlow();
+            if (nextStep) await context.executeStep(nextStep); else context.stopFlow();
         },
     });
 
@@ -484,7 +484,7 @@ export function registerFlowStepDefinitions(flowManager) {
         },
         renderOutputConnectors: (step) => `<div class="connector-group labels"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="pass"><span class="connector-label">Over</span></div><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="fail"><span class="connector-label">Under</span></div></div>`,
         onUpdate: (step, target) => { step.data[target.dataset.key] = parseInt(target.value, 10); },
-        execute: (step, context) => {
+        execute: async (step, context) => {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
@@ -500,7 +500,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
             const nextStep = context.getNextStep(step.id, isOverThreshold ? 'pass' : 'fail');
             if (nextStep) {
-                context.executeStep(nextStep);
+                await context.executeStep(nextStep);
             } else {
                 context.stopFlow();
             }
@@ -517,7 +517,7 @@ export function registerFlowStepDefinitions(flowManager) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea><label>On Match:</label><select class="flow-step-on-match flow-step-input" data-id="${step.id}" data-key="onMatch"><option value="stop" ${step.data.onMatch === 'stop' ? 'selected' : ''}>Stop flow</option><option value="continue" ${step.data.onMatch === 'continue' ? 'selected' : ''}>Must match to continue</option></select></div>`;
         },
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
-        execute: (step, context) => {
+        execute: async (step, context) => {
             const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
             let isMatch = false;
             try {
@@ -531,7 +531,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 return context.stopFlow('Flow stopped by conditional stop.');
             }
             const nextStep = context.getNextStep(step.id);
-            if (nextStep) context.executeStep(nextStep); else context.stopFlow();
+            if (nextStep) await context.executeStep(nextStep); else context.stopFlow();
         },
     });
 
@@ -573,7 +573,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 renderAndConnect();
             }
         },
-        execute: (step, context) => {
+        execute: async (step, context) => {
             const chat = context.app.chatManager.getActiveChat();
             const chatLog = chat?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
@@ -631,22 +631,23 @@ export function registerFlowStepDefinitions(flowManager) {
             }
             messagesForAgent.push({ role: 'user', content: promptText });
 
-            return context.app.apiService.executeStreamingAgentCall(
-                context.app,
-                chat,
-                messageToUpdate,
-                messagesForAgent,
-                agentId
-            ).then(() => {
+            try {
+                await context.app.apiService.executeStreamingAgentCall(
+                    context.app,
+                    chat,
+                    messageToUpdate,
+                    messagesForAgent,
+                    agentId
+                );
                 const nextStep = context.getNextStep(step.id);
                 if (nextStep) {
-                    context.executeStep(nextStep);
+                    await context.executeStep(nextStep);
                 } else {
                     context.stopFlow('Flow finished after agent call.');
                 }
-            }).catch(error => {
+            } catch (error) {
                 context.stopFlow(`Error during agent call: ${error.message}`);
-            });
+            }
         },
     });
 
@@ -786,54 +787,54 @@ export function registerFlowStepDefinitions(flowManager) {
             fetchTools();
         },
 
-        execute: (step, context) => {
+        execute: async (step, context) => {
             const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
             const escapedLastMessage = JSON.stringify(lastMessage).slice(1, -1);
             const toolCallStr = step.data.toolCall.replace(/\${LAST_RESPONSE}/g, escapedLastMessage);
 
             try {
                 const toolCall = JSON.parse(toolCallStr);
-                return context.app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer)
-                    .then(result => {
-                        let resultStr = '';
-                        if (result.isError) {
-                            if (typeof result.content === 'object' && result.content !== null && result.content.message) {
-                                resultStr = `Error: ${result.content.message}`;
-                            } else {
-                                resultStr = `Error: ${JSON.stringify(result.content)}`;
-                            }
-                        } else if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
-                            resultStr = result.content[0].text;
-                        } else {
-                            resultStr = JSON.stringify(result.content, null, 2);
-                        }
+                const result = await context.app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer);
 
-                        if (step.data.createPrompt) {
-                            const newPrompt = `${step.data.prePrompt || ''}${resultStr}${step.data.postPrompt || ''}`;
-                            context.app.dom.messageInput.value = newPrompt;
-                            context.app.chatManager.handleFormSubmit({});
-                        } else {
-                            const chat = context.app.chatManager.getActiveChat();
-                            if (chat) {
-                                chat.log.addMessage({
-                                    role: 'tool',
-                                    content: resultStr,
-                                    metadata: { tool_call: toolCall }
-                                });
-                            }
-                            const nextStep = context.getNextStep(step.id);
-                            if (nextStep) {
-                                context.executeStep(nextStep);
-                            } else {
-                                context.stopFlow();
-                            }
-                        }
-                    })
-                    .catch(error => {
-                        context.stopFlow(`Error in Manual MCP Call: ${error.message}`);
-                    });
+                let resultStr = '';
+                if (result.isError) {
+                    if (typeof result.content === 'object' && result.content !== null && result.content.message) {
+                        resultStr = `Error: ${result.content.message}`;
+                    } else {
+                        resultStr = `Error: ${JSON.stringify(result.content)}`;
+                    }
+                } else if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
+                    resultStr = result.content[0].text;
+                } else {
+                    resultStr = JSON.stringify(result.content, null, 2);
+                }
+
+                if (step.data.createPrompt) {
+                    const newPrompt = `${step.data.prePrompt || ''}${resultStr}${step.data.postPrompt || ''}`;
+                    context.app.dom.messageInput.value = newPrompt;
+                    await context.app.chatManager.handleFormSubmit({});
+                } else {
+                    const chat = context.app.chatManager.getActiveChat();
+                    if (chat) {
+                        chat.log.addMessage({
+                            role: 'tool',
+                            content: resultStr,
+                            metadata: { tool_call: toolCall }
+                        });
+                    }
+                    const nextStep = context.getNextStep(step.id);
+                    if (nextStep) {
+                        await context.executeStep(nextStep);
+                    } else {
+                        context.stopFlow();
+                    }
+                }
             } catch (error) {
-                context.stopFlow(`Invalid JSON in tool call: ${error.message}`);
+                if (error instanceof SyntaxError) {
+                    context.stopFlow(`Invalid JSON in tool call: ${error.message}`);
+                } else {
+                    context.stopFlow(`Error in Manual MCP Call: ${error.message}`);
+                }
             }
         },
     });
@@ -848,22 +849,21 @@ export function registerFlowStepDefinitions(flowManager) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}</div>`;
         },
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
-        execute: (step, context) => {
+        execute: async (step, context) => {
             // Note: The URI 'stack://stack/pop' is used because the MCP proxy prefixes 
             // the server name ('stack') to the resource URI ('stack://pop').
-            return context.app.mcp.rpc('resources/read', { uri: 'stack://stack/pop' })
-                .then(result => {
-                    const prompt = result.contents && result.contents[0] ? result.contents[0].text : '';
-                    if (prompt) {
-                        context.app.dom.messageInput.value = prompt;
-                        context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
-                    } else {
-                        context.stopFlow('Stack is empty.');
-                    }
-                })
-                .catch(error => {
-                    context.stopFlow(`Error popping from stack: ${error.message}`);
-                });
+            try {
+                const result = await context.app.mcp.rpc('resources/read', { uri: 'stack://stack/pop' });
+                const prompt = result.contents && result.contents[0] ? result.contents[0].text : '';
+                if (prompt) {
+                    context.app.dom.messageInput.value = prompt;
+                    await context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+                } else {
+                    context.stopFlow('Stack is empty.');
+                }
+            } catch (error) {
+                context.stopFlow(`Error popping from stack: ${error.message}`);
+            }
         },
     });
 
