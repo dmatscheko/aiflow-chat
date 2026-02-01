@@ -443,7 +443,7 @@ export function registerFlowStepDefinitions(flowManager) {
             }
 
             const nextStep = context.getNextStep(step.id);
-            if (nextStep) context.executeStep(nextStep); else context.stopFlow();
+            if (nextStep) return context.executeStep(nextStep); else context.stopFlow();
         },
     });
 
@@ -469,7 +469,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 }
             } catch (e) { return context.stopFlow('Invalid regex in branching step.'); }
             const nextStep = context.getNextStep(step.id, isMatch ? 'pass' : 'fail');
-            if (nextStep) context.executeStep(nextStep); else context.stopFlow();
+            if (nextStep) return context.executeStep(nextStep); else context.stopFlow();
         },
     });
 
@@ -500,7 +500,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
             const nextStep = context.getNextStep(step.id, isOverThreshold ? 'pass' : 'fail');
             if (nextStep) {
-                context.executeStep(nextStep);
+                return context.executeStep(nextStep);
             } else {
                 context.stopFlow();
             }
@@ -531,7 +531,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 return context.stopFlow('Flow stopped by conditional stop.');
             }
             const nextStep = context.getNextStep(step.id);
-            if (nextStep) context.executeStep(nextStep); else context.stopFlow();
+            if (nextStep) return context.executeStep(nextStep); else context.stopFlow();
         },
     });
 
@@ -640,7 +640,7 @@ export function registerFlowStepDefinitions(flowManager) {
             ).then(() => {
                 const nextStep = context.getNextStep(step.id);
                 if (nextStep) {
-                    context.executeStep(nextStep);
+                    return context.executeStep(nextStep);
                 } else {
                     context.stopFlow('Flow finished after agent call.');
                 }
@@ -823,7 +823,7 @@ export function registerFlowStepDefinitions(flowManager) {
                             }
                             const nextStep = context.getNextStep(step.id);
                             if (nextStep) {
-                                context.executeStep(nextStep);
+                                return context.executeStep(nextStep);
                             } else {
                                 context.stopFlow();
                             }

@@ -486,9 +486,9 @@ class FlowRunner {
      * This method is called by the `onResponseComplete` hook.
      * @param {Message | null} message - The message that was just completed, or `null` if it's an idle check.
      * @param {Chat} chat - The active chat instance.
-     * @returns {boolean} `true` if the flow proceeded and scheduled new work, `false` otherwise.
+     * @returns {Promise<boolean>} `true` if the flow proceeded and scheduled new work, `false` otherwise.
      */
-    continue(message, chat) {
+    async continue(message, chat) {
          // Only act when a flow is running, a step is selected, and the AI is idle.
         if (!this.isRunning || !this.currentStepId || message !== null || this.isExecutingStep) return false;
 
@@ -509,7 +509,7 @@ class FlowRunner {
                 this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
                 const nextStep = this.getNextStep(step.id);
                 if (nextStep) {
-                    this.executeStep(nextStep);
+                    await this.executeStep(nextStep);
                     return true; // A new step was executed.
                 } else {
                     this.stop('Flow execution complete.');
@@ -523,7 +523,7 @@ class FlowRunner {
             if (stepDef?.execute?.toString().includes('handleFormSubmit')) {
                 const nextStep = this.getNextStep(this.currentStepId);
                 if (nextStep) {
-                    this.executeStep(nextStep);
+                    await this.executeStep(nextStep);
                     return true; // A new step was executed.
                 } else {
                     this.stop('Flow execution complete.');
@@ -609,11 +609,11 @@ pluginManager.register({
         }
     },
 
-    onResponseComplete(message, chat) {
+    async onResponseComplete(message, chat) {
         if (!flowManager.activeFlowRunner) {
             return false;
         }
-        return flowManager.activeFlowRunner.continue(message, chat);
+        return await flowManager.activeFlowRunner.continue(message, chat);
     },
 
     onRightPanelRegister(rightPanelManager) {
