@@ -6,12 +6,13 @@ from test_03_simple_flow import test_simple_flow
 from test_04_agent_management import test_agent_management
 from test_05_flow_ui import test_flow_ui
 from test_06_token_count_flow_step import test_token_count_flow_step
+from test_07_loop_flow import test_loop_flow
 
 if __name__ == "__main__":
     with sync_playwright() as p:
         # browser = p.chromium.launch(channel="chrome", headless=False, args=["--disable-ipv6"])  # Could help with MacOS errors
-        browser = p.chromium.launch(headless=False)  # For debug
-        # browser = p.chromium.launch(headless=True)  # Normal test operation
+        # browser = p.chromium.launch(headless=False)  # For debug
+        browser = p.chromium.launch(headless=True)  # Normal test operation
         page = browser.new_page()
         page.goto("http://127.0.0.1:8000")
         configure_agent(page)  # Run once
@@ -44,11 +45,16 @@ if __name__ == "__main__":
             test_token_count_flow_step(page)
             print("test_token_count_flow_step passed.")
 
+            # Test 7
+            start_new_chat(page)
+            test_loop_flow(page)
+            print("test_loop_flow passed.")
+
             print("All tests finished successfully.")
         except Exception as e:
             print(f"Error in tests: {e}")
             page.screenshot(path="test-results/verification_error.png")
             # raise
         finally:
-            input("Press Enter to close the browser...")  # Keeps window open. For debug
+            # input("Press Enter to close the browser...")  # Keeps window open. For debug
             browser.close()
