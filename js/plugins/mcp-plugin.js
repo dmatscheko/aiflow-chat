@@ -131,6 +131,7 @@ class McpPlugin {
         const sessionId = this.#sessionCache.get(url);
         if (sessionId && method !== 'initialize') {
             headers['mcp-session-id'] = sessionId;
+            headers['x-mcp-session-id'] = sessionId;
         }
 
         const controller = new AbortController();
@@ -213,7 +214,7 @@ class McpPlugin {
                 clientInfo: { name: 'NewChatClient', version: '1.0.0' }
             };
             const respHeaders = await this.#sendMcpRequest(url, 'initialize', initParams, false, true);
-            const sessionId = respHeaders.get('mcp-session-id');
+            const sessionId = respHeaders.get('mcp-session-id') || respHeaders.get('x-mcp-session-id');
 
             if (!sessionId) {
                 throw new Error('No session ID returned in initialize response header');
