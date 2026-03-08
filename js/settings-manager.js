@@ -6,7 +6,7 @@
  * settings panel from a declarative configuration object.
  */
 
-'use.strict';
+'use strict';
 
 import { pluginManager } from './plugin-manager.js';
 import { createElement, createButton, createInput, createSelect, createTextarea } from './ui/ui-elements.js';

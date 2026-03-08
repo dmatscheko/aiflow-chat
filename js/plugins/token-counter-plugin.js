@@ -178,7 +178,7 @@ function updateAllTokenCounts() {
     let contextTokens = 0;
     if (activeChat) {
         const messages = activeChat.log.getActiveMessages();
-        const historyText = messages.map(m => m.value.content).join('\n');
+        const historyText = messages.map(m => m.value.content || '').join('\n');
         contextTokens = GPTTokenizer_cl100k_base.encode(historyText).length;
     }
     contextTokenCounter.textContent = `Context: ${contextTokens}`;

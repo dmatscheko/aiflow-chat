@@ -8,3 +8,5 @@ test-results/
 _mcp_filesystem/read_write/src/
 
 .DS_Store
+
+.claude/

@@ -494,7 +494,7 @@ const mcpPluginDefinition = {
             activeChat,
             message,
             tools,
-            (call) => !call.name.endsWith('_agent'), // Don't handle agent-as-tool calls here.
+            (call) => !call.name.startsWith('agent-'), // Don't handle agent-as-tool calls here. call.name is extracted from the name="..." attribute in <dma:tool_call name="agent-598356234">
             (call, msg) => mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl) // Executor function.
         );
     }

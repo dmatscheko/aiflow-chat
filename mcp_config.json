@@ -10,6 +10,8 @@
   "web": {
     "command": "uvx",
     "args": [
+      "--with",
+      "requests",
       "fastmcp",
       "run",
       "./_mcp_servers/fetch-mcp/fetch-mcp.py"

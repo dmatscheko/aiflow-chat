@@ -201,12 +201,10 @@ async function processToolCalls(app, chat, message, tools, filterCallback, execu
             { role: 'tool', content: toolContents, agent: message.agent },
             { depth: message.depth }
         );
-        // After adding tool results, queue up the next step for the AI.
+        // After adding tool results, queue up the next assistant turn to process them.
         const callingAgentId = message.agent;
-        // The role of the next turn should be the same as the role that made the tool call.
-        const nextTurnRole = message.value.role === 'tool' ? 'tool' : 'assistant';
         chat.log.addMessage(
-            { role: nextTurnRole, content: null, agent: callingAgentId },
+            { role: 'assistant', content: null, agent: callingAgentId },
             { depth: message.depth }
         );
         return true;
