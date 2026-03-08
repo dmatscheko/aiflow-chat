@@ -141,6 +141,11 @@ def main():
     """
     Main function to run the application.
     """
+    # Clear persisted stack data on every fresh start so stacks begin empty.
+    stack_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_mcp_servers", "stack-mcp", "stack_data.json")
+    if os.path.exists(stack_file):
+        os.remove(stack_file)
+
     parser = argparse.ArgumentParser(description="Run MCP proxy and web server")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable debug logging")
     parser.add_argument("--proxy-host", default="127.0.0.1", help="Host IP for the MCP proxy (default: 127.0.0.1)")

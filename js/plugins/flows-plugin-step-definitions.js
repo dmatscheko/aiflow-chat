@@ -824,6 +824,10 @@ export function registerFlowStepDefinitions(flowManager) {
                 const toolCallStr = _substituteLastResponse(toolCallTextarea.value, lastMessage);
                 try {
                     const toolCall = JSON.parse(toolCallStr);
+                    // Auto-inject stack_id for stack tools so each chat has its own stack.
+                    if (toolCall.tool?.startsWith('stack_') && !toolCall.arguments?.stack_id) {
+                        toolCall.arguments = { ...toolCall.arguments, stack_id: app.chatManager?.activeChatId || 'default' };
+                    }
                     const result = await app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer);
                     alert(`Tool Result:\n${_formatMcpResult(result)}`);
                 } catch (error) {
@@ -841,6 +845,10 @@ export function registerFlowStepDefinitions(flowManager) {
 
             try {
                 const toolCall = JSON.parse(toolCallStr);
+                // Auto-inject stack_id for stack tools so each chat has its own stack.
+                if (toolCall.tool?.startsWith('stack_') && !toolCall.arguments?.stack_id) {
+                    toolCall.arguments = { ...toolCall.arguments, stack_id: context.app.chatManager?.activeChatId || 'default' };
+                }
                 return context.app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer)
                     .then(result => {
                         const resultStr = _formatMcpResult(result);
@@ -885,11 +893,10 @@ export function registerFlowStepDefinitions(flowManager) {
         },
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
-            // Note: The URI 'stack://stack/pop' is used because the MCP proxy prefixes
-            // the server name ('stack') to the resource URI ('stack://pop').
-            return context.app.mcp.rpc('resources/read', { uri: 'stack://stack/pop' })
+            const chatId = context.app.chatManager?.activeChatId || 'default';
+            return context.app.mcp.rpc('tools/call', { name: 'stack_pop_from_stack', arguments: { stack_id: chatId } })
                 .then(result => {
-                    const prompt = result.contents && result.contents[0] ? result.contents[0].text : '';
+                    const prompt = result.content && result.content[0] ? result.content[0].text : '';
                     if (prompt) {
                         _submitPrompt(context, prompt, step.data.agentId);
                     } else {

@@ -478,13 +478,20 @@ const mcpPluginDefinition = {
         const tools = await mcpPluginSingleton.getTools(mcpUrl);
         if (!tools || tools.length === 0) return false;
 
+        const chatId = activeChat?.id || 'default';
         return await genericProcessToolCalls(
             app,
             activeChat,
             message,
             tools,
             (call) => !call.name.startsWith('agent-'), // Don't handle agent-as-tool calls here. call.name is extracted from the name="..." attribute in <dma:tool_call name="agent-598356234">
-            (call, msg) => mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl) // Executor function.
+            (call, msg) => {
+                // Auto-inject stack_id for stack tools so each chat has its own stack.
+                if (call.name.startsWith('stack_') && !call.params.stack_id) {
+                    call = { ...call, params: { ...call.params, stack_id: chatId } };
+                }
+                return mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl); // Executor function.
+            }
         );
     }
 };
