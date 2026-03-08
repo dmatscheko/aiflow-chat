@@ -34,16 +34,7 @@ const roleMapping = {
  * @private
  */
 function _findLastMessageWithAlternatives(chatLog) {
-    if (!chatLog.rootAlternatives) {
-        return null;
-    }
-    const messages = [];
-    let current = chatLog.rootAlternatives.getActiveMessage();
-    while (current) {
-        messages.push(current);
-        current = current.getActiveAnswer();
-    }
-
+    const messages = chatLog.getActiveMessages();
     for (let i = messages.length - 1; i >= 0; i--) {
         const msg = messages[i];
         if (msg && msg.answerAlternatives && msg.answerAlternatives.messages.length > 1) {
@@ -123,6 +114,121 @@ function _getTurns(chatLog) {
     }
     return turns;
 }
+
+// --- Reusable Helpers for Flow Step Definitions ---
+
+/**
+ * A reusable onUpdate handler for flow steps that saves the target element's
+ * value to the step's data object using the target's data-key attribute.
+ * @param {object} step - The flow step object.
+ * @param {HTMLElement} target - The input element that triggered the update.
+ */
+const _defaultOnUpdate = (step, target) => {
+    step.data[target.dataset.key] = target.value;
+};
+
+/**
+ * Evaluates a condition against a text string using the specified matching strategy.
+ * Used by the 'branch' and 'conditional-stop' flow step types.
+ * @param {string} text - The text to test against.
+ * @param {string} conditionType - One of 'contains', 'matches', or 'regex'.
+ * @param {string} condition - The condition string or regex pattern.
+ * @returns {boolean} Whether the condition matches.
+ * @throws {Error} If conditionType is 'regex' and the pattern is invalid.
+ */
+function _evaluateCondition(text, conditionType, condition) {
+    switch (conditionType) {
+        case 'regex': return new RegExp(condition).test(text);
+        case 'matches': return text === condition;
+        default: return text.includes(condition);
+    }
+}
+
+/**
+ * Returns the HTML for a condition-type dropdown and condition textarea.
+ * Used by the 'branch' and 'conditional-stop' flow step render functions.
+ * @param {object} step - The flow step object.
+ * @returns {string} HTML string for the condition UI controls.
+ */
+function _getConditionUI(step) {
+    return `<label>Last Response Condition:</label>` +
+        `<select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType">` +
+        `<option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option>` +
+        `<option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option>` +
+        `<option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option>` +
+        `</select>` +
+        `<textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea>`;
+}
+
+/**
+ * Extracts formatted content from the last AI turn in the chat history.
+ * Used by 'echo-answer' and 'agent-call-from-answer' flow steps.
+ * @param {Message[][]} turns - The array of turns from _getTurns().
+ * @param {boolean} onlyLastAnswer - If true, returns only the last message's content.
+ *   If false, formats all messages in the turn with role labels.
+ * @returns {{ content: string } | { error: string }} The extracted content or an error.
+ */
+function _extractLastAiTurnContent(turns, onlyLastAnswer) {
+    if (turns.length < 1) {
+        return { error: 'Not enough turns in the chat.' };
+    }
+    const lastTurn = turns[turns.length - 1];
+    const isLastTurnAi = lastTurn.every(msg => msg.value.role === 'assistant' || msg.value.role === 'tool');
+    if (!isLastTurnAi) {
+        return { error: 'Last turn is not an AI turn.' };
+    }
+    if (onlyLastAnswer) {
+        return { content: lastTurn[lastTurn.length - 1].value.content || '' };
+    }
+    const formatted = lastTurn.map(msg => {
+        const role = roleMapping[msg.value.role] || msg.value.role;
+        return `**${role}:** ${msg.value.content || ''}`;
+    }).join('\n\n');
+    return { content: formatted };
+}
+
+/**
+ * Substitutes the ${LAST_RESPONSE} placeholder in a tool call JSON string
+ * with the JSON-escaped content of the last message.
+ * @param {string} toolCallStr - The raw tool call JSON string with optional ${LAST_RESPONSE} placeholders.
+ * @param {string} lastMessageContent - The raw content of the last chat message.
+ * @returns {string} The tool call string with the placeholder substituted.
+ */
+function _substituteLastResponse(toolCallStr, lastMessageContent) {
+    const escaped = JSON.stringify(lastMessageContent).slice(1, -1);
+    return toolCallStr.replace(/\${LAST_RESPONSE}/g, escaped);
+}
+
+/**
+ * Formats the result of an MCP tool call into a display string.
+ * @param {object} result - The MCP tool call result object.
+ * @returns {string} A formatted string representation of the result.
+ */
+function _formatMcpResult(result) {
+    if (result.isError) {
+        if (typeof result.content === 'object' && result.content !== null && result.content.message) {
+            return `Error: ${result.content.message}`;
+        }
+        return `Error: ${JSON.stringify(result.content)}`;
+    }
+    if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
+        return result.content[0].text;
+    }
+    return JSON.stringify(result.content, null, 2);
+}
+
+/**
+ * Submits a prompt to the chat via the message input, optionally using a specific agent.
+ * This is the standard way for flow steps to trigger a new AI response.
+ * @param {object} context - The flow execution context.
+ * @param {string} prompt - The text to submit.
+ * @param {string} [agentId=''] - The agent ID to use for the response.
+ */
+function _submitPrompt(context, prompt, agentId = '') {
+    context.app.dom.messageInput.value = prompt;
+    context.app.chatManager.handleFormSubmit({ agentId });
+}
+
 
 /**
  * Registers all the standard flow step definitions with the `FlowManager`.
@@ -206,11 +312,10 @@ export function registerFlowStepDefinitions(flowManager) {
         render: function(step, agentOptions) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea></div>`;
         },
-        onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
+        onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
             if (!step.data.prompt) return context.stopFlow('Simple Prompt step not configured.');
-            context.app.dom.messageInput.value = step.data.prompt;
-            context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+            _submitPrompt(context, step.data.prompt, step.data.agentId);
         },
     });
 
@@ -325,8 +430,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 }
             }
 
-            context.app.dom.messageInput.value = finalPrompt;
-            context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+            _submitPrompt(context, finalPrompt, step.data.agentId);
         },
     });
 
@@ -382,27 +486,12 @@ export function registerFlowStepDefinitions(flowManager) {
                 return context.stopFlow('Echo Answer: Not enough turns in the chat.');
             }
 
+            const result = _extractLastAiTurnContent(turns, step.data.onlyLastAnswer);
+            if (result.error) return context.stopFlow(`Echo Answer: ${result.error}`);
+
             const lastTurn = turns[turns.length - 1];
             const userTurn = turns[turns.length - 2];
-
-            const isLastTurnAi = lastTurn.every(msg => msg.value.role === 'assistant' || msg.value.role === 'tool');
-
-            if (!isLastTurnAi) {
-                return context.stopFlow('Echo Answer: Last turn is not an AI turn.');
-            }
-
-            let contentToEcho = '';
-            if (step.data.onlyLastAnswer) {
-                const lastMessage = lastTurn[lastTurn.length - 1];
-                contentToEcho = lastMessage.value.content || '';
-            } else {
-                contentToEcho = lastTurn.map(msg => {
-                    const role = roleMapping[msg.value.role] || msg.value.role;
-                    return `**${role}:** ${msg.value.content || ''}`;
-                }).join('\n\n');
-            }
-
-            const newPrompt = `${step.data.prePrompt || ''}${contentToEcho}${step.data.postPrompt || ''}`;
+            const newPrompt = `${step.data.prePrompt || ''}${result.content}${step.data.postPrompt || ''}`;
 
             if (step.data.deleteUserMessage) {
                 // This will delete the user message and the entire AI turn that follows it.
@@ -413,8 +502,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 [...lastTurn].reverse().forEach(msg => chatLog.deleteMessage(msg));
             }
 
-            context.app.dom.messageInput.value = newPrompt;
-            context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+            _submitPrompt(context, newPrompt, step.data.agentId);
         },
     });
 
@@ -454,19 +542,15 @@ export function registerFlowStepDefinitions(flowManager) {
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="4" r="2"></circle><circle cx="7" cy="20" r="2"></circle><circle cx="17" cy="20" r="2"></circle><path d="M7 18V6"></path><path d="M7 7c0 1.66 1.34 3 3 3h5c1.1 0 2 .9 2 2v6"></path></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '' }),
         render: function(step) {
-            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea></div>`;
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${_getConditionUI(step)}</div>`;
         },
         renderOutputConnectors: (step) => `<div class="connector-group labels"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="pass"><span class="connector-label">Pass</span></div><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="fail"><span class="connector-label">Fail</span></div></div>`,
-        onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
+        onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
             const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
             let isMatch = false;
             try {
-                switch(step.data.conditionType) {
-                    case 'regex': isMatch = new RegExp(step.data.condition).test(lastMessage); break;
-                    case 'matches': isMatch = (lastMessage === step.data.condition); break;
-                    default: isMatch = lastMessage.includes(step.data.condition); break;
-                }
+                isMatch = _evaluateCondition(lastMessage, step.data.conditionType, step.data.condition);
             } catch (e) { return context.stopFlow('Invalid regex in branching step.'); }
             const nextStep = context.getNextStep(step.id, isMatch ? 'pass' : 'fail');
             if (nextStep) return context.executeStep(nextStep); else context.stopFlow();
@@ -514,18 +598,14 @@ export function registerFlowStepDefinitions(flowManager) {
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '', onMatch: 'stop' }),
         render: function(step) {
-            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content"><label>Last Response Condition:</label><select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType"><option value="contains" ${step.data.conditionType === 'contains' ? 'selected' : ''}>Contains String</option><option value="matches" ${step.data.conditionType === 'matches' ? 'selected' : ''}>Matches String</option><option value="regex" ${step.data.conditionType === 'regex' ? 'selected' : ''}>Matches Regex</option></select><textarea class="flow-step-condition flow-step-input" rows="2" data-id="${step.id}" data-key="condition" placeholder="Enter value...">${step.data.condition || ''}</textarea><label>On Match:</label><select class="flow-step-on-match flow-step-input" data-id="${step.id}" data-key="onMatch"><option value="stop" ${step.data.onMatch === 'stop' ? 'selected' : ''}>Stop flow</option><option value="continue" ${step.data.onMatch === 'continue' ? 'selected' : ''}>Must match to continue</option></select></div>`;
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${_getConditionUI(step)}<label>On Match:</label><select class="flow-step-on-match flow-step-input" data-id="${step.id}" data-key="onMatch"><option value="stop" ${step.data.onMatch === 'stop' ? 'selected' : ''}>Stop flow</option><option value="continue" ${step.data.onMatch === 'continue' ? 'selected' : ''}>Must match to continue</option></select></div>`;
         },
-        onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
+        onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
             const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
             let isMatch = false;
             try {
-                switch(step.data.conditionType) {
-                    case 'regex': isMatch = new RegExp(step.data.condition).test(lastMessage); break;
-                    case 'matches': isMatch = (lastMessage === step.data.condition); break;
-                    default: isMatch = lastMessage.includes(step.data.condition); break;
-                }
+                isMatch = _evaluateCondition(lastMessage, step.data.conditionType, step.data.condition);
             } catch (e) { return context.stopFlow('Invalid regex in conditional step.'); }
             if ((isMatch && step.data.onMatch === 'stop') || (!isMatch && step.data.onMatch === 'continue')) {
                 return context.stopFlow('Flow stopped by conditional stop.');
@@ -584,25 +664,9 @@ export function registerFlowStepDefinitions(flowManager) {
             const turns = _getTurns(chatLog);
             let contentToInclude = '';
             if (step.data.includeLastAnswer) {
-                if (turns.length < 1) {
-                    return context.stopFlow('Agent Call: Not enough turns in the chat to include an answer.');
-                }
-                const lastTurn = turns[turns.length - 1];
-                const isLastTurnAi = lastTurn.every(msg => msg.value.role === 'assistant' || msg.value.role === 'tool');
-
-                if (!isLastTurnAi) {
-                    return context.stopFlow('Agent Call: The last turn is not an AI turn, so its answer cannot be included.');
-                }
-
-                if (step.data.onlyLastAnswer) {
-                    const lastMessage = lastTurn[lastTurn.length - 1];
-                    contentToInclude = lastMessage.value.content || '';
-                } else {
-                    contentToInclude = lastTurn.map(msg => {
-                        const role = roleMapping[msg.value.role] || msg.value.role;
-                        return `**${role}:** ${msg.value.content || ''}`;
-                    }).join('\n\n');
-                }
+                const result = _extractLastAiTurnContent(turns, step.data.onlyLastAnswer);
+                if (result.error) return context.stopFlow(`Agent Call: ${result.error}`);
+                contentToInclude = result.content;
             }
 
             const promptText = `${step.data.prePrompt || ''}${contentToInclude}${step.data.postPrompt || ''}`.trim();
@@ -757,26 +821,11 @@ export function registerFlowStepDefinitions(flowManager) {
 
             testBtn.addEventListener('click', async () => {
                 const lastMessage = app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
-                const escapedLastMessage = JSON.stringify(lastMessage).slice(1, -1);
-                const toolCallStr = toolCallTextarea.value.replace(/\${LAST_RESPONSE}/g, escapedLastMessage);
+                const toolCallStr = _substituteLastResponse(toolCallTextarea.value, lastMessage);
                 try {
                     const toolCall = JSON.parse(toolCallStr);
                     const result = await app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer);
-
-                    let resultStr = '';
-                    if (result.isError) {
-                        if (typeof result.content === 'object' && result.content !== null && result.content.message) {
-                            resultStr = `Error: ${result.content.message}`;
-                        } else {
-                            resultStr = `Error: ${JSON.stringify(result.content)}`;
-                        }
-                    } else if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
-                        resultStr = result.content[0].text;
-                    } else {
-                        resultStr = JSON.stringify(result.content, null, 2);
-                    }
-                    alert(`Tool Result:\n${resultStr}`);
-
+                    alert(`Tool Result:\n${_formatMcpResult(result)}`);
                 } catch (error) {
                     alert(`Error testing tool: ${error.message}`);
                 }
@@ -788,30 +837,17 @@ export function registerFlowStepDefinitions(flowManager) {
 
         execute: (step, context) => {
             const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
-            const escapedLastMessage = JSON.stringify(lastMessage).slice(1, -1);
-            const toolCallStr = step.data.toolCall.replace(/\${LAST_RESPONSE}/g, escapedLastMessage);
+            const toolCallStr = _substituteLastResponse(step.data.toolCall, lastMessage);
 
             try {
                 const toolCall = JSON.parse(toolCallStr);
                 return context.app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer)
                     .then(result => {
-                        let resultStr = '';
-                        if (result.isError) {
-                            if (typeof result.content === 'object' && result.content !== null && result.content.message) {
-                                resultStr = `Error: ${result.content.message}`;
-                            } else {
-                                resultStr = `Error: ${JSON.stringify(result.content)}`;
-                            }
-                        } else if (result.content && Array.isArray(result.content) && result.content[0]?.text) {
-                            resultStr = result.content[0].text;
-                        } else {
-                            resultStr = JSON.stringify(result.content, null, 2);
-                        }
+                        const resultStr = _formatMcpResult(result);
 
                         if (step.data.createPrompt) {
                             const newPrompt = `${step.data.prePrompt || ''}${resultStr}${step.data.postPrompt || ''}`;
-                            context.app.dom.messageInput.value = newPrompt;
-                            context.app.chatManager.handleFormSubmit({});
+                            _submitPrompt(context, newPrompt);
                         } else {
                             const chat = context.app.chatManager.getActiveChat();
                             if (chat) {
@@ -847,16 +883,15 @@ export function registerFlowStepDefinitions(flowManager) {
         render: function(step, agentOptions) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}</div>`;
         },
-        onUpdate: (step, target) => { step.data[target.dataset.key] = target.value; },
+        onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
-            // Note: The URI 'stack://stack/pop' is used because the MCP proxy prefixes 
+            // Note: The URI 'stack://stack/pop' is used because the MCP proxy prefixes
             // the server name ('stack') to the resource URI ('stack://pop').
             return context.app.mcp.rpc('resources/read', { uri: 'stack://stack/pop' })
                 .then(result => {
                     const prompt = result.contents && result.contents[0] ? result.contents[0].text : '';
                     if (prompt) {
-                        context.app.dom.messageInput.value = prompt;
-                        context.app.chatManager.handleFormSubmit({ agentId: step.data.agentId });
+                        _submitPrompt(context, prompt, step.data.agentId);
                     } else {
                         context.stopFlow('Stack is empty.');
                     }

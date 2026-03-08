@@ -246,14 +246,8 @@ export class ChatLog {
      * @returns {Message | null} The last `Message` in the active path, or `null` if the log is empty.
      */
     getLastMessage() {
-        if (!this.rootAlternatives) {
-            return null;
-        }
-        let current = this.rootAlternatives.getActiveMessage();
-        while (current && current.getActiveAnswer()) {
-            current = current.getActiveAnswer();
-        }
-        return current;
+        const messages = this.getActiveMessages();
+        return messages.length > 0 ? messages[messages.length - 1] : null;
     }
 
     /**
@@ -262,21 +256,13 @@ export class ChatLog {
      * @returns {MessageValue[]} An array of the message values.
      */
     getActiveMessageValues() {
-        const result = [];
-        if (!this.rootAlternatives) {
-            return result;
-        }
-        let current = this.rootAlternatives.getActiveMessage();
-        while (current) {
-            result.push(current.value);
-            current = current.getActiveAnswer();
-        }
-        return result;
+        return this.getActiveMessages().map(msg => msg.value);
     }
 
     /**
      * Returns an array of all message instances (`Message`) in the active conversational path,
-     * from the root to the last message.
+     * from the root to the last message. This is the fundamental traversal method that
+     * other convenience methods delegate to.
      * @returns {Message[]} An array of the `Message` instances.
      */
     getActiveMessages() {

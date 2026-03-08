@@ -23,6 +23,20 @@ import { pluginManager } from './plugin-manager.js';
  */
 export class ApiService {
     /**
+     * Builds the standard HTTP headers for an API request.
+     * @param {string} apiKey - The API key for Bearer authentication. May be empty/null.
+     * @returns {Object<string, string>} The headers object.
+     * @private
+     */
+    _buildHeaders(apiKey) {
+        const headers = { 'Content-Type': 'application/json' };
+        if (apiKey) {
+            headers['Authorization'] = `Bearer ${apiKey}`;
+        }
+        return headers;
+    }
+
+    /**
      * Fetches the list of available AI models from the API.
      * @param {string} apiUrl - The base URL of the API (e.g., "https://api.openai.com/").
      * @param {string} apiKey - The user's API key for authentication.
@@ -34,11 +48,7 @@ export class ApiService {
         // The models endpoint is usually at /v1/models
         const modelsUrl = new URL('/v1/models', apiUrl).href;
         try {
-            const headers = { 'Content-Type': 'application/json' };
-            if (apiKey) {
-                headers['Authorization'] = `Bearer ${apiKey}`;
-            }
-            const response = await fetch(modelsUrl, { headers });
+            const response = await fetch(modelsUrl, { headers: this._buildHeaders(apiKey) });
             if (!response.ok) {
                 throw new Error(`API Error: ${response.status} ${response.statusText}`);
             }
@@ -63,15 +73,11 @@ export class ApiService {
         console.log('Streaming chat ...');
         // The chat completions endpoint is usually at /v1/chat/completions
         const chatUrl = new URL('/v1/chat/completions', apiUrl).href;
-        const headers = { 'Content-Type': 'application/json' };
-        if (apiKey) {
-            headers['Authorization'] = `Bearer ${apiKey}`;
-        }
 
         try {
             const response = await fetch(chatUrl, {
                 method: 'POST',
-                headers,
+                headers: this._buildHeaders(apiKey),
                 body: JSON.stringify(payload),
                 signal: abortSignal,
             });

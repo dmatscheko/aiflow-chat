@@ -266,13 +266,7 @@ class McpPlugin {
      * @private
      */
     async #executeMcpCall(call, message, mcpUrl) {
-        const agentId = message.agent;
-        const agent = agentId ? this.#app.agentManager.getAgent(agentId) : null;
-        const defaultAgent = this.#app.agentManager.getAgent('agent-default');
-        let effectiveToolSettings = defaultAgent.toolSettings;
-        if (agent?.useCustomToolSettings) {
-            effectiveToolSettings = agent.toolSettings;
-        }
+        const effectiveToolSettings = this.#app.agentManager.getEffectiveApiConfig(message.agent).toolSettings;
 
         const isAllowed = effectiveToolSettings.allowAll || effectiveToolSettings.allowed?.includes(call.name);
         if (!isAllowed) {
@@ -341,12 +335,7 @@ class McpPlugin {
         const agentManager = this.#app?.agentManager;
         if (!agentManager) return '';
 
-        const defaultAgent = agentManager.getAgent('agent-default');
-        let effectiveToolSettings = defaultAgent.toolSettings;
-        if (agent?.useCustomToolSettings) {
-            effectiveToolSettings = agent.toolSettings;
-        }
-
+        const effectiveToolSettings = agentManager.getEffectiveApiConfig(agent?.id).toolSettings;
         if (!effectiveToolSettings) return '';
 
         const allowedTools = effectiveToolSettings.allowAll

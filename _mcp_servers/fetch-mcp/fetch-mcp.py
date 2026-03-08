@@ -2,13 +2,15 @@
 This is an MCP server that provides a tool to get a web page.
 """
 
-import urllib3
+import warnings
+from urllib3.exceptions import InsecureRequestWarning
+
 from fastmcp import FastMCP
 import requests
 from typing import Annotated
 
 # Suppress SSL warnings
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.simplefilter("ignore", InsecureRequestWarning)
 
 mcp = FastMCP("Web Page Fetcher")
 
