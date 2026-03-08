@@ -64,8 +64,8 @@ if len(sys.argv) != 2:
 
 real_dir = sys.argv[1]
 if not os.path.isdir(real_dir):
-    print(f"Error: {real_dir} is not a directory")
-    sys.exit(1)
+    os.makedirs(real_dir, exist_ok=True)
+    print(f"Created watched directory: {real_dir}")
 
 set_watched_dir(real_dir)
 print(f"MCP File Watcher Server running on stdio\nWatching directory: {_watched_dir}")

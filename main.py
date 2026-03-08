@@ -83,10 +83,36 @@ def load_config():
         return {}
 
 
+def validate_servers(mcp_servers):
+    """
+    Validates each MCP server config and returns only the ones that can start.
+    Servers with missing scripts or directories are skipped with a warning.
+    """
+    valid = {}
+    for name, config in mcp_servers.items():
+        args = config.get("args", [])
+        # For stdio servers using 'fastmcp run <script> [-- <dir>...]',
+        # check that the script exists and any directories after '--' exist or can be created.
+        try:
+            run_idx = args.index("run") if "run" in args else -1
+            if run_idx >= 0 and run_idx + 1 < len(args):
+                script = args[run_idx + 1]
+                if not os.path.isfile(script):
+                    logging.warning(f"MCP: Skipping '{name}': script not found: {script}")
+                    continue
+        except (ValueError, IndexError):
+            pass
+        valid[name] = config
+    return valid
+
+
 def setup_proxy(mcp_servers):
     """
     Sets up the MCP proxy.
     """
+    if not mcp_servers:
+        return None
+    mcp_servers = validate_servers(mcp_servers)
     if not mcp_servers:
         return None
     proxy = FastMCP.as_proxy({"mcpServers": mcp_servers}, name="Composite Proxy")
