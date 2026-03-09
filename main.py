@@ -13,7 +13,10 @@ import argparse
 import time
 import signal
 import sys
-from fastmcp import FastMCP
+import anyio
+from functools import partial
+from fastmcp import Client
+from fastmcp.server import create_proxy
 from starlette.middleware import Middleware
 from starlette.middleware.cors import CORSMiddleware
 
@@ -106,17 +109,11 @@ def validate_servers(mcp_servers):
     return valid
 
 
-def setup_proxy(mcp_servers):
+def get_cors_middleware():
     """
-    Sets up the MCP proxy.
+    Returns CORS middleware configuration for the MCP proxy.
     """
-    if not mcp_servers:
-        return None
-    mcp_servers = validate_servers(mcp_servers)
-    if not mcp_servers:
-        return None
-    proxy = FastMCP.as_proxy({"mcpServers": mcp_servers}, name="Composite Proxy")
-    cors = [
+    return [
         Middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -126,7 +123,22 @@ def setup_proxy(mcp_servers):
             expose_headers=["MCP-Session-ID", "X-MCP-Session-ID"],
         )
     ]
-    return proxy, cors
+
+
+async def run_proxy(mcp_servers, host, port, middleware):
+    """
+    Runs the MCP proxy with a pre-connected client.
+
+    Connects the Client ONCE before creating the proxy so that all tool calls
+    reuse the same backend sessions instead of spawning fresh subprocesses
+    for every single MCP call.
+    """
+    client = Client({"mcpServers": mcp_servers})
+    async with client:
+        proxy = create_proxy(client, name="Composite Proxy")
+        await proxy.run_async(
+            transport="http", host=host, port=port, middleware=middleware
+        )
 
 
 def shutdown(sig, frame):
@@ -162,7 +174,7 @@ def main():
     signal.signal(signal.SIGTERM, shutdown)
 
     mcp_servers = load_config()
-    proxy_info = setup_proxy(mcp_servers)
+    mcp_servers = validate_servers(mcp_servers) if mcp_servers else {}
 
     CustomHandler.proxy_port = args.proxy_port
 
@@ -174,11 +186,16 @@ def main():
     if not args.no_browser:
         webbrowser.open(f"http://{file_log_host}:{args.file_port}")
 
-    if proxy_info:
-        proxy, cors = proxy_info
+    if mcp_servers:
+        cors = get_cors_middleware()
         logging.info(f"MCP: Starting proxy at http://{proxy_log_host}:{args.proxy_port}/mcp")
-        # This is a blocking call
-        proxy.run(transport="http", host=args.proxy_host, port=args.proxy_port, middleware=cors)
+        # Connect the MCP client once and keep backend subprocesses alive
+        # for the lifetime of the server, then run the HTTP proxy on top.
+        anyio.run(
+            partial(
+                run_proxy, mcp_servers, args.proxy_host, args.proxy_port, cors
+            )
+        )
     else:
         logging.info("No MCP proxy to run. Serving files only.")
         # Keep the main thread alive so the daemon file server thread can run.
