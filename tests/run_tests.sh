@@ -60,7 +60,11 @@ echo "Main server started with PID: $MAIN_PID"
 echo "Waiting for servers to initialize..."
 sleep 3
 
-# 4. Run the Playwright test scripts
+# 4. Run Python unit tests (no servers needed)
+echo "Running Python unit tests..."
+uv run python3 -m pytest tests/test_main_config.py tests/test_stack_mcp.py tests/test_filesystem_paths.py tests/test_filesystem_write_patch.py tests/test_datetime_mcp.py -v
+
+# 5. Run the Playwright test scripts
 echo "Running Playwright tests..."
 uv run tests/run_playwright_tests.py || (cat test-results/mock_backend.log && exit 1)
 
