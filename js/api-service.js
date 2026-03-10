@@ -246,11 +246,11 @@ export class ApiService {
             const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
             const finalSystemPrompt = await app.agentManager.constructSystemPrompt(agentId);
 
-            if (finalSystemPrompt) {
-                messages.unshift({ role: 'system', content: finalSystemPrompt });
-            }
+            const finalMessages = finalSystemPrompt
+                ? [{ role: 'system', content: finalSystemPrompt }, ...messages]
+                : messages;
 
-            const payload = { messages };
+            const payload = { messages: finalMessages };
             messageToUpdate.value.model = effectiveConfig.model;
 
             await this.streamAndProcessResponse(

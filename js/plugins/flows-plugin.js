@@ -520,8 +520,7 @@ class FlowRunner {
             // --- Normal Prompt Handling ---
             const step = this.flow.steps.find(s => s.id === this.currentStepId);
             const stepDef = this.manager.stepTypes[step?.type];
-            const fnStr = stepDef?.execute?.toString() || '';
-        if (fnStr.includes('_submitPrompt') || fnStr.includes('handleFormSubmit')) {
+            if (stepDef?.triggersAIResponse) {
                 const nextStep = this.getNextStep(this.currentStepId);
                 if (nextStep) {
                     await this.executeStep(nextStep);

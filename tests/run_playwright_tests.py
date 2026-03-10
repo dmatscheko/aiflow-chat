@@ -10,6 +10,13 @@ from test_07_js_chat_data import test_js_chat_data
 from test_08_js_tool_parser import test_js_tool_parser
 from test_09_js_utils import test_js_utils
 from test_10_api_config import test_api_config
+from test_11_js_plugin_manager import test_js_plugin_manager
+from test_12_js_data_manager import test_js_data_manager
+from test_13_js_response_processor import test_js_response_processor
+from test_14_js_api_service import test_js_api_service
+from test_15_js_flow_runner import test_js_flow_runner
+from test_16_js_settings_manager import test_js_settings_manager
+from test_17_js_step_definitions import test_js_step_definitions
 
 if __name__ == "__main__":
     with sync_playwright() as p:
@@ -63,6 +70,34 @@ if __name__ == "__main__":
             # Test 10: /api/config endpoint
             test_api_config(page)
             print("test_api_config passed.")
+
+            # Test 11: JS PluginManager unit tests
+            test_js_plugin_manager(page)
+            print("test_js_plugin_manager passed.")
+
+            # Test 12: JS DataManager unit tests
+            test_js_data_manager(page)
+            print("test_js_data_manager passed.")
+
+            # Test 13: JS ResponseProcessor unit tests
+            test_js_response_processor(page)
+            print("test_js_response_processor passed.")
+
+            # Test 14: JS ApiService unit tests
+            test_js_api_service(page)
+            print("test_js_api_service passed.")
+
+            # Test 15: JS FlowRunner unit tests
+            test_js_flow_runner(page)
+            print("test_js_flow_runner passed.")
+
+            # Test 16: JS SettingsManager unit tests
+            test_js_settings_manager(page)
+            print("test_js_settings_manager passed.")
+
+            # Test 17: JS Step Definitions unit tests
+            test_js_step_definitions(page)
+            print("test_js_step_definitions passed.")
 
             print("All tests finished successfully.")
         except Exception as e:

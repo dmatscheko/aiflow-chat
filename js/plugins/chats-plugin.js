@@ -48,6 +48,8 @@ class ChatManager {
     constructor(app) {
         this.app = app;
         this.listPane = null;
+        /** @type {Function} Bound save callback for ChatLog subscriptions, enabling proper unsubscribe. */
+        this._boundSaveCallback = () => this.dataManager.save();
         this.dataManager = new DataManager('core_chat_logs', 'chat', (loadedData) => {
             return loadedData.map(chatData => this._hydrateChat(chatData));
         });
@@ -81,9 +83,9 @@ class ChatManager {
             agent: chatData.agent || null,
             flow: chatData.flow || null,
         };
-        // Avoid duplicate subscriptions
-        chat.log.unsubscribe(() => this.dataManager.save());
-        chat.log.subscribe(() => this.dataManager.save());
+        // Use the same bound callback for subscribe/unsubscribe so unsubscribe can match
+        chat.log.unsubscribe(this._boundSaveCallback);
+        chat.log.subscribe(this._boundSaveCallback);
         return chat;
     }
 
@@ -174,6 +176,14 @@ class ChatManager {
     initChatView(chatId) {
         const chat = this.chats.find(c => c.id === chatId);
         if (!chat) return;
+
+        // Abort previous listeners to prevent accumulation across view switches
+        if (this._chatViewAbortController) {
+            this._chatViewAbortController.abort();
+        }
+        this._chatViewAbortController = new AbortController();
+        const signal = this._chatViewAbortController.signal;
+
         this.chatUI = new ChatUI(document.getElementById('chat-container'), this.app.agentManager);
         this.chatUI.setChatLog(chat.log);
         this.app.dom.messageForm = document.getElementById('message-form');
@@ -188,13 +198,13 @@ class ChatManager {
                 activeChat.draftMessage = this.app.dom.messageInput.value;
                 this.debouncedSave();
             }
-        });
+        }, { signal });
 
         this.app.dom.messageForm.addEventListener('submit', (e) => {
             e.preventDefault();
             this.handleFormSubmit();
-        });
-        this.app.dom.stopButton.addEventListener('click', () => this.stopChatFlow());
+        }, { signal });
+        this.app.dom.stopButton.addEventListener('click', () => this.stopChatFlow(), { signal });
 
         this.app.dom.messageInput.addEventListener('keydown', (e) => {
             // If an edit-in-place textarea is active, don't do anything.
@@ -207,7 +217,7 @@ class ChatManager {
                 e.preventDefault();
                 this.handleFormSubmit();
             }
-        });
+        }, { signal });
     }
 
     /**
@@ -463,7 +473,12 @@ pluginManager.register({
                 onMount: (container) => {
                     const selector = container.querySelector('#agent-selector');
                     if (selector) {
-                        selector.innerHTML = agentOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+                        agentOptions.forEach(opt => {
+                            const option = document.createElement('option');
+                            option.value = opt.value;
+                            option.textContent = opt.label;
+                            selector.appendChild(option);
+                        });
                         selector.value = chat.agent || 'agent-default';
                         selector.addEventListener('change', (e) => {
                             chat.agent = e.target.value === 'agent-default' ? null : e.target.value;
@@ -478,7 +493,12 @@ pluginManager.register({
                 onMount: (container) => {
                     const selector = container.querySelector('#flow-selector');
                     if (selector) {
-                        selector.innerHTML += flowOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('');
+                        flowOptions.forEach(opt => {
+                            const option = document.createElement('option');
+                            option.value = opt.value;
+                            option.textContent = opt.label;
+                            selector.appendChild(option);
+                        });
                         selector.value = chat.flow || '';
                         selector.addEventListener('change', (e) => {
                             chat.flow = e.target.value || null;

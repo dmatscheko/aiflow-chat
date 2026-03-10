@@ -209,7 +209,10 @@ class App {
             await pluginManager.triggerAsync('onAfterViewRendered', this.activeView, activeChat);
             await pluginManager.triggerAsync('onViewRendered', this.activeView, activeChat);
         } else {
-            this.dom.mainPanel.innerHTML = `<h2>Error: View type "${type}" not found.</h2>`;
+            const errorHeading = document.createElement('h2');
+            errorHeading.textContent = `Error: View type "${type}" not found.`;
+            this.dom.mainPanel.innerHTML = '';
+            this.dom.mainPanel.appendChild(errorHeading);
         }
 
         // 3. Now that the panel is populated, render the title bar and prepend it.
@@ -250,9 +253,9 @@ class App {
     initEventListeners() {
         // Listener for sidebar tab clicks.
         this.dom.panelTabs.addEventListener('click', async (e) => {
-            const tabId = e.target.dataset.tabId;
-            if (tabId) {
-                await this.showTab(tabId);
+            const tabBtn = e.target.closest('[data-tab-id]');
+            if (tabBtn) {
+                await this.showTab(tabBtn.dataset.tabId);
             }
         });
 

@@ -39,7 +39,7 @@ Do not escape any of the tool call arguments. The arguments will be parsed as no
 
 You can use multiple tools in one message, but either use tools or write an answer in a message. Use tools only if you need them.
 
-IMPORTANT: Write files only if explicitely instructed to do so.
+IMPORTANT: Write files only if explicitly instructed to do so.
 
 #### Available Tools:\n\n`;
 
@@ -152,7 +152,6 @@ class McpPlugin {
             if (isNotification) return null;
 
             const rawText = await resp.text();
-            console.log(`DEBUG: Raw response from ${url} for method ${method}:`, rawText);
 
             try {
                 const data = JSON.parse(rawText);
@@ -313,7 +312,7 @@ class McpPlugin {
             const response = await this.#mcpJsonRpc(url, 'tools/list');
             const tools = Array.isArray(response?.tools) ? response.tools : [];
             this.#toolCache.set(url, tools);
-            console.log(`DEBUG: Successfully fetched and cached ${tools.length} tools for ${url}.`);
+            console.log(`MCP: Fetched ${tools.length} tools for ${url}.`);
             document.body.dispatchEvent(new CustomEvent('mcp-tools-updated', { detail: { url } }));
             return tools;
         } catch (error) {

@@ -187,7 +187,7 @@ class AgentsCallPlugin {
             return false;
         }
 
-        const fullContext = call.params.full_context === true;
+        const fullContext = call.params.full_context === true || call.params.full_context === 'true';
         const newDepth = fullContext ? message.depth : message.depth + 1;
 
         app.responseProcessor.agentCallStack.push({

@@ -138,7 +138,13 @@ const _defaultOnUpdate = (step, target) => {
  */
 function _evaluateCondition(text, conditionType, condition) {
     switch (conditionType) {
-        case 'regex': return new RegExp(condition).test(text);
+        case 'regex':
+            try {
+                return new RegExp(condition).test(text);
+            } catch (e) {
+                console.error('Invalid regex in flow condition:', e.message);
+                return false;
+            }
         case 'matches': return text === condition;
         default: return text.includes(condition);
     }
@@ -306,6 +312,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('simple-prompt', {
         label: 'Simple Prompt',
+        triggersAIResponse: true,
         color: 'hsla(0, 0%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
         getDefaults: () => ({ prompt: 'Hello, world!', agentId: '' }),
@@ -322,6 +329,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('multi-prompt', {
         label: 'Multi Prompt',
+        triggersAIResponse: true,
         color: 'hsla(145, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M14 10H6" /><path d="M14 6H6" /></svg>',
         getDefaults: () => ({ prompt: '', count: 2, agentId: '' }),
@@ -359,6 +367,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('consolidator', {
         label: 'Alt. Consolidator',
+        triggersAIResponse: true,
         color: 'hsla(280, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>',
         getDefaults: () => ({
@@ -437,6 +446,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('echo-answer', {
         label: 'Echo Answer',
+        triggersAIResponse: true,
         color: 'hsla(200, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 22L10 19M10 19L13 16M10 19H15C18.866 19 22 15.866 22 12C22 9.2076 20.3649 6.7971 18 5.67363M6 18.3264C3.63505 17.2029 2 14.7924 2 12C2 8.13401 5.13401 5 9 5H14M14 5L11 2M14 5L11 8"></path></svg>',
         getDefaults: () => ({
@@ -618,6 +628,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('agent-call-from-answer', {
         label: 'Agent Call from Answer',
+        triggersAIResponse: true,
         color: 'hsla(60, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 1-10 10h12a5 5 0 0 0 0-10Z"/></svg>',
         getDefaults: () => ({
@@ -717,6 +728,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('manual-mcp-call', {
         label: 'Manual MCP Call',
+        triggersAIResponse: true,
         color: 'hsla(85, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 1-10 10h12a5 5 0 0 0 0-10Z"/></svg>',
         getDefaults: () => ({
@@ -810,7 +822,7 @@ export function registerFlowStepDefinitions(flowManager) {
                     const toolCall = {
                         tool: tool.name,
                         arguments: Object.fromEntries(
-                            Object.entries(params).map(([key, value]) => [key, value.default || ''])
+                            Object.entries(params).map(([key, value]) => [key, value.default ?? ''])
                         )
                     };
                     toolCallTextarea.value = JSON.stringify(toolCall, null, 2);
@@ -885,6 +897,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
     flowManager._defineStep('pop-from-stack', {
         label: 'Pop from Stack',
+        triggersAIResponse: true,
         color: 'hsla(180, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v 8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8"/><path d="M21 11v 8a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2v-8"/><path d="M11 11v 8a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2v-8"/><path d="M7 11h14"/><path d="M9 7h10"/><path d="M11 3h6"/></svg>',
         getDefaults: () => ({ agentId: '' }),
