@@ -128,6 +128,20 @@ const _defaultOnUpdate = (step, target) => {
 };
 
 /**
+ * Generates HTML for multiple named output connectors at the bottom of a flow step.
+ * Each output is a labeled connector dot that can be wired to a different next step.
+ * @param {object} step - The flow step object.
+ * @param {Array<{name: string, label: string}>} outputs - Output definitions.
+ * @returns {string} HTML string for the connector group.
+ */
+function _renderOutputConnectors(step, outputs) {
+    const connectors = outputs.map(o =>
+        `<div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="${o.name}"><span class="connector-label">${o.label}</span></div>`
+    ).join('');
+    return `<div class="connector-group labels">${connectors}</div>`;
+}
+
+/**
  * Evaluates a condition against a text string using the specified matching strategy.
  * Used by the 'branch' and 'conditional-stop' flow step types.
  * @param {string} text - The text to test against.
@@ -554,7 +568,7 @@ export function registerFlowStepDefinitions(flowManager) {
         render: function(step) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${_getConditionUI(step)}</div>`;
         },
-        renderOutputConnectors: (step) => `<div class="connector-group labels"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="pass"><span class="connector-label">Pass</span></div><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="fail"><span class="connector-label">Fail</span></div></div>`,
+        renderOutputConnectors: (step) => _renderOutputConnectors(step, [{name: 'pass', label: 'Pass'}, {name: 'fail', label: 'Fail'}]),
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
             const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
@@ -576,7 +590,7 @@ export function registerFlowStepDefinitions(flowManager) {
         render: function(step) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content"><label>If token count is over:</label><input type="number" class="flow-step-token-count flow-step-input" data-id="${step.id}" data-key="tokenCount" value="${step.data.tokenCount || 500}" min="0"></div>`;
         },
-        renderOutputConnectors: (step) => `<div class="connector-group labels"><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="pass"><span class="connector-label">Over</span></div><div class="connector bottom" data-id="${step.id}" data-type="out" data-output-name="fail"><span class="connector-label">Under</span></div></div>`,
+        renderOutputConnectors: (step) => _renderOutputConnectors(step, [{name: 'pass', label: 'Over'}, {name: 'fail', label: 'Under'}]),
         onUpdate: (step, target) => { step.data[target.dataset.key] = parseInt(target.value, 10); },
         execute: (step, context) => {
             const chatLog = context.app.chatManager.getActiveChat()?.log;
@@ -898,12 +912,14 @@ export function registerFlowStepDefinitions(flowManager) {
     flowManager._defineStep('pop-from-stack', {
         label: 'Pop from Stack',
         triggersAIResponse: true,
+        continueOutputName: 'next',
         color: 'hsla(180, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v 8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8"/><path d="M21 11v 8a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2v-8"/><path d="M11 11v 8a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2v-8"/><path d="M7 11h14"/><path d="M9 7h10"/><path d="M11 3h6"/></svg>',
         getDefaults: () => ({ agentId: '' }),
         render: function(step, agentOptions) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}</div>`;
         },
+        renderOutputConnectors: (step) => _renderOutputConnectors(step, [{name: 'next', label: 'Next'}, {name: 'empty', label: 'Empty'}]),
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
             const chatId = context.app.chatManager?.activeChatId || 'default';
@@ -913,7 +929,8 @@ export function registerFlowStepDefinitions(flowManager) {
                     if (prompt) {
                         _submitPrompt(context, prompt, step.data.agentId);
                     } else {
-                        context.stopFlow('Stack is empty.');
+                        const nextStep = context.getNextStep(step.id, 'empty');
+                        if (nextStep) return context.executeStep(nextStep); else context.stopFlow();
                     }
                 })
                 .catch(error => {

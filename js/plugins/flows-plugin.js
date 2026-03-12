@@ -521,7 +521,7 @@ class FlowRunner {
             const step = this.flow.steps.find(s => s.id === this.currentStepId);
             const stepDef = this.manager.stepTypes[step?.type];
             if (stepDef?.triggersAIResponse) {
-                const nextStep = this.getNextStep(this.currentStepId);
+                const nextStep = this.getNextStep(this.currentStepId, stepDef.continueOutputName || 'default');
                 if (nextStep) {
                     await this.executeStep(nextStep);
                     return true; // A new step was executed.
