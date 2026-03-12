@@ -199,6 +199,31 @@ export class FlowManager {
     }
 
     /**
+     * Removes connections whose source step, target step, or output connector
+     * no longer exists. This handles cases where a step type's outputs were
+     * renamed or removed (e.g. 'default' → 'next').
+     * @param {Flow} flow - The flow to clean up.
+     * @returns {boolean} `true` if any connections were removed.
+     */
+    pruneOrphanedConnections(flow) {
+        const stepIds = new Set(flow.steps.map(s => s.id));
+        const before = flow.connections.length;
+        flow.connections = flow.connections.filter(conn => {
+            if (!stepIds.has(conn.from) || !stepIds.has(conn.to)) return false;
+            const stepDef = this.stepTypes[flow.steps.find(s => s.id === conn.from)?.type];
+            if (!stepDef) return false;
+            // Build the set of valid output names for this step type
+            const tempStep = { id: '__probe__', data: {} };
+            const html = stepDef.renderOutputConnectors
+                ? stepDef.renderOutputConnectors(tempStep)
+                : '<div data-output-name="default"></div>';
+            const validOutputs = new Set([...html.matchAll(/data-output-name="([^"]+)"/g)].map(m => m[1]));
+            return validOutputs.has(conn.outputName || 'default');
+        });
+        return flow.connections.length < before;
+    }
+
+    /**
      * Renders the connections (lines) between steps on the SVG layer.
      * @param {Flow} flow - The flow whose connections are to be rendered.
      */
@@ -256,6 +281,11 @@ export class FlowManager {
         if (!nodeContainer) return;
         nodeContainer.innerHTML = ''; // Clear only the nodes
 
+        // Remove connections whose endpoints or output names are no longer valid.
+        if (this.pruneOrphanedConnections(flow)) {
+            this.updateFlow(flow);
+        }
+
         const svgLayer = document.getElementById('flow-svg-layer');
         if (svgLayer && !svgLayer.querySelector('defs')) {
             // Add SVG definitions for the arrowhead marker on connections.
@@ -312,6 +342,7 @@ export class FlowManager {
     _handleCanvasMouseDown(e, flow, debouncedUpdate) {
         const target = e.target;
         if (target.classList.contains('connector') && target.dataset.type === 'out') {
+            e.preventDefault(); // Prevent text selection while dragging a connection line
             this.connectionInfo = { active: true, fromNode: target.closest('.flow-step-card'), fromConnector: target, tempLine: document.createElementNS('http://www.w3.org/2000/svg', 'line') };
             this.connectionInfo.tempLine.setAttribute('stroke', 'red'); this.connectionInfo.tempLine.setAttribute('stroke-width', '2');
             document.getElementById('flow-svg-layer').appendChild(this.connectionInfo.tempLine);
@@ -339,6 +370,7 @@ export class FlowManager {
             this.dragInfo.target.style.top = `${e.clientY - this.dragInfo.offsetY}px`;
             this.updateConnections(flow);
         } else if (this.connectionInfo.active) {
+            e.preventDefault(); // Prevent text selection while dragging
             const fromNode = this.connectionInfo.fromNode;
             const outConn = this.connectionInfo.fromConnector;
             const wrapper = document.getElementById('flow-canvas-wrapper');
