@@ -8,7 +8,7 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { parseToolCalls } from '../tool-processor.js';
+import { parseToolCalls, processToolCalls } from '../tool-processor.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -25,7 +25,7 @@ import { parseToolCalls } from '../tool-processor.js';
  */
 const agentCallsHeader = `### Callable Agents:
 
-You can call other specialized agents as tools. The format for calling an agent is the same as a regular tool call. The agent's ID is used as the tool name. Never call an agent and a tool in the same message.
+You can call other specialized agents as tools. The format for calling an agent is the same as a regular tool call. The agent's ID is used as the tool name. You can call both tools and agents in the same message.
 
 Example of calling an agent with the ID 'agent-598356234':
 <dma:tool_call name="agent-598356234">
@@ -106,6 +106,13 @@ class AgentsCallPlugin {
      * Hooks into the response completion event to detect and handle agent-as-tool calls.
      * It parses the message content for tool calls that match the ID of a known agent.
      * For each valid agent call, it invokes `_handleAgentCall` to manage the sub-agent execution.
+     *
+     * The calling agent is pushed onto the agentCallStack ONCE for all calls in this message.
+     * Resumption of the calling agent is handled exclusively by the processLoop's stack pop,
+     * which fires only after all sub-agent work (including nested MCP tool usage) is complete.
+     * This prevents the double-resumption bug where both an explicit pending message and a
+     * stack pop would each create a turn for the calling agent.
+     *
      * @param {Message | null} message - The message that has just been completed.
      * @param {Chat} activeChat - The active chat instance.
      * @returns {Promise<boolean>} A promise that resolves to `true` if an agent call was
@@ -125,28 +132,74 @@ class AgentsCallPlugin {
             return false;
         }
 
-        let nestedCallQueued = false;
-        for (const call of agentCalls) {
-            // A sub-agent call may itself queue a nested tool call.
-            const subAgentHandledNestedCall = await this._handleAgentCall(call, message, activeChat);
-            if (subAgentHandledNestedCall) {
-                nestedCallQueued = true;
-            }
+        // If the message also contains non-agent tool calls (MCP tools), process
+        // them first. Since triggerSequentially stops at the first `true` return,
+        // the MCP plugin's handler would never run for this message. We handle
+        // MCP tool calls here with `createPendingMessage: false` because the
+        // agent call stack (below) will manage resuming the calling agent's turn.
+        const hasNonAgentCalls = toolCalls.some(call => !allAgentIds.has(call.name));
+        if (hasNonAgentCalls) {
+            await this._processNonAgentToolCalls(message, activeChat, allAgentIds);
         }
 
-        if (nestedCallQueued) {
-            // A nested call was queued, so stop this chain and let the main loop handle the new work.
-            return true;
-        }
-
-        // After all agent calls are handled, and if no nested calls were queued, queue up the next step for the AI.
+        // Push calling agent onto the stack ONCE for all calls in this message.
+        // The processLoop will pop this entry to resume the calling agent after
+        // all sub-agent work (including any MCP tool usage by sub-agents) is complete.
         const callingAgentId = message.agent || 'agent-default';
-        activeChat.log.addMessage(
-            { role: 'assistant', content: null, agent: callingAgentId },
-            { depth: message.depth }
-        );
-        this.app.responseProcessor.scheduleProcessing(this.app);
+        this.app.responseProcessor.agentCallStack.push({
+            agentId: callingAgentId,
+            depth: message.depth,
+            chatId: activeChat.id,
+        });
+
+        for (const call of agentCalls) {
+            await this._handleAgentCall(call, message, activeChat);
+        }
+
+        // No explicit pending message creation here. The stack pop in the
+        // processLoop handles resuming the calling agent once all work is done.
         return true;
+    }
+
+    /**
+     * Processes non-agent tool calls (e.g., MCP tools) found in a message that also
+     * contains agent calls. This is necessary because `triggerSequentially` stops at the
+     * first handler that returns `true`, so the MCP plugin's `onResponseComplete` would
+     * never run for messages that also contain agent calls.
+     *
+     * Tool results are added to the chat log, but no pending assistant message is created
+     * since the agent call stack handles resuming the calling agent's turn.
+     *
+     * @param {Message} message - The message containing the mixed tool calls.
+     * @param {Chat} activeChat - The active chat instance.
+     * @param {Set<string>} allAgentIds - The set of all known agent IDs, used to filter out agent calls.
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _processNonAgentToolCalls(message, activeChat, allAgentIds) {
+        const agentId = message.agent || null;
+        const effectiveConfig = this.app.agentManager.getEffectiveApiConfig(agentId);
+        const mcpUrl = effectiveConfig.toolSettings?.mcpServer;
+        if (!mcpUrl || !this.app.mcp) return;
+
+        const tools = await this.app.mcp.getTools(mcpUrl);
+        if (!tools || tools.length === 0) return;
+
+        const chatId = activeChat?.id || 'default';
+        await processToolCalls(
+            this.app,
+            activeChat,
+            message,
+            tools,
+            (call) => !allAgentIds.has(call.name) && !call.name.startsWith('agent-'),
+            (call, msg) => {
+                if (call.name.startsWith('stack_') && !call.params.stack_id) {
+                    call = { ...call, params: { ...call.params, stack_id: chatId } };
+                }
+                return this.app.mcp.executeCall(call, msg, mcpUrl);
+            },
+            { createPendingMessage: false }
+        );
     }
 
     /**
@@ -154,12 +207,15 @@ class AgentsCallPlugin {
      * This method validates permissions, constructs the API payload for the target agent,
      * initiates the streaming call, and updates the chat log with the response.
      * Crucially, it recursively triggers `onResponseComplete` on the sub-agent's response
-     * to allow for deeply nested tool calls.
+     * to allow for deeply nested tool calls and MCP tool usage by sub-agents.
+     *
+     * Stack management is handled by `onResponseComplete` (one push per message),
+     * not here. This prevents duplicate stack entries when a single message contains
+     * multiple agent calls.
+     *
      * @param {ToolCall} call - The agent tool call to process.
      * @param {Message} message - The original message containing the tool call.
      * @param {Chat} activeChat - The active chat instance.
-     * @returns {Promise<boolean>} A promise that resolves to `true` if a nested tool call was
-     * queued by the sub-agent, otherwise `false`.
      * @private
      */
     async _handleAgentCall(call, message, activeChat) {
@@ -171,29 +227,24 @@ class AgentsCallPlugin {
 
         if (!callingAgent || !targetAgent) {
             this._addErrorToolResponse(activeChat, message, call, 'Invalid agent specified.');
-            return false;
+            return;
         }
 
         const callingAgentConfig = agentManager.getEffectiveApiConfig(callingAgent.id);
         const isAllowed = callingAgentConfig.agentCallSettings.allowAll || callingAgentConfig.agentCallSettings.allowed?.includes(targetAgent.id);
         if (!isAllowed) {
             this._addErrorToolResponse(activeChat, message, call, `Agent "${callingAgent.name}" is not permitted to call agent "${targetAgent.name}".`);
-            return false;
+            return;
         }
 
         const prompt = call.params.prompt;
         if (!prompt) {
             this._addErrorToolResponse(activeChat, message, call, 'The "prompt" parameter is required when calling an agent.');
-            return false;
+            return;
         }
 
         const fullContext = call.params.full_context === true || call.params.full_context === 'true';
         const newDepth = fullContext ? message.depth : message.depth + 1;
-
-        app.responseProcessor.agentCallStack.push({
-            agentId: callingAgentId,
-            depth: message.depth,
-        });
 
         const toolResponseAsMessage = activeChat.log.addMessage({
             role: 'tool',
@@ -208,7 +259,7 @@ class AgentsCallPlugin {
         if (!messages) {
             toolResponseAsMessage.value.content = '<error>Could not reconstruct message history for agent call.</error>';
             activeChat.log.notify();
-            return false;
+            return;
         }
         messages.push({ role: 'user', content: prompt });
 
@@ -220,8 +271,11 @@ class AgentsCallPlugin {
             targetAgent.id
         );
 
-        const nestedCallHandled = await pluginManager.triggerSequentially('onResponseComplete', toolResponseAsMessage, activeChat);
-        return nestedCallHandled;
+        // Recursively check if the sub-agent's response triggers further work
+        // (nested agent calls, MCP tool usage, etc.). Any such work is resolved
+        // inline before this method returns, ensuring the calling agent only
+        // resumes (via stack pop) after all descendant work is complete.
+        await pluginManager.triggerSequentially('onResponseComplete', toolResponseAsMessage, activeChat);
     }
 
     /**

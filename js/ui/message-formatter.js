@@ -244,17 +244,22 @@ export function formatMessage(message) {
     titleTextEl.appendChild(roleEl);
 
     // Display agent and model details for assistant/tool messages.
+    // For 'tool' role messages, only show agent details when a model is set,
+    // which indicates an AI-generated sub-agent response. System-generated
+    // tool responses (e.g., MCP tool results) have no model and should not
+    // display an agent header, as they are not authored by any agent.
     if (message.value.role === 'assistant' || message.value.role === 'tool') {
         const details = [];
-    
+        const showAgentForTool = message.value.role !== 'tool' || !!message.value.model;
+
         const agentManager = pluginManager.app?.agentManager;
-        if (message.agent && agentManager) {
+        if (showAgentForTool && message.agent && agentManager) {
             const agent = agentManager.getAgent(message.agent);
             if (agent?.name) details.push(agent.name);
         }
-        
+
         if (message.value.model) details.push(message.value.model);
-        
+
         if (details.length > 0) {
             const detailsEl = document.createElement('span');
             detailsEl.className = 'message-details';

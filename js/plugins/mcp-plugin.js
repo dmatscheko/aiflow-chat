@@ -421,7 +421,8 @@ const mcpPluginDefinition = {
         mcpPluginSingleton.init(app);
         app.mcp = {
             getTools: mcpPluginSingleton.getTools.bind(mcpPluginSingleton),
-            rpc: mcpPluginSingleton.mcpJsonRpc.bind(mcpPluginSingleton)
+            rpc: mcpPluginSingleton.mcpJsonRpc.bind(mcpPluginSingleton),
+            executeCall: mcpPluginSingleton.executeMcpCall.bind(mcpPluginSingleton),
         };
     },
 

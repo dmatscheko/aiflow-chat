@@ -155,9 +155,13 @@ function parseToolCalls(content, tools = []) {
  * @param {ToolSchema[]} tools - A list of available tools and their schemas, passed to the parser.
  * @param {ToolFilterCallback} filterCallback - A function to select which of the parsed tool calls should be executed.
  * @param {ToolExecuteCallback} executeCallback - An async function that executes a single tool call and returns its result.
+ * @param {object} [options] - Additional options for processing.
+ * @param {boolean} [options.createPendingMessage=true] - Whether to create a pending assistant message after adding tool results.
+ *   Set to `false` when another mechanism (e.g., the agent call stack) will handle resuming the calling agent's turn.
  * @returns {Promise<boolean>} A promise that resolves to `true` if any tool calls were processed and a new assistant turn was queued, otherwise `false`.
  */
-async function processToolCalls(app, chat, message, tools, filterCallback, executeCallback) {
+async function processToolCalls(app, chat, message, tools, filterCallback, executeCallback, options = {}) {
+    const { createPendingMessage = true } = options;
     const { toolCalls, positions, isSelfClosings } = parseToolCalls(message.value.content, tools);
     if (toolCalls.length === 0) return false;
 
@@ -201,12 +205,14 @@ async function processToolCalls(app, chat, message, tools, filterCallback, execu
             { role: 'tool', content: toolContents, agent: message.agent },
             { depth: message.depth }
         );
-        // After adding tool results, queue up the next assistant turn to process them.
-        const callingAgentId = message.agent;
-        chat.log.addMessage(
-            { role: 'assistant', content: null, agent: callingAgentId },
-            { depth: message.depth }
-        );
+        if (createPendingMessage) {
+            // After adding tool results, queue up the next assistant turn to process them.
+            const callingAgentId = message.agent;
+            chat.log.addMessage(
+                { role: 'assistant', content: null, agent: callingAgentId },
+                { depth: message.depth }
+            );
+        }
         return true;
     }
     return false;

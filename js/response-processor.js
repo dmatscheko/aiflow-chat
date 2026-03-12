@@ -46,8 +46,9 @@ class ResponseProcessor {
         /**
          * A stack to manage nested agent calls. When a sub-agent is called, its parent
          * is pushed onto this stack. When the sub-agent finishes, the parent is popped
-         * and its turn is resumed.
-         * @type {Array<{agentId: string, depth: number}>}
+         * and its turn is resumed. Each entry includes the chat ID so that resumption
+         * targets the correct chat even if the user switches chats during processing.
+         * @type {Array<{agentId: string, depth: number, chatId: string}>}
          */
         this.agentCallStack = [];
     }
@@ -123,7 +124,28 @@ class ResponseProcessor {
                     continue;
                 }
 
-                // If we're here, the AI is idle. Check if any plugin wants to take a follow-up action.
+                // If we're here, the AI is idle.
+                // First priority: return control to a parent agent from the call stack.
+                // This MUST be checked before the idle plugin trigger, because plugins
+                // (e.g., the flows-plugin) may take follow-up actions that would skip
+                // the stack pop via `continue`, permanently starving the parent agent.
+                if (this.agentCallStack.length > 0) {
+                    const activeChat = this.app.chatManager.getActiveChat();
+                    const parentAgentContext = this.agentCallStack.pop();
+                    const targetChat = (parentAgentContext.chatId
+                        ? this.app.chatManager.chats.find(c => c.id === parentAgentContext.chatId)
+                        : null) || activeChat;
+                    if (targetChat) {
+                        targetChat.log.addMessage(
+                            { role: 'assistant', content: null, agent: parentAgentContext.agentId },
+                            { depth: parentAgentContext.depth }
+                        );
+                    }
+                    // A new turn has been queued, so restart the loop.
+                    continue;
+                }
+
+                // Second priority: check if any plugin wants to take a follow-up action.
                 const activeChat = this.app.chatManager.getActiveChat();
                 if (activeChat) {
                     // Trigger with a null message to signify an idle-state check.
@@ -132,23 +154,12 @@ class ResponseProcessor {
                         // A plugin (e.g., flows-plugin) took action. Loop again.
                         continue;
                     }
-
-                    // If all work is done, check if we need to return control to a parent agent.
-                    if (this.agentCallStack.length > 0) {
-                        const parentAgentContext = this.agentCallStack.pop();
-                        activeChat.log.addMessage(
-                            { role: 'assistant', content: null, agent: parentAgentContext.agentId },
-                            { depth: parentAgentContext.depth }
-                        );
-                        // A new turn has been queued, so restart the loop.
-                        continue;
-                    }
                 }
 
                 // If we reach this point, it means:
                 // 1. There were no pending messages to process.
-                // 2. No plugin took any action on the idle state.
-                // 3. The agent call stack is empty.
+                // 2. The agent call stack is empty.
+                // 3. No plugin took any action on the idle state.
                 // Therefore, all work is truly complete.
                 break;
             }
