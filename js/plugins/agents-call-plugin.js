@@ -193,8 +193,8 @@ class AgentsCallPlugin {
             tools,
             (call) => !allAgentIds.has(call.name) && !call.name.startsWith('agent-'),
             (call, msg) => {
-                if (call.name.startsWith('stack_') && !call.params.stack_id) {
-                    call = { ...call, params: { ...call.params, stack_id: chatId } };
+                if (call.name.startsWith('stack_')) {
+                    call = { ...call, params: { ...call.params, __hidden_stack_id: chatId } };
                 }
                 return this.app.mcp.executeCall(call, msg, mcpUrl);
             },

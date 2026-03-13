@@ -850,9 +850,9 @@ export function registerFlowStepDefinitions(flowManager) {
                 const toolCallStr = _substituteLastResponse(toolCallTextarea.value, lastMessage);
                 try {
                     const toolCall = JSON.parse(toolCallStr);
-                    // Auto-inject stack_id for stack tools so each chat has its own stack.
-                    if (toolCall.tool?.startsWith('stack_') && !toolCall.arguments?.stack_id) {
-                        toolCall.arguments = { ...toolCall.arguments, stack_id: app.chatManager?.activeChatId || 'default' };
+                    // Auto-inject __hidden_stack_id for stack tools so each chat has its own stack.
+                    if (toolCall.tool?.startsWith('stack_')) {
+                        toolCall.arguments = { ...toolCall.arguments, __hidden_stack_id: app.chatManager?.activeChatId || 'default' };
                     }
                     const result = await app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer);
                     alert(`Tool Result:\n${_formatMcpResult(result)}`);
@@ -871,9 +871,9 @@ export function registerFlowStepDefinitions(flowManager) {
 
             try {
                 const toolCall = JSON.parse(toolCallStr);
-                // Auto-inject stack_id for stack tools so each chat has its own stack.
-                if (toolCall.tool?.startsWith('stack_') && !toolCall.arguments?.stack_id) {
-                    toolCall.arguments = { ...toolCall.arguments, stack_id: context.app.chatManager?.activeChatId || 'default' };
+                // Auto-inject __hidden_stack_id for stack tools so each chat has its own stack.
+                if (toolCall.tool?.startsWith('stack_')) {
+                    toolCall.arguments = { ...toolCall.arguments, __hidden_stack_id: context.app.chatManager?.activeChatId || 'default' };
                 }
                 return context.app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer)
                     .then(result => {
@@ -923,7 +923,7 @@ export function registerFlowStepDefinitions(flowManager) {
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
             const chatId = context.app.chatManager?.activeChatId || 'default';
-            return context.app.mcp.rpc('tools/call', { name: 'stack_pop_from_stack', arguments: { stack_id: chatId } })
+            return context.app.mcp.rpc('tools/call', { name: 'stack_pop_from_stack', arguments: { __hidden_stack_id: chatId } })
                 .then(result => {
                     const prompt = result.content && result.content[0] ? result.content[0].text : '';
                     if (prompt) {

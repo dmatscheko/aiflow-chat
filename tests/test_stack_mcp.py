@@ -35,16 +35,16 @@ class TestAddToStack:
         assert "stack size: 2" in result
 
     def test_add_to_named_stack(self):
-        result = _mod.add_to_stack("task A", stack_id="my-stack")
+        result = _mod.add_to_stack("task A", __hidden_stack_id="my-stack")
         assert "stack size: 1" in result
         # Default stack should be empty
         popped = _mod.pop_from_stack("default")
         assert popped == ""
 
     def test_add_to_separate_stacks(self):
-        _mod.add_to_stack("a1", stack_id="a")
-        _mod.add_to_stack("b1", stack_id="b")
-        _mod.add_to_stack("a2", stack_id="a")
+        _mod.add_to_stack("a1", __hidden_stack_id="a")
+        _mod.add_to_stack("b1", __hidden_stack_id="b")
+        _mod.add_to_stack("a2", __hidden_stack_id="a")
         assert _mod.pop_from_stack("a") == "a2"
         assert _mod.pop_from_stack("b") == "b1"
 
@@ -67,7 +67,7 @@ class TestPopFromStack:
         assert _mod.pop_from_stack() == ""
 
     def test_pop_removes_empty_stack_key(self, isolated_stack_file):
-        _mod.add_to_stack("only one", stack_id="temp")
+        _mod.add_to_stack("only one", __hidden_stack_id="temp")
         _mod.pop_from_stack("temp")
         # The stack key should be cleaned up
         with open(isolated_stack_file) as f:

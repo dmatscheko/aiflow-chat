@@ -351,7 +351,8 @@ class McpPlugin {
             const displayName = action.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
             const properties = tool.inputSchema?.properties || {};
             const requiredSet = new Set(tool.inputSchema?.required || []);
-            const argsStr = Object.entries(properties).map(([name, arg]) => {
+            // Hide system-managed parameters (prefixed with "__hidden_") from the AI.
+            const argsStr = Object.entries(properties).filter(([name]) => !name.startsWith('__hidden_')).map(([name, arg]) => {
                 const argDesc = arg.description || arg.title || 'No description.';
                 const argType = arg.type || 'unknown';
                 const required = requiredSet.has(name) ? '(required)' : '(optional)';
@@ -486,9 +487,9 @@ const mcpPluginDefinition = {
             tools,
             (call) => !call.name.startsWith('agent-'), // Don't handle agent-as-tool calls here. call.name is extracted from the name="..." attribute in <dma:tool_call name="agent-598356234">
             (call, msg) => {
-                // Auto-inject stack_id for stack tools so each chat has its own stack.
-                if (call.name.startsWith('stack_') && !call.params.stack_id) {
-                    call = { ...call, params: { ...call.params, stack_id: chatId } };
+                // Always inject __hidden_stack_id for stack tools so each chat has its own stack.
+                if (call.name.startsWith('stack_')) {
+                    call = { ...call, params: { ...call.params, __hidden_stack_id: chatId } };
                 }
                 return mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl); // Executor function.
             }

@@ -31,7 +31,7 @@ def _save_all_stacks(stacks: dict) -> None:
 
 
 @mcp.tool()
-def add_to_stack(prompt: str, stack_id: str = "default") -> str:
+def add_to_stack(prompt: str, __hidden_stack_id: str = "default") -> str:
     """
     Adds a prompt to the stack.
 
@@ -48,9 +48,8 @@ def add_to_stack(prompt: str, stack_id: str = "default") -> str:
     The system will later run stacked prompts one-by-one as new calls,
     compressing context if needed. Write them like standalone user messages.
     Do NOT stack your current task.
-
-    The stack_id parameter is set automatically by the system. Do not set it yourself.
     """
+    stack_id = __hidden_stack_id
     stacks = _load_all_stacks()
     if stack_id not in stacks:
         stacks[stack_id] = []
@@ -60,13 +59,12 @@ def add_to_stack(prompt: str, stack_id: str = "default") -> str:
 
 
 @mcp.tool()
-def pop_from_stack(stack_id: str = "default") -> str:
+def pop_from_stack(__hidden_stack_id: str = "default") -> str:
     """
     Pop the latest prompt from the stack.
     Returns the prompt or an empty string if the stack is empty.
-
-    The stack_id parameter is set automatically by the system. Do not set it yourself.
     """
+    stack_id = __hidden_stack_id
     stacks = _load_all_stacks()
     stack = stacks.get(stack_id, [])
     if not stack:
