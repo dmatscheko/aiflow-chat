@@ -1,33 +1,13 @@
-import json
-import os
-
 from fastmcp import FastMCP
 
 # Create an MCP server instance
 mcp = FastMCP("Stack Server")
 
-# Persist stacks to a JSON file so they survive process restarts
-# (FastMCP proxy may spawn a new subprocess per session/call).
-# Data format: { "stack_id": ["prompt1", "prompt2", ...], ... }
-_STACK_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stack_data.json")
-
-
-def _load_all_stacks() -> dict:
-    """Load all stacks from disk."""
-    try:
-        with open(_STACK_FILE, "r") as f:
-            data = json.load(f)
-            if isinstance(data, dict):
-                return data
-    except (FileNotFoundError, json.JSONDecodeError):
-        pass
-    return {}
-
-
-def _save_all_stacks(stacks: dict) -> None:
-    """Save all stacks to disk."""
-    with open(_STACK_FILE, "w") as f:
-        json.dump(stacks, f)
+# In-memory stack storage. The MCP server is loaded once by the proxy and
+# stays alive for the entire session, so no file persistence is needed.
+# Keeping stacks in memory eliminates the race condition that occurred when
+# concurrent tool calls performed read-modify-write cycles on a JSON file.
+_stacks: dict[str, list[str]] = {}
 
 
 @mcp.tool()
@@ -50,12 +30,10 @@ def add_to_stack(prompt: str, __hidden_stack_id: str = "default") -> str:
     Do NOT stack your current task.
     """
     stack_id = __hidden_stack_id
-    stacks = _load_all_stacks()
-    if stack_id not in stacks:
-        stacks[stack_id] = []
-    stacks[stack_id].append(prompt)
-    _save_all_stacks(stacks)
-    return f"Prompt added to stack. Current stack size: {len(stacks[stack_id])}"
+    if stack_id not in _stacks:
+        _stacks[stack_id] = []
+    _stacks[stack_id].append(prompt)
+    return f"Prompt added to stack. Current stack size: {len(_stacks[stack_id])}"
 
 
 @mcp.tool()
@@ -65,16 +43,12 @@ def pop_from_stack(__hidden_stack_id: str = "default") -> str:
     Returns the prompt or an empty string if the stack is empty.
     """
     stack_id = __hidden_stack_id
-    stacks = _load_all_stacks()
-    stack = stacks.get(stack_id, [])
+    stack = _stacks.get(stack_id, [])
     if not stack:
         return ""
     prompt = stack.pop()
-    if stack:
-        stacks[stack_id] = stack
-    else:
-        stacks.pop(stack_id, None)
-    _save_all_stacks(stacks)
+    if not stack:
+        _stacks.pop(stack_id, None)
     return prompt
 
 
