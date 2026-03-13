@@ -1,8 +1,6 @@
-"""Unit tests for stack-mcp: add_to_stack, pop_from_stack, persistence."""
+"""Unit tests for stack-mcp: add_to_stack, pop_from_stack."""
 
-import json
 import os
-import sys
 import pytest
 
 # Import from the MCP server module (filename has hyphen, use importlib)
@@ -17,11 +15,11 @@ _spec.loader.exec_module(_mod)
 
 
 @pytest.fixture(autouse=True)
-def isolated_stack_file(tmp_path, monkeypatch):
-    """Redirect stack persistence to a temp file for each test."""
-    stack_file = str(tmp_path / "stack_data.json")
-    monkeypatch.setattr(_mod, "_STACK_FILE", stack_file)
-    yield stack_file
+def clear_stacks():
+    """Reset in-memory stacks before each test."""
+    _mod._stacks.clear()
+    yield
+    _mod._stacks.clear()
 
 
 class TestAddToStack:
@@ -66,30 +64,17 @@ class TestPopFromStack:
         assert _mod.pop_from_stack() == "a"
         assert _mod.pop_from_stack() == ""
 
-    def test_pop_removes_empty_stack_key(self, isolated_stack_file):
+    def test_pop_removes_empty_stack_key(self):
         _mod.add_to_stack("only one", __hidden_stack_id="temp")
         _mod.pop_from_stack("temp")
-        # The stack key should be cleaned up
-        with open(isolated_stack_file) as f:
-            data = json.load(f)
-        assert "temp" not in data
+        assert "temp" not in _mod._stacks
 
 
-class TestPersistence:
-    def test_data_persists_across_load_cycles(self, isolated_stack_file):
-        _mod.add_to_stack("persistent prompt")
-        # Simulate fresh load
-        stacks = _mod._load_all_stacks()
-        assert stacks["default"] == ["persistent prompt"]
+class TestInMemoryStorage:
+    def test_stacks_share_module_state(self):
+        _mod.add_to_stack("prompt 1")
+        assert _mod._stacks["default"] == ["prompt 1"]
 
-    def test_handles_corrupted_file(self, isolated_stack_file):
-        with open(isolated_stack_file, "w") as f:
-            f.write("not json!!!")
-        stacks = _mod._load_all_stacks()
-        assert stacks == {}
-
-    def test_handles_non_dict_json(self, isolated_stack_file):
-        with open(isolated_stack_file, "w") as f:
-            json.dump(["a list", "not a dict"], f)
-        stacks = _mod._load_all_stacks()
-        assert stacks == {}
+    def test_stacks_isolated_between_tests(self):
+        """Verify the autouse fixture clears stacks."""
+        assert _mod._stacks == {}
