@@ -311,6 +311,30 @@ export class ChatLog {
     }
 
     /**
+     * Converts all pending messages (assistant/tool with null content) to log messages
+     * so they are no longer picked up by `findNextPendingMessage`. This is called when
+     * the user stops execution, to prevent orphaned pending messages from being processed
+     * by a future `processLoop` invocation.
+     */
+    removePendingMessages() {
+        if (!this.rootAlternatives) return;
+        const clearInAlternatives = (alternatives) => {
+            for (const message of alternatives.messages) {
+                if ((message.value.role === 'assistant' || message.value.role === 'tool') && message.value.content === null) {
+                    message.value.role = 'log';
+                    message.value.content = '[Stopped]';
+                    message.cache = null;
+                }
+                if (message.answerAlternatives) {
+                    clearInAlternatives(message.answerAlternatives);
+                }
+            }
+        };
+        clearInAlternatives(this.rootAlternatives);
+        this.notify();
+    }
+
+    /**
      * Gets the appropriate message history for an agent call, respecting context rules.
      * If `fullContext` is `false`, it returns an empty history.
      * If `fullContext` is `true`, it traverses the history backwards from the `callingMessage`

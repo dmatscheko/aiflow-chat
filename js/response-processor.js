@@ -37,6 +37,13 @@ class ResponseProcessor {
          */
         this.isProcessing = false;
         /**
+         * A flag set by the user's stop action (Esc / Stop button). When true, the
+         * processing loop exits at the next check point, and no further agent or flow
+         * work is initiated. Reset to `false` when new processing is scheduled.
+         * @type {boolean}
+         */
+        this.isStopped = false;
+        /**
          * The main application instance, providing access to other components like
          * `chatManager`, `agentManager`, and `apiService`.
          * @type {App | null}
@@ -54,6 +61,25 @@ class ResponseProcessor {
     }
 
     /**
+     * Immediately halts all ongoing processing. Called when the user presses Esc or
+     * clicks the Stop button. It sets the `isStopped` flag so the `processLoop`
+     * exits at the next check point, and clears the agent call stack so that no
+     * parent agents are resumed after the currently-aborting request finishes.
+     * It also removes any pending (null-content) messages that were already queued,
+     * preventing orphaned work items from being picked up later.
+     */
+    stop() {
+        this.isStopped = true;
+        this.agentCallStack.length = 0;
+        // Remove pending messages so they don't get picked up by a future processLoop.
+        if (this.app?.chatManager) {
+            for (const chat of this.app.chatManager.chats) {
+                chat.log.removePendingMessages();
+            }
+        }
+    }
+
+    /**
      * Schedules a processing check. If the processor is not already running,
      * this method kicks off the main processing loop. This is the primary entry point
      * for initiating all AI response generation and subsequent actions.
@@ -61,6 +87,7 @@ class ResponseProcessor {
      */
     scheduleProcessing(app) {
         this.app = app;
+        this.isStopped = false;
         if (!this.isProcessing) {
             this.processLoop();
         }
@@ -106,14 +133,19 @@ class ResponseProcessor {
 
         try {
             while (true) {
+                if (this.isStopped) break;
+
                 const workItem = this._findNextPendingMessage();
                 if (workItem) {
                     const { chat, message } = workItem;
                     // Highest priority: process any pending AI response.
                     await this.processMessage(chat, message);
 
+                    if (this.isStopped) break;
+
                     // Immediately give plugins a chance to react to the new message.
                     const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', message, chat);
+                    if (this.isStopped) break;
                     if (aHandlerTookAction) {
                         // A plugin (e.g., mcp-plugin) took action, so new work might exist.
                         // Restart the loop to handle it immediately.
@@ -150,6 +182,7 @@ class ResponseProcessor {
                 if (activeChat) {
                     // Trigger with a null message to signify an idle-state check.
                     const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', null, activeChat);
+                    if (this.isStopped) break;
                     if (aHandlerTookAction) {
                         // A plugin (e.g., flows-plugin) took action. Loop again.
                         continue;

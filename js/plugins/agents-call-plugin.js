@@ -153,6 +153,7 @@ class AgentsCallPlugin {
         });
 
         for (const call of agentCalls) {
+            if (this.app.responseProcessor.isStopped) break;
             await this._handleAgentCall(call, message, activeChat);
         }
 
@@ -270,6 +271,10 @@ class AgentsCallPlugin {
             messages,
             targetAgent.id
         );
+
+        // If the user stopped while the sub-agent was streaming, skip any
+        // further recursive processing to avoid resuming parent agents.
+        if (app.responseProcessor.isStopped) return;
 
         // Recursively check if the sub-agent's response triggers further work
         // (nested agent calls, MCP tool usage, etc.). Any such work is resolved

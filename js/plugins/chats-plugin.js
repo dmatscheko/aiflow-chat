@@ -256,6 +256,9 @@ class ChatManager {
         if (this.app.flowManager && this.app.flowManager.activeFlowRunner) {
             this.app.flowManager.activeFlowRunner.stop('Flow stopped by user.');
         }
+        // Signal the processing loop to exit and clear the agent call stack so
+        // that no parent agents are resumed after the current request is aborted.
+        responseProcessor.stop();
         if (this.app.abortController) {
             this.app.abortController.abort();
         }
