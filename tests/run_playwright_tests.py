@@ -18,6 +18,18 @@ from test_15_js_flow_runner import test_js_flow_runner
 from test_16_js_settings_manager import test_js_settings_manager
 from test_17_js_step_definitions import test_js_step_definitions
 
+
+# ANSI color codes (pytest style)
+GREEN = "\033[92m"
+RED = "\033[91m"
+RESET = "\033[0m"
+
+
+def print_passed(test_name: str):
+    """Print test name followed by green PASSED"""
+    print(f"{test_name} {GREEN}PASSED{RESET}")
+
+
 if __name__ == "__main__":
     with sync_playwright() as p:
         # browser = p.chromium.launch(channel="chrome", headless=False, args=["--disable-ipv6"])  # Could help with MacOS errors
@@ -31,77 +43,78 @@ if __name__ == "__main__":
             # Test 1
             start_new_chat(page)
             test_tool_success(page)
-            print("test_tool_success passed.")
+            print_passed("test_tool_success")
 
             # Test 2
             start_new_chat(page)
             test_tool_error(page)
-            print("test_tool_error passed.")
+            print_passed("test_tool_error")
 
             # Test 3
             start_new_chat(page)
             test_simple_flow(page)
-            print("test_simple_flow passed.")
+            print_passed("test_simple_flow")
 
             # Test 4
             test_agent_management(page)
-            print("test_agent_management passed.")
+            print_passed("test_agent_management")
 
             # Test 5
             test_flow_ui(page)
-            print("test_flow_ui passed.")
+            print_passed("test_flow_ui")
 
             # Test 6
             test_token_count_flow_step(page)
-            print("test_token_count_flow_step passed.")
+            print_passed("test_token_count_flow_step")
 
             # Test 7: JS ChatLog unit tests
             test_js_chat_data(page)
-            print("test_js_chat_data passed.")
+            print_passed("test_js_chat_data")
 
             # Test 8: JS parseToolCalls unit tests
             test_js_tool_parser(page)
-            print("test_js_tool_parser passed.")
+            print_passed("test_js_tool_parser")
 
             # Test 9: JS utils & settings-manager unit tests
             test_js_utils(page)
-            print("test_js_utils passed.")
+            print_passed("test_js_utils")
 
             # Test 10: /api/config endpoint
             test_api_config(page)
-            print("test_api_config passed.")
+            print_passed("test_api_config")
 
             # Test 11: JS PluginManager unit tests
             test_js_plugin_manager(page)
-            print("test_js_plugin_manager passed.")
+            print_passed("test_js_plugin_manager")
 
             # Test 12: JS DataManager unit tests
             test_js_data_manager(page)
-            print("test_js_data_manager passed.")
+            print_passed("test_js_data_manager")
 
             # Test 13: JS ResponseProcessor unit tests
             test_js_response_processor(page)
-            print("test_js_response_processor passed.")
+            print_passed("test_js_response_processor")
 
             # Test 14: JS ApiService unit tests
             test_js_api_service(page)
-            print("test_js_api_service passed.")
+            print_passed("test_js_api_service")
 
             # Test 15: JS FlowRunner unit tests
             test_js_flow_runner(page)
-            print("test_js_flow_runner passed.")
+            print_passed("test_js_flow_runner")
 
             # Test 16: JS SettingsManager unit tests
             test_js_settings_manager(page)
-            print("test_js_settings_manager passed.")
+            print_passed("test_js_settings_manager")
 
             # Test 17: JS Step Definitions unit tests
             test_js_step_definitions(page)
-            print("test_js_step_definitions passed.")
+            print_passed("test_js_step_definitions")
 
-            print("All tests finished successfully.")
+            print(f"\n{GREEN}All Playwright tests finished successfully.{RESET}")
+
         except Exception as e:
-            print(f"Error in tests: {e}")
+            print(f"{RED}Error in Playwright tests: {e}{RESET}")
             page.screenshot(path="test-results/verification_error.png")
             # raise
         finally:
