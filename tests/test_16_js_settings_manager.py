@@ -60,6 +60,96 @@ def test_js_settings_manager(page):
         const fallbackConfig = agentManager.getEffectiveApiConfig('nonexistent-agent');
         assert(fallbackConfig, 'getEffectiveApiConfig with unknown id returns fallback config');
 
+        // --- Test: Agent config inheritance from Default Agent ---
+        // Set up Default Agent with known model settings
+        const origDefaultMs = { ...defaultAgent.modelSettings };
+        const origDefaultTs = { ...defaultAgent.toolSettings };
+        const origDefaultAcs = { ...defaultAgent.agentCallSettings };
+        defaultAgent.modelSettings = {
+            apiUrl: 'http://default-url',
+            apiKey: 'default-key',
+            use_model: true, model: 'default-model',
+            use_temperature: true, temperature: 0.5,
+            use_top_p: false, top_p: 0.9,
+        };
+        defaultAgent.toolSettings = { mcpServer: 'http://default-mcp', allowAll: true, allowed: [] };
+        defaultAgent.agentCallSettings = { allowAll: false, allowed: ['agent-x'] };
+
+        // Create a test custom agent
+        const testAgent = agentManager.addAgent({
+            name: 'Inheritance Test Agent',
+            useCustomModelSettings: false,
+            modelSettings: {},
+            useCustomToolSettings: false,
+            toolSettings: { allowAll: true, allowed: [] },
+            useCustomAgentCallSettings: false,
+            agentCallSettings: { allowAll: true, allowed: [] },
+        });
+
+        // Case 1: useCustomModelSettings=false -> inherit ALL from default
+        const cfg1 = agentManager.getEffectiveApiConfig(testAgent.id);
+        assert(cfg1.apiUrl === 'http://default-url', 'inherit apiUrl when useCustomModelSettings=false, got: ' + cfg1.apiUrl);
+        assert(cfg1.apiKey === 'default-key', 'inherit apiKey when useCustomModelSettings=false');
+        assert(cfg1.use_model === true, 'inherit use_model when useCustomModelSettings=false');
+        assert(cfg1.model === 'default-model', 'inherit model when useCustomModelSettings=false, got: ' + cfg1.model);
+        assert(cfg1.use_temperature === true, 'inherit use_temperature when useCustomModelSettings=false');
+        assert(cfg1.temperature === 0.5, 'inherit temperature when useCustomModelSettings=false');
+
+        // Case 2: useCustomModelSettings=true, empty modelSettings -> inherit ALL from default
+        testAgent.useCustomModelSettings = true;
+        testAgent.modelSettings = {};
+        const cfg2 = agentManager.getEffectiveApiConfig(testAgent.id);
+        assert(cfg2.apiUrl === 'http://default-url', 'inherit apiUrl when custom modelSettings is empty');
+        assert(cfg2.use_model === true, 'inherit use_model when custom modelSettings is empty');
+        assert(cfg2.model === 'default-model', 'inherit model when custom modelSettings is empty, got: ' + cfg2.model);
+
+        // Case 3: useCustomModelSettings=true, custom agent has use_model: false -> still inherit default's model
+        testAgent.modelSettings = { use_model: false };
+        const cfg3 = agentManager.getEffectiveApiConfig(testAgent.id);
+        assert(cfg3.use_model === true, 'inherit use_model from default when custom has use_model=false, got: ' + cfg3.use_model);
+        assert(cfg3.model === 'default-model', 'inherit model from default when custom has use_model=false, got: ' + cfg3.model);
+        assert(cfg3.use_temperature === true, 'inherit use_temperature when custom does not override it');
+
+        // Case 4: useCustomModelSettings=true, custom agent has use_model: true with different model -> override
+        testAgent.modelSettings = { use_model: true, model: 'custom-model' };
+        const cfg4 = agentManager.getEffectiveApiConfig(testAgent.id);
+        assert(cfg4.use_model === true, 'custom use_model should be true');
+        assert(cfg4.model === 'custom-model', 'custom model should override default, got: ' + cfg4.model);
+        assert(cfg4.use_temperature === true, 'non-overridden use_temperature should inherit from default');
+        assert(cfg4.temperature === 0.5, 'non-overridden temperature should inherit from default');
+
+        // Case 5: Custom apiUrl set -> use custom apiUrl, inherit default apiKey if not set
+        testAgent.modelSettings = { apiUrl: 'http://custom-url' };
+        const cfg5 = agentManager.getEffectiveApiConfig(testAgent.id);
+        assert(cfg5.apiUrl === 'http://custom-url', 'custom apiUrl should override default');
+        assert(cfg5.apiKey === 'default-key', 'apiKey should inherit from default when custom only sets apiUrl');
+
+        // Case 6: Custom apiUrl and apiKey set -> use both custom values
+        testAgent.modelSettings = { apiUrl: 'http://custom-url', apiKey: 'custom-key' };
+        const cfg6 = agentManager.getEffectiveApiConfig(testAgent.id);
+        assert(cfg6.apiUrl === 'http://custom-url', 'custom apiUrl should be used');
+        assert(cfg6.apiKey === 'custom-key', 'custom apiKey should be used');
+
+        // Case 7: Tool settings inheritance
+        testAgent.useCustomToolSettings = true;
+        testAgent.toolSettings = { allowAll: false, allowed: ['tool-a'] };
+        const cfg7 = agentManager.getEffectiveApiConfig(testAgent.id);
+        assert(cfg7.toolSettings.mcpServer === 'http://default-mcp', 'inherit mcpServer when custom does not set it');
+        assert(cfg7.toolSettings.allowAll === false, 'custom allowAll should override');
+        assert(JSON.stringify(cfg7.toolSettings.allowed) === JSON.stringify(['tool-a']), 'custom allowed should override');
+
+        // Case 8: Agent call settings inheritance
+        testAgent.useCustomAgentCallSettings = true;
+        testAgent.agentCallSettings = { allowAll: true };
+        const cfg8 = agentManager.getEffectiveApiConfig(testAgent.id);
+        assert(cfg8.agentCallSettings.allowAll === true, 'custom agentCallSettings.allowAll should override');
+
+        // Cleanup: delete test agent and restore default
+        agentManager.deleteAgent(testAgent.id);
+        defaultAgent.modelSettings = origDefaultMs;
+        defaultAgent.toolSettings = origDefaultTs;
+        defaultAgent.agentCallSettings = origDefaultAcs;
+
         // --- Test: constructSystemPrompt ---
         // This is async since it may fetch tools
 

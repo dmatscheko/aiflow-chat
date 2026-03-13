@@ -255,22 +255,54 @@ class AgentManager {
             effectiveConfig.systemPrompt = agent.systemPrompt;
 
             if (agent.useCustomModelSettings) {
-                Object.assign(effectiveConfig, agent.modelSettings);
-                if (!agent.modelSettings?.apiUrl) {
-                    effectiveConfig.apiUrl = defaultAgent.modelSettings.apiUrl;
-                    effectiveConfig.apiKey = defaultAgent.modelSettings.apiKey;
+                const custom = agent.modelSettings || {};
+
+                // Override apiUrl/apiKey only if the custom agent has an apiUrl set.
+                if (custom.apiUrl) {
+                    effectiveConfig.apiUrl = custom.apiUrl;
+                    effectiveConfig.apiKey = custom.apiKey ?? effectiveConfig.apiKey;
+                }
+
+                // For each use_* toggle pair, only override the Default Agent's
+                // value when the custom agent explicitly enables it (use_* === true).
+                // When use_* is false or undefined, the Default Agent's setting
+                // is inherited.
+                const toggleKeys = [
+                    'model', 'temperature', 'top_p', 'top_k', 'max_tokens',
+                    'stream', 'stop', 'presence_penalty', 'frequency_penalty',
+                    'logit_bias', 'repeat_penalty', 'seed',
+                ];
+                for (const key of toggleKeys) {
+                    if (custom[`use_${key}`] === true) {
+                        effectiveConfig[`use_${key}`] = true;
+                        if (custom[key] !== undefined) {
+                            effectiveConfig[key] = custom[key];
+                        }
+                    }
                 }
             }
 
             if (agent.useCustomToolSettings) {
-                Object.assign(effectiveConfig.toolSettings, agent.toolSettings);
-                if (!agent.toolSettings?.mcpServer) {
-                    effectiveConfig.toolSettings.mcpServer = defaultAgent.toolSettings?.mcpServer;
+                const custom = agent.toolSettings || {};
+                if (custom.mcpServer) {
+                    effectiveConfig.toolSettings.mcpServer = custom.mcpServer;
+                }
+                if (custom.allowAll !== undefined) {
+                    effectiveConfig.toolSettings.allowAll = custom.allowAll;
+                }
+                if (custom.allowed !== undefined) {
+                    effectiveConfig.toolSettings.allowed = custom.allowed;
                 }
             }
 
             if (agent.useCustomAgentCallSettings) {
-                Object.assign(effectiveConfig.agentCallSettings, agent.agentCallSettings);
+                const custom = agent.agentCallSettings || {};
+                if (custom.allowAll !== undefined) {
+                    effectiveConfig.agentCallSettings.allowAll = custom.allowAll;
+                }
+                if (custom.allowed !== undefined) {
+                    effectiveConfig.agentCallSettings.allowed = custom.allowed;
+                }
             }
         }
 
