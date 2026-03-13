@@ -473,6 +473,12 @@ class FlowRunner {
         this.isRunning = false;
         this.currentStepId = null;
         this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
+        if (message) {
+            const chat = this.app.chatManager.getActiveChat();
+            if (chat) {
+                chat.log.addMessage({ role: 'log', content: message });
+            }
+        }
         console.log(message);
         this.manager.activeFlowRunner = null;
     }

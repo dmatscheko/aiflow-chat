@@ -23,6 +23,7 @@ const roleMapping = {
     assistant: 'AI',
     system: 'System',
     tool: 'Tool',
+    log: 'Log',
 };
 
 /**
@@ -97,6 +98,7 @@ function _getTurns(chatLog) {
     let currentTurn = []; // A turn is an array of messages
     messages.forEach(msg => {
         const role = msg.value.role;
+        if (role === 'log') return; // Skip log messages — they are display-only.
         if (role !== 'assistant' && role !== 'tool') {
             // A non-AI message starts a new turn.
             if (currentTurn.length > 0) {
@@ -170,6 +172,23 @@ function _evaluateCondition(text, conditionType, condition) {
  * @param {object} step - The flow step object.
  * @returns {string} HTML string for the condition UI controls.
  */
+/**
+ * Returns the content of the last non-log message in the active chat history.
+ * Skips log messages since they are display-only and not part of the conversation.
+ * @param {ChatLog} chatLog The chat log to search.
+ * @returns {string} The content of the last relevant message, or an empty string.
+ * @private
+ */
+function _getLastResponseContent(chatLog) {
+    const messages = chatLog.getActiveMessages();
+    for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].value.role !== 'log') {
+            return messages[i].value.content || '';
+        }
+    }
+    return '';
+}
+
 function _getConditionUI(step) {
     return `<label>Last Response Condition:</label>` +
         `<select class="flow-step-condition-type flow-step-input" data-id="${step.id}" data-key="conditionType">` +
@@ -531,6 +550,33 @@ export function registerFlowStepDefinitions(flowManager) {
     });
 
 
+    flowManager._defineStep('log-message', {
+        label: 'Log Message',
+        color: 'hsla(210, 15%, 40%, 0.8)',
+        icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
+        getDefaults: () => ({ message: '' }),
+        render: function(step) {
+            return `<h4>${this.icon} ${this.label}</h4>
+            <div class="flow-step-content">
+                <label>Message (leave empty for NOP):</label>
+                <textarea class="flow-step-input" rows="2" data-id="${step.id}" data-key="message">${step.data.message || ''}</textarea>
+            </div>`;
+        },
+        onUpdate: _defaultOnUpdate,
+        execute: (step, context) => {
+            if (step.data.message) {
+                const chat = context.app.chatManager.getActiveChat();
+                if (chat) {
+                    chat.log.addMessage({ role: 'log', content: step.data.message });
+                }
+            }
+            const nextStep = context.getNextStep(step.id);
+            if (nextStep) return context.executeStep(nextStep);
+            else context.stopFlow('Flow finished.');
+        },
+    });
+
+
     flowManager._defineStep('clear-history', {
         label: 'Clear History',
         color: 'hsla(0, 12%, 34%, 0.80)',
@@ -571,10 +617,12 @@ export function registerFlowStepDefinitions(flowManager) {
         renderOutputConnectors: (step) => _renderOutputConnectors(step, [{name: 'pass', label: 'Pass'}, {name: 'fail', label: 'Fail'}]),
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
-            const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
+            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            if (!chatLog) return context.stopFlow('No active chat.');
+            const lastContent = _getLastResponseContent(chatLog);
             let isMatch = false;
             try {
-                isMatch = _evaluateCondition(lastMessage, step.data.conditionType, step.data.condition);
+                isMatch = _evaluateCondition(lastContent, step.data.conditionType, step.data.condition);
             } catch (e) { return context.stopFlow('Invalid regex in branching step.'); }
             const nextStep = context.getNextStep(step.id, isMatch ? 'pass' : 'fail');
             if (nextStep) return context.executeStep(nextStep); else context.stopFlow();
@@ -626,10 +674,12 @@ export function registerFlowStepDefinitions(flowManager) {
         },
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
-            const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
+            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            if (!chatLog) return context.stopFlow('No active chat.');
+            const lastContent = _getLastResponseContent(chatLog);
             let isMatch = false;
             try {
-                isMatch = _evaluateCondition(lastMessage, step.data.conditionType, step.data.condition);
+                isMatch = _evaluateCondition(lastContent, step.data.conditionType, step.data.condition);
             } catch (e) { return context.stopFlow('Invalid regex in conditional step.'); }
             if ((isMatch && step.data.onMatch === 'stop') || (!isMatch && step.data.onMatch === 'continue')) {
                 return context.stopFlow('Flow stopped by conditional stop.');
@@ -846,7 +896,8 @@ export function registerFlowStepDefinitions(flowManager) {
             });
 
             testBtn.addEventListener('click', async () => {
-                const lastMessage = app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
+                const chatLog = app.chatManager.getActiveChat()?.log;
+                const lastMessage = chatLog ? _getLastResponseContent(chatLog) : '';
                 const toolCallStr = _substituteLastResponse(toolCallTextarea.value, lastMessage);
                 try {
                     const toolCall = JSON.parse(toolCallStr);
@@ -866,7 +917,8 @@ export function registerFlowStepDefinitions(flowManager) {
         },
 
         execute: (step, context) => {
-            const lastMessage = context.app.chatManager.getActiveChat()?.log.getLastMessage()?.value.content || '';
+            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            const lastMessage = chatLog ? _getLastResponseContent(chatLog) : '';
             const toolCallStr = _substituteLastResponse(step.data.toolCall, lastMessage);
 
             try {

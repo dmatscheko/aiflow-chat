@@ -197,11 +197,14 @@ class ResponseProcessor {
             return;
         }
 
+        // Filter out log messages — they are display-only and not part of the AI context.
+        const filteredMessages = messages.filter(m => m.role !== 'log');
+
         await app.apiService.executeStreamingAgentCall(
             app,
             chat,
             assistantMsg,
-            messages,
+            filteredMessages,
             assistantMsg.agent
         );
 

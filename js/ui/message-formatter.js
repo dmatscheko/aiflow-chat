@@ -206,6 +206,15 @@ function formatMessageContent(message) {
  * @private
  */
 export function formatMessage(message) {
+    // Log messages are display-only: render as simple text between chat bubbles,
+    // not inside a bubble, to signal they are not part of the AI conversation.
+    if (message.value.role === 'log') {
+        const logEl = document.createElement('div');
+        logEl.className = 'log-message';
+        logEl.textContent = message.value.content || '';
+        return logEl;
+    }
+
     const wrapper = document.createElement('div');
     wrapper.className = 'message-wrapper';
 

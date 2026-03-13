@@ -425,6 +425,15 @@ h2 {
     background-color: var(--message-tool-bg);
     align-self: flex-start;
 }
+.log-message {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-color-secondary);
+    padding: 0.25rem 1rem;
+    margin-bottom: 0.5rem;
+    opacity: 0.7;
+    font-style: italic;
+}
 .message-title {
     display: flex;
     justify-content: space-between;

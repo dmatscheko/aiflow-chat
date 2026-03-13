@@ -11,7 +11,7 @@
 
 /**
  * Defines the possible roles for a message author in the chat.
- * @typedef {'user' | 'assistant' | 'system' | 'tool'} MessageRole
+ * @typedef {'user' | 'assistant' | 'system' | 'tool' | 'log'} MessageRole
  */
 
 /**
@@ -347,13 +347,9 @@ export class ChatLog {
             }
         }
 
-        if (boundaryIndex !== -1) {
-            // If a boundary was found, return only the history from that point forward.
-            return history.slice(boundaryIndex).map(msg => msg.value);
-        } else {
-            // No boundary found, so the agent sees the full history.
-            return history.map(msg => msg.value);
-        }
+        const slice = boundaryIndex !== -1 ? history.slice(boundaryIndex) : history;
+        // Filter out log messages — they are display-only and not part of the AI context.
+        return slice.map(msg => msg.value).filter(v => v.role !== 'log');
     }
 
     /**
