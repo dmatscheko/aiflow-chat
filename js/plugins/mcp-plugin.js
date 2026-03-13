@@ -160,7 +160,7 @@ class McpPlugin {
             } catch (error) {
                 // Fallback for servers that might incorrectly return a stream for a non-stream request.
                 if (error instanceof SyntaxError && rawText.includes('data:')) {
-                    console.warn('MCP: JSON parsing failed, attempting to parse as event-stream.');
+                    console.log('MCP: JSON parsing failed, attempting to parse as event-stream.');
                     let result = null;
                     const lines = rawText.split('\n');
                     for (const line of lines) {
