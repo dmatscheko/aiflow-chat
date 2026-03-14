@@ -188,13 +188,25 @@ export class ApiService {
                 // Keep the last (potentially incomplete) line in the buffer
                 buffer = lines.pop();
                 const deltas = lines
-                    .map(line => line.replace(/^data: /, '').trim())
-                    .filter(line => line !== '' && line !== '[DONE]')
+                    .filter(line => {
+                        const trimmed = line.trim();
+                        if (trimmed === '' || trimmed === 'data: [DONE]') return false;
+                        if (trimmed.startsWith('data: ') || trimmed.startsWith('data:')) return true;
+                        // Log non-data SSE fields for debugging (event:, id:, retry:, etc.)
+                        if (trimmed.includes(':')) {
+                            console.debug('SSE non-data field:', trimmed);
+                        } else {
+                            console.warn('Unexpected SSE line (no field prefix):', trimmed);
+                        }
+                        return false;
+                    })
+                    .map(line => line.replace(/^data: ?/, '').trim())
+                    .filter(line => line !== '')
                     .map(line => {
                         try {
                             return JSON.parse(line);
                         } catch (e) {
-                            console.error("Failed to parse stream chunk:", line, e);
+                            console.error('Failed to parse stream chunk as JSON:', line, e);
                             return null;
                         }
                     })
