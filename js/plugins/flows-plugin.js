@@ -92,6 +92,8 @@ export class FlowManager {
         this.dragInfo = {};
         this.panInfo = {};
         this.connectionInfo = {};
+        /** @type {AbortController | null} */
+        this._canvasAbortController = null;
         this._defineSteps();
     }
 
@@ -143,6 +145,9 @@ export class FlowManager {
      * @param {string} flowId The ID of the flow to start.
      */
     startFlow(flowId) {
+        if (this.activeFlowRunner) {
+            this.activeFlowRunner.stop('Flow stopped: starting a new flow.');
+        }
         const flow = this.getFlow(flowId);
         if (flow) {
             this.activeFlowRunner = new FlowRunner(flow, this.app, this);
@@ -208,18 +213,16 @@ export class FlowManager {
      */
     pruneOrphanedConnections(flow) {
         const stepIds = new Set(flow.steps.map(s => s.id));
+        const stepDefByStepId = new Map(
+            flow.steps.map(s => [s.id, this.stepTypes[s.type]])
+        );
         const before = flow.connections.length;
         flow.connections = flow.connections.filter(conn => {
             if (!stepIds.has(conn.from) || !stepIds.has(conn.to)) return false;
-            const stepDef = this.stepTypes[flow.steps.find(s => s.id === conn.from)?.type];
+            const stepDef = stepDefByStepId.get(conn.from);
             if (!stepDef) return false;
-            // Build the set of valid output names for this step type
-            const tempStep = { id: '__probe__', data: {} };
-            const html = stepDef.renderOutputConnectors
-                ? stepDef.renderOutputConnectors(tempStep)
-                : '<div data-output-name="default"></div>';
-            const validOutputs = new Set([...html.matchAll(/data-output-name="([^"]+)"/g)].map(m => m[1]));
-            return validOutputs.has(conn.outputName || 'default');
+            const validOutputs = stepDef.outputNames || ['default'];
+            return validOutputs.includes(conn.outputName || 'default');
         });
         return flow.connections.length < before;
     }
@@ -603,47 +606,50 @@ pluginManager.register({
 
                 renderAndConnect(); // Initial render
 
+                // Abort previous canvas listeners and reset stale interaction state
+                flowManager._resetInteractions();
+                if (flowManager._canvasAbortController) {
+                    flowManager._canvasAbortController.abort();
+                }
+                flowManager._canvasAbortController = new AbortController();
+                const { signal } = flowManager._canvasAbortController;
+
                 const canvas = document.getElementById('flow-canvas');
-                // Use a proxy element for event delegation to avoid re-attaching listeners
                 const canvasProxy = canvas.closest('#flow-editor-container');
 
-                // Check if listener is already attached to avoid duplicates
-                if (!canvasProxy.dataset.eventsAttached) {
-                     canvasProxy.dataset.eventsAttached = 'true';
-                     canvasProxy.addEventListener('mousedown', (e) => flowManager._handleCanvasMouseDown(e, flow, debouncedUpdate));
-                     canvasProxy.addEventListener('mousemove', (e) => flowManager._handleCanvasMouseMove(e, flow));
-                     canvasProxy.addEventListener('mouseup', (e) => flowManager._handleCanvasMouseUp(e, flow, debouncedUpdate));
-                     canvasProxy.addEventListener('change', (e) => {
-                        const stepId = e.target.closest('.flow-step-card')?.dataset.id;
-                        if (!stepId) return;
+                canvasProxy.addEventListener('mousedown', (e) => flowManager._handleCanvasMouseDown(e, flow, debouncedUpdate), { signal });
+                canvasProxy.addEventListener('mousemove', (e) => flowManager._handleCanvasMouseMove(e, flow), { signal });
+                canvasProxy.addEventListener('mouseup', (e) => flowManager._handleCanvasMouseUp(e, flow, debouncedUpdate), { signal });
+                canvasProxy.addEventListener('change', (e) => {
+                    const stepId = e.target.closest('.flow-step-card')?.dataset.id;
+                    if (!stepId) return;
+                    const step = flow.steps.find(s => s.id === stepId);
+                    if (step && flowManager.stepTypes[step.type]?.onUpdate) {
+                        flowManager.stepTypes[step.type].onUpdate(step, e.target, renderAndConnect);
+                        debouncedUpdate();
+                    }
+                }, { signal });
+                canvasProxy.addEventListener('click', (e) => {
+                    const target = e.target;
+                    if (target.classList.contains('delete-flow-step-btn')) {
+                        const stepId = target.closest('.flow-step-card').dataset.id;
+                        flow.steps = flow.steps.filter(s => s.id !== stepId);
+                        flow.connections = flow.connections.filter(c => c.from !== stepId && c.to !== stepId);
+                    } else if (target.classList.contains('delete-connection-btn')) {
+                        const { from, to, outputName } = target.dataset;
+                        flow.connections = flow.connections.filter(c =>
+                            !(c.from === from && c.to === to && (c.outputName || 'default') === outputName)
+                        );
+                    } else if (target.classList.contains('minimize-flow-step-btn')) {
+                        const stepId = target.closest('.flow-step-card').dataset.id;
                         const step = flow.steps.find(s => s.id === stepId);
-                        if (step && flowManager.stepTypes[step.type]?.onUpdate) {
-                            flowManager.stepTypes[step.type].onUpdate(step, e.target, renderAndConnect);
-                            debouncedUpdate();
-                        }
-                    });
-                     canvasProxy.addEventListener('click', (e) => {
-                        const target = e.target;
-                        if (target.classList.contains('delete-flow-step-btn')) {
-                            const stepId = target.closest('.flow-step-card').dataset.id;
-                            flow.steps = flow.steps.filter(s => s.id !== stepId);
-                            flow.connections = flow.connections.filter(c => c.from !== stepId && c.to !== stepId);
-                        } else if (target.classList.contains('delete-connection-btn')) {
-                            const { from, to, outputName } = target.dataset;
-                            flow.connections = flow.connections.filter(c =>
-                                !(c.from === from && c.to === to && (c.outputName || 'default') === outputName)
-                            );
-                        } else if (target.classList.contains('minimize-flow-step-btn')) {
-                            const stepId = target.closest('.flow-step-card').dataset.id;
-                            const step = flow.steps.find(s => s.id === stepId);
-                            if (step) step.isMinimized = !step.isMinimized;
-                        } else {
-                            return; // Not a relevant click, do nothing
-                        }
-                        flowManager.updateFlow(flow);
-                        renderAndConnect();
-                    });
-                }
+                        if (step) step.isMinimized = !step.isMinimized;
+                    } else {
+                        return; // Not a relevant click, do nothing
+                    }
+                    flowManager.updateFlow(flow);
+                    renderAndConnect();
+                }, { signal });
             }
         }
     },

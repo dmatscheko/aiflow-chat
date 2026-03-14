@@ -162,18 +162,19 @@ class ResponseProcessor {
                 // (e.g., the flows-plugin) may take follow-up actions that would skip
                 // the stack pop via `continue`, permanently starving the parent agent.
                 if (this.agentCallStack.length > 0) {
-                    const activeChat = this.app.chatManager.getActiveChat();
                     const parentAgentContext = this.agentCallStack.pop();
-                    const targetChat = (parentAgentContext.chatId
+                    const targetChat = parentAgentContext.chatId
                         ? this.app.chatManager.chats.find(c => c.id === parentAgentContext.chatId)
-                        : null) || activeChat;
+                        : this.app.chatManager.getActiveChat();
                     if (targetChat) {
                         targetChat.log.addMessage(
                             { role: 'assistant', content: null, agent: parentAgentContext.agentId },
                             { depth: parentAgentContext.depth }
                         );
+                    } else {
+                        console.warn('Agent call stack: target chat no longer exists, skipping resumption.');
                     }
-                    // A new turn has been queued, so restart the loop.
+                    // Restart the loop (either to process the new turn, or to check for more stack entries).
                     continue;
                 }
 

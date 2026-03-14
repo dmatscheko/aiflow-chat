@@ -49,6 +49,7 @@ export class DataManager {
         } catch (e) {
             console.error(`Failed to load ${this.entityName}s:`, e);
             this.items = [];
+            this.loadError = e;
         }
     }
 

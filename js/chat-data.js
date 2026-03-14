@@ -85,6 +85,12 @@ class Message {
          * @type {Alternatives | null}
          */
         this.answerAlternatives = null;
+        /**
+         * Cached DOM element for the rendered message content. Set to `null` to
+         * force re-rendering on next display. Not serialized.
+         * @type {HTMLElement | null}
+         */
+        this.cache = null;
     }
 
     /**

@@ -152,6 +152,7 @@ class App {
 
             await this.renderMainView();
             this.initEventListeners();
+            this._checkForLoadErrors();
         })();
     }
 
@@ -301,6 +302,30 @@ class App {
      */
     _saveLastActiveIds() {
         localStorage.setItem(STORAGE_KEYS.LAST_ACTIVE_IDS, JSON.stringify(this.lastActiveIds));
+    }
+
+    /**
+     * Checks all DataManager instances for load errors and notifies the user
+     * if any data corruption was detected during startup.
+     * @private
+     */
+    _checkForLoadErrors() {
+        const managers = [
+            this.chatManager?.dataManager,
+            this.agentManager?.dataManager,
+            this.flowManager?.dataManager,
+        ].filter(m => m?.loadError);
+        if (managers.length > 0) {
+            const names = managers.map(m => m.entityName).join(', ');
+            console.error(`Data corruption detected in: ${names}. Data has been reset.`);
+            const chat = this.chatManager?.getActiveChat();
+            if (chat) {
+                chat.log.addMessage({
+                    role: 'log',
+                    content: `Warning: Saved data (${names}) could not be loaded and was reset. Check the browser console for details.`
+                });
+            }
+        }
     }
 }
 

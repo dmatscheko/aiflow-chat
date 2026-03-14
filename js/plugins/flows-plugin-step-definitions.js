@@ -596,6 +596,7 @@ export function registerFlowStepDefinitions(flowManager) {
         color: 'hsla(30, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="4" r="2"></circle><circle cx="7" cy="20" r="2"></circle><circle cx="17" cy="20" r="2"></circle><path d="M7 18V6"></path><path d="M7 7c0 1.66 1.34 3 3 3h5c1.1 0 2 .9 2 2v6"></path></svg>',
         getDefaults: () => ({ conditionType: 'contains', condition: '' }),
+        outputNames: ['pass', 'fail'],
         render: function(step) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${_getConditionUI(step)}</div>`;
         },
@@ -620,6 +621,7 @@ export function registerFlowStepDefinitions(flowManager) {
         color: 'hsla(30, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="4" r="2"></circle><circle cx="7" cy="20" r="2"></circle><circle cx="17" cy="20" r="2"></circle><path d="M7 18V6"></path><path d="M7 7c0 1.66 1.34 3 3 3h5c1.1 0 2 .9 2 2v6"></path></svg>',
         getDefaults: () => ({ tokenCount: 500 }),
+        outputNames: ['pass', 'fail'],
         render: function(step) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content"><label>If token count is over:</label><input type="number" class="flow-step-token-count flow-step-input" data-id="${step.id}" data-key="tokenCount" value="${step.data.tokenCount || 500}" min="0"></div>`;
         },
@@ -933,6 +935,7 @@ export function registerFlowStepDefinitions(flowManager) {
         label: 'Pop from Stack',
         triggersAIResponse: true,
         continueOutputName: 'next',
+        outputNames: ['next', 'empty'],
         color: 'hsla(180, 20%, 35%, 0.8)',
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v 8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8"/><path d="M21 11v 8a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2v-8"/><path d="M11 11v 8a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2v-8"/><path d="M7 11h14"/><path d="M9 7h10"/><path d="M11 3h6"/></svg>',
         getDefaults: () => ({ agentId: '' }),
