@@ -89,6 +89,94 @@ export class SettingsManager {
  */
 
 /**
+ * Creates the appropriate input element (text, textarea, select, checkbox, etc.)
+ * for a standard setting definition and wraps it in a labelled container.
+ * @param {Setting} setting - The setting definition.
+ * @param {string} settingId - The HTML element ID.
+ * @param {string} settingPath - The dot-notation path for the onChange callback.
+ * @param {*} currentValue - The current value of the setting.
+ * @param {SettingChangedCallback} [onChange] - The change callback.
+ * @param {string} context - The context string for the onChange callback.
+ * @returns {{ container: HTMLElement, input: HTMLElement }} The container and the input element.
+ * @private
+ */
+function _createStandardSettingInput(setting, settingId, settingPath, currentValue, onChange, context) {
+    const valueToSet = currentValue ?? setting.default ?? '';
+    const valueChangeHandler = (e) => {
+        const target = e.target;
+        let newValue;
+        if (target.type === 'checkbox') {
+            newValue = target.checked;
+        } else if (target.type === 'select-multiple') {
+            newValue = Array.from(target.selectedOptions).map(opt => opt.value);
+        } else if (target.type === 'number' || target.type === 'range') {
+            newValue = target.value === '' ? null : parseFloat(target.value);
+        } else {
+            newValue = target.value;
+        }
+        onChange?.(settingPath, newValue, context, target);
+    };
+
+    const commonInputProps = {
+        id: settingId,
+        dataset: { path: settingPath },
+        required: setting.required,
+        onChange: valueChangeHandler,
+    };
+
+    const inputType = setting.type || 'text';
+    if (['text', 'textarea', 'number', 'range', 'password', 'url', 'email'].includes(inputType)) {
+        commonInputProps.onInput = valueChangeHandler;
+    }
+
+    let input;
+    if (setting.type === 'textarea') {
+        input = createTextarea({ ...commonInputProps, rows: setting.rows || 4, textContent: valueToSet, placeholder: setting.placeholder });
+    } else if (setting.type === 'select') {
+        const options = setting.options.map(opt => ({
+            value: typeof opt === 'string' ? opt : opt.value,
+            label: typeof opt === 'string' ? opt : opt.label
+        }));
+        input = createSelect(options, valueToSet, { ...commonInputProps, multiple: setting.multiple });
+    } else {
+        input = createInput({
+            ...commonInputProps,
+            type: inputType,
+            placeholder: setting.placeholder,
+            value: valueToSet,
+            checked: ['checkbox', 'radio'].includes(setting.type) ? !!valueToSet : undefined,
+            min: setting.min,
+            max: setting.max,
+            step: setting.step,
+        });
+    }
+
+    let rangeValueSpan = null;
+    if (setting.type === 'range') {
+        rangeValueSpan = createElement('span', { id: `${settingId}-value`, textContent: valueToSet });
+        input.addEventListener('input', () => { rangeValueSpan.textContent = input.value; });
+    }
+
+    const helpText = setting.description ? createElement('small', { className: 'help-text', textContent: setting.description }) : null;
+    const errorSpan = setting.errorSpan ? createElement('span', { className: 'error' }) : null;
+    const requiredMark = setting.required ? ' *' : '';
+
+    let container;
+    if (['checkbox', 'radio'].includes(input.type)) {
+        const label = setting.label ? createElement('label', { htmlFor: settingId, className: `${input.type}-label`, textContent: `${setting.label}${requiredMark}` }) : null;
+        const wrapper = createElement('div', { className: 'checkbox-container', children: [input, label].filter(Boolean) });
+        container = createElement('div', { className: `setting ${setting.className || ''}`, children: [wrapper, helpText, errorSpan].filter(Boolean) });
+    } else {
+        const label = setting.label
+            ? createElement('label', { htmlFor: settingId, textContent: `${setting.label}${requiredMark}` })
+            : null;
+        container = createElement('div', { className: `setting ${setting.className || ''}`, children: [label, input, rangeValueSpan, helpText, errorSpan].filter(Boolean) });
+    }
+
+    return { container, input };
+}
+
+/**
  * Creates and manages a settings UI from a declarative array of setting definitions.
  * This powerful function recursively builds a complete HTML form structure based on
  * the provided configuration, handling various input types, dependencies between fields,
@@ -179,76 +267,7 @@ export function createSettingsUI(settings, currentValues, onChange, idPrefix = '
                     break;
 
                 default:
-                    const valueToSet = currentValue ?? setting.default ?? '';
-                    const valueChangeHandler = (e) => {
-                        const target = e.target;
-                        let newValue;
-                        if (target.type === 'checkbox') {
-                            newValue = target.checked;
-                        } else if (target.type === 'select-multiple') {
-                            newValue = Array.from(target.selectedOptions).map(opt => opt.value);
-                        } else if (target.type === 'number' || target.type === 'range') {
-                            newValue = target.value === '' ? null : parseFloat(target.value);
-                        } else {
-                            newValue = target.value;
-                        }
-                        onChange?.(settingPath, newValue, context, target);
-                    };
-
-                    const commonInputProps = {
-                        id: settingId,
-                        dataset: { path: settingPath },
-                        required: setting.required,
-                        onChange: valueChangeHandler,
-                    };
-
-                    const inputType = setting.type || 'text';
-                    if (['text', 'textarea', 'number', 'range', 'password', 'url', 'email'].includes(inputType)) {
-                        commonInputProps.onInput = valueChangeHandler;
-                    }
-
-
-                    if (setting.type === 'textarea') {
-                        input = createTextarea({ ...commonInputProps, rows: setting.rows || 4, textContent: valueToSet, placeholder: setting.placeholder });
-                    } else if (setting.type === 'select') {
-                        const options = setting.options.map(opt => ({
-                            value: typeof opt === 'string' ? opt : opt.value,
-                            label: typeof opt === 'string' ? opt : opt.label
-                        }));
-                        input = createSelect(options, valueToSet, { ...commonInputProps, multiple: setting.multiple });
-                    } else {
-                        input = createInput({
-                            ...commonInputProps,
-                            type: inputType,
-                            placeholder: setting.placeholder,
-                            value: valueToSet,
-                            checked: ['checkbox', 'radio'].includes(setting.type) ? !!valueToSet : undefined,
-                            min: setting.min,
-                            max: setting.max,
-                            step: setting.step,
-                        });
-                    }
-
-                    let rangeValueSpan = null;
-                    if (setting.type === 'range') {
-                        rangeValueSpan = createElement('span', { id: `${settingId}-value`, textContent: valueToSet });
-                        input.addEventListener('input', () => { rangeValueSpan.textContent = input.value; });
-                    }
-
-                    const helpText = setting.description ? createElement('small', { className: 'help-text', textContent: setting.description }) : null;
-                    const errorSpan = setting.errorSpan ? createElement('span', { className: 'error' }) : null;
-                    const requiredMark = setting.required ? ' *' : '';
-
-                    if (['checkbox', 'radio'].includes(input.type)) {
-                        label = setting.label ? createElement('label', { htmlFor: settingId, className: `${input.type}-label`, textContent: `${setting.label}${requiredMark}` }) : null;
-                        const wrapper = createElement('div', { className: 'checkbox-container', children: [input, label].filter(Boolean) });
-                        container = createElement('div', { className: `setting ${setting.className || ''}`, children: [wrapper, helpText, errorSpan].filter(Boolean) });
-                    } else {
-                        label = setting.label
-                            ? createElement('label', { htmlFor: settingId, textContent: `${setting.label}${requiredMark}` })
-                            : null;
-                        container = createElement('div', { className: `setting ${setting.className || ''}`, children: [label, input, rangeValueSpan, helpText, errorSpan].filter(Boolean) });
-                    }
+                    ({ container, input } = _createStandardSettingInput(setting, settingId, settingPath, currentValue, onChange, context));
             }
 
             if (setting.actions) {

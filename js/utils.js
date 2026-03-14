@@ -280,13 +280,6 @@ export function generateUniqueName(baseName, existingNames) {
 
 
 /**
- * Coerces a value to the specified JSON Schema type.
- * Used for type-safe parameter parsing in tool calls and API configurations.
- * @param {*} value - The value to coerce.
- * @param {string} type - The target type: 'integer', 'number', 'boolean', or 'string'.
- * @returns {*} The coerced value, or `null` for empty numeric values.
- */
-/**
  * Appends a section to a system prompt with proper separator handling.
  * This is the standard way plugins add content (e.g., tool lists, agent lists) to the system prompt.
  * @param {string} systemPrompt - The existing system prompt (may be empty or null).
@@ -298,6 +291,13 @@ export function appendSystemPromptSection(systemPrompt, section) {
     return (systemPrompt ? systemPrompt + '\n\n' : '') + section;
 }
 
+/**
+ * Coerces a value to the specified JSON Schema type.
+ * Used for type-safe parameter parsing in tool calls and API configurations.
+ * @param {*} value - The value to coerce.
+ * @param {string} type - The target type: 'integer', 'number', 'boolean', or 'string'.
+ * @returns {*} The coerced value, or `null` for empty numeric values.
+ */
 export function coerceValue(value, type) {
     if (value === '' || value === undefined || value === null) {
         return (type === 'integer' || type === 'number') ? null : value;
@@ -318,6 +318,11 @@ export function coerceValue(value, type) {
     }
 }
 
+/**
+ * Decodes common HTML entities in a string back to their character equivalents.
+ * @param {string} text - The text containing HTML entities to decode.
+ * @returns {string} The decoded text.
+ */
 export function decodeHTMLEntities(text) {
     const entityMap = {
         '&amp;': '&',

@@ -407,6 +407,7 @@ pluginManager.register({
             viewType: 'chat',
             addAtStart: true,
             listPane: {
+                manager: appInstance.chatManager,
                 dataManager: appInstance.chatManager.dataManager,
                 viewType: 'chat',
                 addNewButtonLabel: 'Add New Chat',

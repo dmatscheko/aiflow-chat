@@ -10,6 +10,7 @@
     --message-user-bg: #004a7c;
     --message-assistant-bg: #333;
     --message-tool-bg: #222;
+    --text-color-secondary: #999;
 }
 
 body {

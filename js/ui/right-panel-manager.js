@@ -18,6 +18,7 @@ import { DEFAULT_AGENT_ID } from '../constants.js';
 /**
  * Defines the configuration for a list pane to be displayed in a tab.
  * @typedef {object} ListPaneConfig
+ * @property {object} [manager] - The owning manager instance; receives a `listPane` property for API access.
  * @property {DataManager} dataManager - The manager for the data being displayed.
  * @property {string} viewType - The view type to activate when an item is selected.
  * @property {string} addNewButtonLabel - The text for the "Add New" button.
@@ -231,10 +232,9 @@ export class RightPanelManager {
 
         const listPaneAPI = { renderList, renderActions, updateActiveItem };
 
-        // Make the API accessible on the manager for the specific entity
-        const managerName = config.viewType.replace('-editor', '') + 'Manager';
-        if (this.app[managerName]) {
-             this.app[managerName].listPane = listPaneAPI;
+        // Make the API accessible on the owning manager if one was provided.
+        if (config.manager) {
+            config.manager.listPane = listPaneAPI;
         }
 
         return listPaneAPI;

@@ -667,6 +667,7 @@ pluginManager.register({
             label: 'Flows',
             viewType: 'flow-editor',
             listPane: {
+                manager: flowManager,
                 dataManager: flowManager.dataManager,
                 viewType: 'flow-editor',
                 addNewButtonLabel: 'Add New Flow',

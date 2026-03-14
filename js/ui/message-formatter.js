@@ -1,5 +1,6 @@
 /**
- * @fileoverview A collection of message formatter.
+ * @fileoverview Message formatting pipeline: Markdown rendering, syntax highlighting,
+ * SVG normalization, KaTeX math, and copy-to-clipboard badge injection.
  */
 
 'use strict';
@@ -20,8 +21,10 @@ const clipBadge = new ClipBadge({ autoRun: false });
 // --- Pre-Markdown Formatting ---
 
 /**
- * Normalizing SVG content before Markdown rendering.
- * It wraps raw SVG tags in ```svg code blocks and ensures data URIs are well-formed.
+ * Normalizes SVG content before Markdown rendering.
+ * Wraps raw SVG tags in fenced code blocks and ensures data URIs are well-formed.
+ * @param {string} html - The raw message content.
+ * @returns {string} The content with SVGs wrapped in code blocks.
  */
 function svgNormalization(html) {
     html = html.replace(/((?:```\w*?\s*?)|(?:<render_component[^>]*?>\s*?)|)(<svg[^>]*?>)([\s\S]*?)(<\/svg>(?:\s*?```|\s*?<\/render_component>|)|$)/gi,
@@ -128,16 +131,20 @@ function getMarkdownIt() {
 }
 
 /**
- * Rendering Markdown to HTML using the shared markdown-it instance.
- * It also applies syntax highlighting to code blocks using highlight.js, and renders math, using katex.
+ * Renders Markdown to HTML using the shared markdown-it instance.
+ * Applies syntax highlighting (highlight.js) and math rendering (KaTeX).
+ * @param {string} html - The Markdown content to render.
+ * @returns {string} The rendered HTML.
  */
 function markdown(html) {
     return getMarkdownIt().render(html);
 }
 
 /**
- * Adding copy-to-clipboard badges to various elements like
- * code blocks, tables, and the entire message.
+ * Adds copy-to-clipboard badges to code blocks, tables, and the full message.
+ * Tables are wrapped in a container and their content converted to CSV for copying.
+ * @param {HTMLElement} messageEl - The message's root DOM element.
+ * @param {Message} message - The message data object.
  */
 function addClipBadge(messageEl, message) {
     messageEl.classList.add('hljs-nobg', 'hljs-message');
@@ -167,6 +174,13 @@ function addClipBadge(messageEl, message) {
 }
 
 
+/**
+ * Renders a message's content through the full formatting pipeline (SVG normalization,
+ * Markdown, KaTeX) and returns a cached DOM element. Returns the cached element on
+ * subsequent calls unless `message.cache` has been cleared.
+ * @param {Message} message - The message to format.
+ * @returns {HTMLElement} The formatted content element.
+ */
 function formatMessageContent(message) {
     let messageEl;
     // Note: Caching needs invalidation (message.cache = null;) on each message modification

@@ -40,6 +40,29 @@ const API_PARAM_DEFS = [
  */
 export class ApiService {
     /**
+     * Applies an error to a message object, converting error-only messages to 'log' role
+     * so they display as informational text and are excluded from AI context.
+     * Messages with existing content get the error prepended instead.
+     * @param {object} message - The message object to update.
+     * @param {Error} error - The error to apply.
+     * @private
+     */
+    _applyErrorToMessage(message, error) {
+        if (error.name === 'AbortError') {
+            message.value.content += '\n\n[Aborted by user]';
+        } else {
+            const hasContent = message.value.content?.trim().length > 0;
+            if (hasContent) {
+                message.value.content = `<error>An error occurred: ${error.message}</error>\n\n` + message.value.content;
+            } else {
+                message.value.role = 'log';
+                message.value.content = `Error: ${error.message}`;
+            }
+        }
+        message.cache = null;
+    }
+
+    /**
      * Builds the standard HTTP headers for an API request.
      * @param {string} apiKey - The API key for Bearer authentication. May be empty/null.
      * @returns {Object<string, string>} The headers object.
@@ -239,22 +262,8 @@ export class ApiService {
             }
             pluginManager.trigger('onStreamingEnd', { message, notifyUpdate });
         } catch (error) {
-            if (error.name === 'AbortError') {
-                message.value.content += '\n\n[Aborted by user]';
-            } else {
-                // Convert error-only messages to 'log' role so they display as
-                // informational text between chat bubbles and are excluded from AI context.
-                const hasExistingContent = message.value.content && message.value.content.trim().length > 0;
-                if (hasExistingContent) {
-                    // Tool/assistant already has partial content — prepend the error.
-                    message.value.content = `<error>An error occurred: ${error.message}</error>\n\n` + message.value.content;
-                } else {
-                    message.value.role = 'log';
-                    message.value.content = `Error: ${error.message}`;
-                }
-            }
-            message.cache = null;
-            notifyUpdate(); // Notify one last time for error/abort messages
+            this._applyErrorToMessage(message, error);
+            notifyUpdate();
         }
     }
 
@@ -293,14 +302,11 @@ export class ApiService {
             );
 
         } catch (error) {
+            // Only apply non-abort errors here. Abort errors from streaming are
+            // already handled inside streamAndProcessResponse; this catch guards
+            // against failures in config/prompt construction.
             if (error.name !== 'AbortError') {
-                const hasExistingContent = messageToUpdate.value.content && messageToUpdate.value.content.trim().length > 0;
-                if (hasExistingContent) {
-                    messageToUpdate.value.content = `<error>An error occurred: ${error.message}</error>\n\n` + messageToUpdate.value.content;
-                } else {
-                    messageToUpdate.value.role = 'log';
-                    messageToUpdate.value.content = `Error: ${error.message}`;
-                }
+                this._applyErrorToMessage(messageToUpdate, error);
             }
             chat.log.notify();
         } finally {

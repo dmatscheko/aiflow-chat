@@ -285,35 +285,51 @@ export class ChatLog {
     }
 
     /**
+     * Checks whether a message is pending (awaiting a response from the API).
+     * A pending message has a role of 'assistant' or 'tool' and `null` content.
+     * @param {Message} message - The message to check.
+     * @returns {boolean} True if the message is pending.
+     * @private
+     */
+    _isPending(message) {
+        return (message.value.role === 'assistant' || message.value.role === 'tool') && message.value.content === null;
+    }
+
+    /**
+     * Performs a depth-first traversal of the entire message tree, calling a visitor
+     * function for each message. If the visitor returns `true`, the traversal stops
+     * early and `_walkTree` returns `true`.
+     * @param {(message: Message) => boolean|void} visitor - Called for each message. Return `true` to stop.
+     * @returns {boolean} `true` if the visitor stopped the traversal early, `false` otherwise.
+     * @private
+     */
+    _walkTree(visitor) {
+        if (!this.rootAlternatives) return false;
+        const walk = (alternatives) => {
+            for (const message of alternatives.messages) {
+                if (visitor(message)) return true;
+                if (message.answerAlternatives && walk(message.answerAlternatives)) return true;
+            }
+            return false;
+        };
+        return walk(this.rootAlternatives);
+    }
+
+    /**
      * Finds the first pending message anywhere in the entire message tree.
      * A pending message is defined as one with a role of 'assistant' or 'tool' and `null` content.
      * It performs a depth-first search through all branches.
      * @returns {Message | null} The first pending `Message` found, or `null` if there are none.
      */
     findNextPendingMessage() {
-        if (!this.rootAlternatives) {
-            return null;
-        }
-
-        // Helper function to perform a depth-first search.
-        const findInAlternatives = (alternatives) => {
-            for (const message of alternatives.messages) {
-                // Check the current message
-                if ((message.value.role === 'assistant' || message.value.role === 'tool') && message.value.content === null) {
-                    return message;
-                }
-                // Recurse into the answers of the current message
-                if (message.answerAlternatives) {
-                    const found = findInAlternatives(message.answerAlternatives);
-                    if (found) {
-                        return found;
-                    }
-                }
+        let found = null;
+        this._walkTree(message => {
+            if (this._isPending(message)) {
+                found = message;
+                return true;
             }
-            return null;
-        };
-
-        return findInAlternatives(this.rootAlternatives);
+        });
+        return found;
     }
 
     /**
@@ -323,20 +339,13 @@ export class ChatLog {
      * by a future `processLoop` invocation.
      */
     removePendingMessages() {
-        if (!this.rootAlternatives) return;
-        const clearInAlternatives = (alternatives) => {
-            for (const message of alternatives.messages) {
-                if ((message.value.role === 'assistant' || message.value.role === 'tool') && message.value.content === null) {
-                    message.value.role = 'log';
-                    message.value.content = '[Stopped]';
-                    message.cache = null;
-                }
-                if (message.answerAlternatives) {
-                    clearInAlternatives(message.answerAlternatives);
-                }
+        this._walkTree(message => {
+            if (this._isPending(message)) {
+                message.value.role = 'log';
+                message.value.content = '[Stopped]';
+                message.cache = null;
             }
-        };
-        clearInAlternatives(this.rootAlternatives);
+        });
         this.notify();
     }
 

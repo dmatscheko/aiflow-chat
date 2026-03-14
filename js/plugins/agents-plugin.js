@@ -637,6 +637,7 @@ pluginManager.register({
             label: 'Agents',
             viewType: 'agent-editor',
             listPane: {
+                manager: agentManager,
                 dataManager: agentManager.dataManager,
                 viewType: 'agent-editor',
                 addNewButtonLabel: 'Add New Agent',
