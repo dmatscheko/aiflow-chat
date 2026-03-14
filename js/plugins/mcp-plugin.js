@@ -10,6 +10,7 @@
 
 import { pluginManager } from '../plugin-manager.js';
 import { processToolCalls as genericProcessToolCalls } from '../tool-processor.js';
+import { appendSystemPromptSection } from '../utils.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -424,6 +425,45 @@ const mcpPluginDefinition = {
             getTools: mcpPluginSingleton.getTools.bind(mcpPluginSingleton),
             rpc: mcpPluginSingleton.mcpJsonRpc.bind(mcpPluginSingleton),
             executeCall: mcpPluginSingleton.executeMcpCall.bind(mcpPluginSingleton),
+            /**
+             * Processes MCP tool calls in a message. Encapsulates the common pattern of:
+             * get effective config → get mcpUrl → get tools → filter → execute → create response.
+             * @param {Message} message - The message containing tool calls.
+             * @param {Chat} activeChat - The active chat instance.
+             * @param {object} [options] - Additional options.
+             * @param {function} [options.filter] - Extra filter applied in addition to the default agent-call exclusion.
+             * @param {boolean} [options.createPendingMessage=true] - Whether to queue the next assistant turn.
+             * @returns {Promise<boolean>} `true` if tool calls were processed.
+             */
+            processMessageToolCalls: async (message, activeChat, options = {}) => {
+                const { filter, createPendingMessage = true } = options;
+                const agentId = message.agent || null;
+                const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
+                const mcpUrl = effectiveConfig.toolSettings?.mcpServer;
+                if (!mcpUrl) return false;
+
+                const tools = await mcpPluginSingleton.getTools(mcpUrl);
+                if (!tools || tools.length === 0) return false;
+
+                const chatId = activeChat?.id || 'default';
+                return await genericProcessToolCalls(
+                    app,
+                    activeChat,
+                    message,
+                    tools,
+                    (call) => {
+                        if (call.name.startsWith('agent-')) return false;
+                        return filter ? filter(call) : true;
+                    },
+                    (call, msg) => {
+                        if (call.name.startsWith('stack_')) {
+                            call = { ...call, params: { ...call.params, __hidden_stack_id: chatId } };
+                        }
+                        return mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl);
+                    },
+                    { createPendingMessage }
+                );
+            },
         };
     },
 
@@ -448,10 +488,7 @@ const mcpPluginDefinition = {
 
         const dynamicToolsSection = mcpPluginSingleton.generateToolsSection(agent, tools);
         if (dynamicToolsSection) {
-            if (systemPrompt) {
-                systemPrompt += '\n\n';
-            }
-            systemPrompt += toolsHeader + dynamicToolsSection;
+            systemPrompt = appendSystemPromptSection(systemPrompt, toolsHeader + dynamicToolsSection);
         }
         return systemPrompt;
     },
@@ -470,30 +507,7 @@ const mcpPluginDefinition = {
             return false;
         }
 
-        const app = mcpPluginSingleton.getApp();
-        const agentId = message.agent || null;
-        const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
-        const mcpUrl = effectiveConfig.toolSettings.mcpServer;
-        if (!mcpUrl) return false;
-
-        const tools = await mcpPluginSingleton.getTools(mcpUrl);
-        if (!tools || tools.length === 0) return false;
-
-        const chatId = activeChat?.id || 'default';
-        return await genericProcessToolCalls(
-            app,
-            activeChat,
-            message,
-            tools,
-            (call) => !call.name.startsWith('agent-'), // Don't handle agent-as-tool calls here. call.name is extracted from the name="..." attribute in <dma:tool_call name="agent-598356234">
-            (call, msg) => {
-                // Always inject __hidden_stack_id for stack tools so each chat has its own stack.
-                if (call.name.startsWith('stack_')) {
-                    call = { ...call, params: { ...call.params, __hidden_stack_id: chatId } };
-                }
-                return mcpPluginSingleton.executeMcpCall(call, msg, mcpUrl); // Executor function.
-            }
-        );
+        return await mcpPluginSingleton.getApp().mcp.processMessageToolCalls(message, activeChat);
     }
 };
 

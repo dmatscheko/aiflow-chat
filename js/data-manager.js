@@ -19,7 +19,7 @@ export class DataManager {
      * @constructor
      * @param {string} storageKey The key to use for storing data in localStorage.
      * @param {string} entityName The singular name of the entity being managed (e.g., 'chat', 'agent'), used for generating unique IDs.
-     * @param {Function|null} [onDataLoaded=null] An optional callback function to process the raw data after it's loaded from localStorage. This is useful for reconstructing class instances from plain objects.
+     * @param {Function|null} [onDataLoaded=null] An optional deserializer callback to transform raw JSON arrays loaded from localStorage into typed instances (e.g., reconstructing ChatLog objects from plain objects).
      */
     constructor(storageKey, entityName, onDataLoaded = null) {
         this.storageKey = storageKey;

@@ -10,6 +10,8 @@
 
 'use strict';
 
+import { coerceValue } from './utils.js';
+
 /**
  * @typedef {import('./chat-data.js').Message} Message
  * @typedef {import('./main.js').App} App
@@ -90,17 +92,7 @@ function parseToolCalls(content, tools = []) {
 
                 if (toolDef && toolDef.inputSchema?.properties?.[paramName]) {
                     const prop = toolDef.inputSchema.properties[paramName];
-                    if (value === '' && (prop.type === 'integer' || prop.type === 'number')) {
-                        value = null;
-                    } else if (prop.type === 'integer') {
-                        const parsed = parseInt(value, 10);
-                        value = isNaN(parsed) ? null : parsed;
-                    } else if (prop.type === 'number') {
-                        const parsed = parseFloat(value);
-                        value = isNaN(parsed) ? null : parsed;
-                    } else if (prop.type === 'boolean') {
-                        value = value.toLowerCase() === 'true';
-                    }
+                    value = coerceValue(value, prop.type);
                 }
                 params[paramName] = value;
             }

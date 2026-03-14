@@ -13,6 +13,7 @@ import { SettingsManager } from './settings-manager.js';
 import { responseProcessor } from './response-processor.js';
 import { RightPanelManager } from './ui/right-panel-manager.js';
 import { TopPanelManager } from './ui/top-panel-manager.js';
+import { STORAGE_KEYS } from './constants.js';
 
 // --- Plugin Loading ---
 // The application's functionality is extended through plugins. Each imported plugin
@@ -181,7 +182,7 @@ class App {
 
         if (type === 'chat' && this.chatManager) {
             this.chatManager.activeChatId = id;
-            localStorage.setItem('core_active_chat_id', this.chatManager.activeChatId);
+            localStorage.setItem(STORAGE_KEYS.ACTIVE_CHAT_ID, this.chatManager.activeChatId);
             this.chatManager.updateActiveChatInList();
         }
         await this.renderMainView();
@@ -286,7 +287,7 @@ class App {
      */
     _loadLastActiveIds() {
         try {
-            const ids = localStorage.getItem('core_last_active_ids');
+            const ids = localStorage.getItem(STORAGE_KEYS.LAST_ACTIVE_IDS);
             this.lastActiveIds = ids ? JSON.parse(ids) : {};
         } catch (e) {
             console.error('Failed to load last active IDs:', e);
@@ -299,7 +300,7 @@ class App {
      * @private
      */
     _saveLastActiveIds() {
-        localStorage.setItem('core_last_active_ids', JSON.stringify(this.lastActiveIds));
+        localStorage.setItem(STORAGE_KEYS.LAST_ACTIVE_IDS, JSON.stringify(this.lastActiveIds));
     }
 }
 

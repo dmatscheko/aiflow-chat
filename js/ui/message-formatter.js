@@ -46,11 +46,20 @@ function svgNormalization(html) {
 // --- Core Markdown and HTML Formatting ---
 
 /**
- * Rendering Markdown to HTML using markdown-it.
- * It also applies syntax highlighting to code blocks using highlight.js, and renders math, using katex.
+ * Lazily initialized, reusable markdown-it instance.
+ * The instance is stateless between renders, so it can safely be shared.
+ * @type {object | null}
  */
-function markdown(html) {
-    const md = window.markdownit({
+let mdInstance = null;
+
+/**
+ * Returns the shared markdown-it instance, creating it on first call.
+ * @returns {object} The configured markdown-it instance.
+ */
+function getMarkdownIt() {
+    if (mdInstance) return mdInstance;
+
+    mdInstance = window.markdownit({
         html: false,             // TODO: If possible set html to false to avoid XSS. At the moment, this breaks <br> in tables.
         breaks: true,
         linkify: true,
@@ -70,27 +79,20 @@ function markdown(html) {
             return `<pre class="hljs language-${language}" data-plaintext="${encodeURIComponent(code.trim())}"><code>${value}</code></pre>`;
         }
     });
-    md.use(math_plugin, {
+    mdInstance.use(math_plugin, {
         throwOnError: false,
         errorColor: "#cc0000",
         delimiters: [
             { left: '$$', right: '$$', display: true },
             { left: '$', right: '$', display: false },
-            // { left: '\\(', right: '\\)', display: false },
-            // { left: '\\[', right: '\\]', display: true },
             { left: '\\begin{equation}', right: '\\end{equation}', display: true },
-            // { left: '\\begin{align}', right: '\\end{align}', display: true },
-            // { left: '\\begin{alignat}', right: '\\end{alignat}', display: true },
-            // { left: '\\begin{gather}', right: '\\end{gather}', display: true },
-            // { left: '\\begin{CD}', right: '\\end{CD}', display: true }
         ],
         ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'option', 'table', 'svg', 'dma:tool_call', 'dma:tool_response', 'details'],
-        throwOnError: false,
         preProcess: math => {
             return decodeHTMLEntities(math);
         }
     });
-    md.use(details_wrapper_plugin, {
+    mdInstance.use(details_wrapper_plugin, {
         tags: [
             {
                 tag: "dma:tool_call",
@@ -121,9 +123,16 @@ function markdown(html) {
             },
         ],
     });
-    md.validateLink = link => !['javascript:', 'dma:'].some(prefix => link.startsWith(prefix));
-    html = md.render(html);
-    return html;
+    mdInstance.validateLink = link => !['javascript:', 'dma:'].some(prefix => link.startsWith(prefix));
+    return mdInstance;
+}
+
+/**
+ * Rendering Markdown to HTML using the shared markdown-it instance.
+ * It also applies syntax highlighting to code blocks using highlight.js, and renders math, using katex.
+ */
+function markdown(html) {
+    return getMarkdownIt().render(html);
 }
 
 /**

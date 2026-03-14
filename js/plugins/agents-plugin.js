@@ -12,6 +12,7 @@ import { pluginManager } from '../plugin-manager.js';
 import { debounce, importJson, exportJson } from '../utils.js';
 import { createSettingsUI, setPropertyByPath } from '../settings-manager.js';
 import { DataManager } from '../data-manager.js';
+import { STORAGE_KEYS, DEFAULT_AGENT_ID } from '../constants.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -67,11 +68,7 @@ import { DataManager } from '../data-manager.js';
  * @property {object} agentCallSettings - The agent's custom settings for calling other agents.
  */
 
-/**
- * The unique identifier for the mandatory Default Agent.
- * @const {string}
- */
-const DEFAULT_AGENT_ID = 'agent-default';
+// DEFAULT_AGENT_ID is imported from constants.js
 
 /**
  * The singleton instance of the AgentManager, initialized by the plugin.
@@ -92,7 +89,7 @@ class AgentManager {
     constructor(app) {
         this.app = app;
         this.listPane = null;
-        this.dataManager = new DataManager('core_agents', 'agent');
+        this.dataManager = new DataManager(STORAGE_KEYS.AGENTS, 'agent');
         this.agents = this.dataManager.getAll();
         this.modelCache = new Map();
         this.debouncedSave = debounce(() => this.dataManager.save(), 500);

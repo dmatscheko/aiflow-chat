@@ -11,6 +11,7 @@ import { pluginManager } from '../plugin-manager.js';
 import { debounce, importJson, exportJson, generateUniqueName } from '../utils.js';
 import { registerFlowStepDefinitions } from './flows-plugin-step-definitions.js';
 import { DataManager } from '../data-manager.js';
+import { STORAGE_KEYS } from '../constants.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -84,7 +85,7 @@ export class FlowManager {
     constructor(app) {
         this.app = app;
         this.listPane = null;
-        this.dataManager = new DataManager('core_flows', 'flow');
+        this.dataManager = new DataManager(STORAGE_KEYS.FLOWS, 'flow');
         this.flows = this.dataManager.getAll();
         this.stepTypes = {};
         this.activeFlowRunner = null;

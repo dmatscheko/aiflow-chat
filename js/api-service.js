@@ -9,6 +9,23 @@
 'use strict';
 
 import { pluginManager } from './plugin-manager.js';
+import { coerceValue } from './utils.js';
+
+/**
+ * Defines the mapping between API parameter keys and their expected types.
+ * Used to build the defaults object from agent configuration in a data-driven way.
+ * @const {Array<{key: string, type: string}>}
+ */
+const API_PARAM_DEFS = [
+    { key: 'temperature', type: 'number' },
+    { key: 'top_p', type: 'number' },
+    { key: 'top_k', type: 'integer' },
+    { key: 'max_tokens', type: 'integer' },
+    { key: 'presence_penalty', type: 'number' },
+    { key: 'frequency_penalty', type: 'number' },
+    { key: 'repeat_penalty', type: 'number' },
+    { key: 'seed', type: 'integer' },
+];
 
 /**
  * Represents a single AI model available from the API.
@@ -130,16 +147,15 @@ export class ApiService {
             const defaults = {
                 stream: config.use_stream && config.stream !== undefined ? config.stream : true,
                 model: config.use_model && config.model ? config.model : undefined,
-                temperature: config.use_temperature && config.temperature !== undefined ? parseFloat(config.temperature) : undefined,
-                top_p: config.use_top_p && config.top_p !== undefined ? parseFloat(config.top_p) : undefined,
-                top_k: config.use_top_k && config.top_k !== undefined ? parseInt(config.top_k, 10) : undefined,
-                max_tokens: config.use_max_tokens && config.max_tokens !== undefined ? parseInt(config.max_tokens, 10) : undefined,
                 stop: config.use_stop && config.stop ? config.stop.split(',').map(s => s.trim()) : undefined,
-                presence_penalty: config.use_presence_penalty && config.presence_penalty !== undefined ? parseFloat(config.presence_penalty) : undefined,
-                frequency_penalty: config.use_frequency_penalty && config.frequency_penalty !== undefined ? parseFloat(config.frequency_penalty) : undefined,
-                repeat_penalty: config.use_repeat_penalty && config.repeat_penalty !== undefined ? parseFloat(config.repeat_penalty) : undefined,
-                seed: config.use_seed && config.seed !== undefined ? parseInt(config.seed, 10) : undefined,
             };
+
+            // Build numeric/typed parameters from the data-driven definitions.
+            for (const { key, type } of API_PARAM_DEFS) {
+                if (config[`use_${key}`] && config[key] !== undefined) {
+                    defaults[key] = coerceValue(config[key], type);
+                }
+            }
 
             const noApiUrlError = new Error("Invalid API URL. Set a valid API URL in the Default Agent Settings.");
             if (!config.apiUrl) {

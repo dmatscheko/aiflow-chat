@@ -279,6 +279,45 @@ export function generateUniqueName(baseName, existingNames) {
 }
 
 
+/**
+ * Coerces a value to the specified JSON Schema type.
+ * Used for type-safe parameter parsing in tool calls and API configurations.
+ * @param {*} value - The value to coerce.
+ * @param {string} type - The target type: 'integer', 'number', 'boolean', or 'string'.
+ * @returns {*} The coerced value, or `null` for empty numeric values.
+ */
+/**
+ * Appends a section to a system prompt with proper separator handling.
+ * This is the standard way plugins add content (e.g., tool lists, agent lists) to the system prompt.
+ * @param {string} systemPrompt - The existing system prompt (may be empty or null).
+ * @param {string} section - The section to append.
+ * @returns {string} The combined system prompt.
+ */
+export function appendSystemPromptSection(systemPrompt, section) {
+    if (!section) return systemPrompt;
+    return (systemPrompt ? systemPrompt + '\n\n' : '') + section;
+}
+
+export function coerceValue(value, type) {
+    if (value === '' || value === undefined || value === null) {
+        return (type === 'integer' || type === 'number') ? null : value;
+    }
+    switch (type) {
+        case 'integer': {
+            const parsed = parseInt(value, 10);
+            return isNaN(parsed) ? null : parsed;
+        }
+        case 'number': {
+            const parsed = parseFloat(value);
+            return isNaN(parsed) ? null : parsed;
+        }
+        case 'boolean':
+            return typeof value === 'boolean' ? value : String(value).toLowerCase() === 'true';
+        default:
+            return value;
+    }
+}
+
 export function decodeHTMLEntities(text) {
     const entityMap = {
         '&amp;': '&',
@@ -290,7 +329,8 @@ export function decodeHTMLEntities(text) {
         '&lt;': '<',
         '&gt;': '>',
         '&nbsp;': ' ',
-        '&quot;': '"'
+        '&quot;': '"',
+        '&#34;': '"'
     };
 
     return text.replace(/&[#\w]+;/g, match => entityMap[match] || match);

@@ -8,6 +8,7 @@
 
 import { createButton } from './ui-elements.js';
 import { DataManager } from '../data-manager.js';
+import { DEFAULT_AGENT_ID } from '../constants.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -151,7 +152,7 @@ export class RightPanelManager {
                 li.className = 'list-item';
                 li.dataset.id = item.id;
 
-                const deleteButtonHtml = (config.onDelete && item.id !== 'agent-default')
+                const deleteButtonHtml = (config.onDelete && item.id !== DEFAULT_AGENT_ID)
                     ? '<button class="delete-button">&times;</button>'
                     : '';
 

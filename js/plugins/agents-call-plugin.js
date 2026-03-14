@@ -8,7 +8,9 @@
 'use strict';
 
 import { pluginManager } from '../plugin-manager.js';
-import { parseToolCalls, processToolCalls } from '../tool-processor.js';
+import { parseToolCalls } from '../tool-processor.js';
+import { DEFAULT_AGENT_ID } from '../constants.js';
+import { appendSystemPromptSection } from '../utils.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -94,12 +96,7 @@ class AgentsCallPlugin {
             return `${idx + 1}. **${a.name} (ID: ${a.id})**\n - **Description**: ${desc}\n - **Action** (dma:tool_call name): \`${a.id}\`\n - **Arguments** (parameter name): prompt, full_context`;
         }).join('\n\n');
 
-        if (systemPrompt) {
-            systemPrompt += '\n\n';
-        }
-        systemPrompt += agentCallsHeader + agentsSection;
-
-        return systemPrompt;
+        return appendSystemPromptSection(systemPrompt, agentCallsHeader + agentsSection);
     }
 
     /**
@@ -145,7 +142,7 @@ class AgentsCallPlugin {
         // Push calling agent onto the stack ONCE for all calls in this message.
         // The processLoop will pop this entry to resume the calling agent after
         // all sub-agent work (including any MCP tool usage by sub-agents) is complete.
-        const callingAgentId = message.agent || 'agent-default';
+        const callingAgentId = message.agent || DEFAULT_AGENT_ID;
         this.app.responseProcessor.agentCallStack.push({
             agentId: callingAgentId,
             depth: message.depth,
@@ -178,29 +175,12 @@ class AgentsCallPlugin {
      * @private
      */
     async _processNonAgentToolCalls(message, activeChat, allAgentIds) {
-        const agentId = message.agent || null;
-        const effectiveConfig = this.app.agentManager.getEffectiveApiConfig(agentId);
-        const mcpUrl = effectiveConfig.toolSettings?.mcpServer;
-        if (!mcpUrl || !this.app.mcp) return;
+        if (!this.app.mcp) return;
 
-        const tools = await this.app.mcp.getTools(mcpUrl);
-        if (!tools || tools.length === 0) return;
-
-        const chatId = activeChat?.id || 'default';
-        await processToolCalls(
-            this.app,
-            activeChat,
-            message,
-            tools,
-            (call) => !allAgentIds.has(call.name) && !call.name.startsWith('agent-'),
-            (call, msg) => {
-                if (call.name.startsWith('stack_')) {
-                    call = { ...call, params: { ...call.params, __hidden_stack_id: chatId } };
-                }
-                return this.app.mcp.executeCall(call, msg, mcpUrl);
-            },
-            { createPendingMessage: false }
-        );
+        await this.app.mcp.processMessageToolCalls(message, activeChat, {
+            filter: (call) => !allAgentIds.has(call.name),
+            createPendingMessage: false,
+        });
     }
 
     /**
@@ -222,7 +202,7 @@ class AgentsCallPlugin {
     async _handleAgentCall(call, message, activeChat) {
         const app = this.app;
         const agentManager = app.agentManager;
-        const callingAgentId = message.agent || 'agent-default';
+        const callingAgentId = message.agent || DEFAULT_AGENT_ID;
         const callingAgent = agentManager.getAgent(callingAgentId);
         const targetAgent = agentManager.getAgent(call.name);
 

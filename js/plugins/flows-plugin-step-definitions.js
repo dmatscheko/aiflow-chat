@@ -126,7 +126,7 @@ function _getTurns(chatLog) {
  * @param {HTMLElement} target - The input element that triggered the update.
  */
 const _defaultOnUpdate = (step, target) => {
-    step.data[target.dataset.key] = target.value;
+    step.data[target.dataset.key] = target.type === 'checkbox' ? target.checked : target.value;
 };
 
 /**
@@ -282,20 +282,23 @@ export function registerFlowStepDefinitions(flowManager) {
             <option value="">Default (Active Agent)</option>${agentOptions}
         </select>`;
 
+    const getTextarea = (step, key, label, rows = 2) =>
+        `<label>${label}:</label><textarea class="flow-step-input" rows="${rows}" data-id="${step.id}" data-key="${key}">${step.data[key] || ''}</textarea>`;
+
+    const getCheckbox = (step, key, label) =>
+        `<label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-input" data-id="${step.id}" data-key="${key}" ${step.data[key] ? 'checked' : ''}> ${label}</label>`;
+
     // --- Reusable UI and Logic for History Clearing ---
 
     const getClearHistoryUI = (step) => `
         <div class="clear-history-options">
             <label>From turn #:</label>
-            <input type="number" class="flow-step-clear-from flow-step-input" data-id="${step.id}" data-key="clearFrom" value="${step.data.clearFrom || 1}" min="1">
+            <input type="number" class="flow-step-input" data-id="${step.id}" data-key="clearFrom" value="${step.data.clearFrom || 1}" min="1">
             <div class="clear-history-to-container" style="${step.data.clearToBeginning ? 'display: none;' : ''}">
                 <label>To turn #:</label>
-                <input type="number" class="flow-step-clear-to flow-step-input" data-id="${step.id}" data-key="clearTo" value="${step.data.clearTo || 1}" min="1">
+                <input type="number" class="flow-step-input" data-id="${step.id}" data-key="clearTo" value="${step.data.clearTo || 1}" min="1">
             </div>
-            <label class="flow-step-checkbox-label">
-                <input type="checkbox" class="flow-step-clear-beginning flow-step-input" data-id="${step.id}" data-key="clearToBeginning" ${step.data.clearToBeginning ? 'checked' : ''}>
-                Clear to beginning
-            </label>
+            ${getCheckbox(step, 'clearToBeginning', 'Clear to beginning')}
             <small>(1 is the last turn)</small>
         </div>`;
 
@@ -350,7 +353,7 @@ export function registerFlowStepDefinitions(flowManager) {
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>',
         getDefaults: () => ({ prompt: 'Hello, world!', agentId: '' }),
         render: function(step, agentOptions) {
-            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea></div>`;
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}${getTextarea(step, 'prompt', 'Prompt', 3)}</div>`;
         },
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
@@ -367,7 +370,7 @@ export function registerFlowStepDefinitions(flowManager) {
         icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M14 10H6" /><path d="M14 6H6" /></svg>',
         getDefaults: () => ({ prompt: '', count: 2, agentId: '' }),
         render: function(step, agentOptions) {
-            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}<label>Prompt:</label><textarea class="flow-step-prompt flow-step-input" rows="3" data-id="${step.id}" data-key="prompt">${step.data.prompt || ''}</textarea><label>Number of alternatives:</label><input type="number" class="flow-step-count flow-step-input" data-id="${step.id}" data-key="count" value="${step.data.count || 1}" min="1" max="10"></div>`;
+            return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">${getAgentsDropdown(step, agentOptions)}${getTextarea(step, 'prompt', 'Prompt', 3)}<label>Number of alternatives:</label><input type="number" class="flow-step-count flow-step-input" data-id="${step.id}" data-key="count" value="${step.data.count || 1}" min="1" max="10"></div>`;
         },
         onUpdate: (step, target) => { step.data[target.dataset.key] = target.dataset.key === 'count' ? parseInt(target.value, 10) : target.value; },
         execute: (step, context) => {
@@ -418,33 +421,21 @@ export function registerFlowStepDefinitions(flowManager) {
             return `<h4>${this.icon} ${this.label}</h4>
             <div class="flow-step-content">
                 ${getAgentsDropdown(step, agentOptions)}
-                <label>Text before alternatives:</label>
-                <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea>
-                <label>Text after alternatives:</label>
-                <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea>
-                <label class="flow-step-checkbox-label">
-                    <input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}>
-                    Only include each last AI answer
-                </label>
+                ${getTextarea(step, 'prePrompt', 'Text before alternatives')}
+                ${getTextarea(step, 'postPrompt', 'Text after alternatives')}
+                ${getCheckbox(step, 'onlyLastAnswer', 'Only include each last AI answer')}
                 <hr class="divider">
-                <label class="flow-step-checkbox-label">
-                    <input type="checkbox" class="flow-step-clear-history-toggle flow-step-input" data-id="${step.id}" data-key="clearHistory" ${step.data.clearHistory ? 'checked' : ''}>
-                    Clear history before consolidating
-                </label>
+                ${getCheckbox(step, 'clearHistory', 'Clear history before consolidating')}
                 <div class="consolidator-clear-history-container" style="${step.data.clearHistory ? '' : 'display: none;'}">
                     ${getClearHistoryUI(step)}
                 </div>
             </div>`;
         },
         onUpdate: (step, target, renderAndConnect) => {
+            _defaultOnUpdate(step, target);
             const key = target.dataset.key;
-            const isCheckbox = target.type === 'checkbox';
-            const value = isCheckbox ? target.checked : target.value;
-
-            step.data[key] = value;
-
             if (key === 'clearHistory') {
-                renderAndConnect(); // Re-render to show/hide the history options
+                renderAndConnect();
             } else if (key.startsWith('clear')) {
                 handleClearHistoryUpdate(step, target, renderAndConnect);
             }
@@ -493,29 +484,24 @@ export function registerFlowStepDefinitions(flowManager) {
         render: function(step, agentOptions) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">
                 ${getAgentsDropdown(step, agentOptions)}
-                <label>Text before AI answer:</label>
-                <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea>
-                <label>Text after AI answer:</label>
-                <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea>
-                <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}> Only include last AI answer</label>
+                ${getTextarea(step, 'prePrompt', 'Text before AI answer')}
+                ${getTextarea(step, 'postPrompt', 'Text after AI answer')}
+                ${getCheckbox(step, 'onlyLastAnswer', 'Only include last AI answer')}
                 <hr class="divider">
                 <label>Before sending the message:</label>
-                <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-ai flow-step-input" data-id="${step.id}" data-key="deleteAIAnswer" ${step.data.deleteAIAnswer ? 'checked' : ''}> Delete original AI answer</label>
-                <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-delete-user flow-step-input" data-id="${step.id}" data-key="deleteUserMessage" ${step.data.deleteUserMessage ? 'checked' : ''}> Delete original user message</label>
+                ${getCheckbox(step, 'deleteAIAnswer', 'Delete original AI answer')}
+                ${getCheckbox(step, 'deleteUserMessage', 'Delete original user message')}
             </div>`;
         },
         onUpdate: (step, target, renderAndConnect) => {
+            _defaultOnUpdate(step, target);
             const key = target.dataset.key;
-            const value = target.type === 'checkbox' ? target.checked : target.value;
-            step.data[key] = value;
-
             // If 'deleteUserMessage' is checked, 'deleteAIAnswer' must also be checked.
-            if (key === 'deleteUserMessage' && value) {
+            if (key === 'deleteUserMessage' && step.data.deleteUserMessage) {
                 step.data.deleteAIAnswer = true;
-                // We need to re-render to update the checkbox state visually
                 renderAndConnect();
             }
-            if (key === 'deleteAIAnswer' && !value && step.data.deleteUserMessage) {
+            if (key === 'deleteAIAnswer' && !step.data.deleteAIAnswer && step.data.deleteUserMessage) {
                 step.data.deleteUserMessage = false;
                 renderAndConnect();
             }
@@ -558,8 +544,7 @@ export function registerFlowStepDefinitions(flowManager) {
         render: function(step) {
             return `<h4>${this.icon} ${this.label}</h4>
             <div class="flow-step-content">
-                <label>Message (leave empty for NOP):</label>
-                <textarea class="flow-step-input" rows="2" data-id="${step.id}" data-key="message">${step.data.message || ''}</textarea>
+                ${getTextarea(step, 'message', 'Message (leave empty for NOP)')}
             </div>`;
         },
         onUpdate: _defaultOnUpdate,
@@ -706,27 +691,20 @@ export function registerFlowStepDefinitions(flowManager) {
         render: function(step, agentOptions) {
             return `<h4>${this.icon} ${this.label}</h4><div class="flow-step-content">
                 ${getAgentsDropdown(step, agentOptions)}
-                <label>Text before AI answer (optional):</label>
-                <textarea class="flow-step-pre-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="prePrompt">${step.data.prePrompt || ''}</textarea>
-                <label>Text after AI answer (optional):</label>
-                <textarea class="flow-step-post-prompt flow-step-input" rows="2" data-id="${step.id}" data-key="postPrompt">${step.data.postPrompt || ''}</textarea>
-                <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-include-last-answer flow-step-input" data-id="${step.id}" data-key="includeLastAnswer" ${step.data.includeLastAnswer ? 'checked' : ''}> Include AI answer in prompt</label>
+                ${getTextarea(step, 'prePrompt', 'Text before AI answer (optional)')}
+                ${getTextarea(step, 'postPrompt', 'Text after AI answer (optional)')}
+                ${getCheckbox(step, 'includeLastAnswer', 'Include AI answer in prompt')}
                 <div class="agent-call-answer-options" style="${!step.data.includeLastAnswer ? 'display: none;' : ''}">
-                    <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-only-last-answer flow-step-input" data-id="${step.id}" data-key="onlyLastAnswer" ${step.data.onlyLastAnswer ? 'checked' : ''}> Only include last AI answer</label>
+                    ${getCheckbox(step, 'onlyLastAnswer', 'Only include last AI answer')}
                 </div>
                 <div class="agent-call-context-options" style="${step.data.includeLastAnswer ? 'display: none;' : ''}">
-                    <label class="flow-step-checkbox-label"><input type="checkbox" class="flow-step-full-context flow-step-input" data-id="${step.id}" data-key="fullContext" ${step.data.fullContext ? 'checked' : ''}> Prepend full conversation context</label>
+                    ${getCheckbox(step, 'fullContext', 'Prepend full conversation context')}
                 </div>
             </div>`;
         },
         onUpdate: (step, target, renderAndConnect) => {
-            const key = target.dataset.key;
-            const value = target.type === 'checkbox' ? target.checked : target.value;
-            step.data[key] = value;
-
-            if (key === 'includeLastAnswer') {
-                renderAndConnect();
-            }
+            _defaultOnUpdate(step, target);
+            if (target.dataset.key === 'includeLastAnswer') renderAndConnect();
         },
         execute: (step, context) => {
             const chat = context.app.chatManager.getActiveChat();
@@ -823,27 +801,17 @@ export function registerFlowStepDefinitions(flowManager) {
 
                 <hr class="divider">
 
-                <label class="flow-step-checkbox-label">
-                    <input type="checkbox" class="flow-step-input mcp-create-prompt" data-key="createPrompt" ${step.data.createPrompt ? 'checked' : ''}>
-                    Create new prompt from call result
-                </label>
+                ${getCheckbox(step, 'createPrompt', 'Create new prompt from call result')}
 
                 <div class="mcp-prompt-options" style="${step.data.createPrompt ? '' : 'display: none;'}">
-                    <label>Text before result:</label>
-                    <textarea class="flow-step-input" data-key="prePrompt" rows="2">${step.data.prePrompt || ''}</textarea>
-                    <label>Text after result:</label>
-                    <textarea class="flow-step-input" data-key="postPrompt" rows="2">${step.data.postPrompt || ''}</textarea>
+                    ${getTextarea(step, 'prePrompt', 'Text before result')}
+                    ${getTextarea(step, 'postPrompt', 'Text after result')}
                 </div>
             </div>`;
         },
         onUpdate: (step, target, renderAndConnect) => {
-            const key = target.dataset.key;
-            const value = target.type === 'checkbox' ? target.checked : target.value;
-            step.data[key] = value;
-
-            if (key === 'createPrompt') {
-                renderAndConnect(); // Re-render to show/hide the prompt options
-            }
+            _defaultOnUpdate(step, target);
+            if (target.dataset.key === 'createPrompt') renderAndConnect();
         },
 
         onMount: (step, card, app) => {

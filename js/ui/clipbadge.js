@@ -92,8 +92,8 @@ export class ClipBadge {
     }
 
     /**
-     * Finds all `pre.hljs` elements on the page and adds a badge to each.
-     * (Not used in the current implementation, but kept for completeness).
+     * Adds badges to all matching elements in the document.
+     * See `addTo()` for scoped usage within a specific container.
      */
     addAll() {
         document.querySelectorAll('.hljs, .hljs-nobg, .hljs-table, .katex').forEach(el => this.addBadge(el));

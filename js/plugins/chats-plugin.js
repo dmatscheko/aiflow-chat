@@ -11,6 +11,7 @@ import { debounce, importJson, exportJson } from '../utils.js';
 import { responseProcessor } from '../response-processor.js';
 import { DataManager } from '../data-manager.js';
 import { formatMessage } from '../ui/message-formatter.js';
+import { STORAGE_KEYS, DEFAULT_AGENT_ID } from '../constants.js';
 
 /**
  * @typedef {import('../main.js').App} App
@@ -50,7 +51,7 @@ class ChatManager {
         this.listPane = null;
         /** @type {Function} Bound save callback for ChatLog subscriptions, enabling proper unsubscribe. */
         this._boundSaveCallback = () => this.dataManager.save();
-        this.dataManager = new DataManager('core_chat_logs', 'chat', (loadedData) => {
+        this.dataManager = new DataManager(STORAGE_KEYS.CHAT_LOGS, 'chat', (loadedData) => {
             return loadedData.map(chatData => this._hydrateChat(chatData));
         });
 
@@ -96,7 +97,7 @@ class ChatManager {
         if (this.chats.length === 0) {
             this.createNewChat();
         }
-        this.activeChatId = localStorage.getItem('core_active_chat_id') || this.chats[0].id;
+        this.activeChatId = localStorage.getItem(STORAGE_KEYS.ACTIVE_CHAT_ID) || this.chats[0].id;
         this.app.activeView.id = this.activeChatId;
     }
 
@@ -104,7 +105,7 @@ class ChatManager {
      * Saves the active chat ID to local storage.
      */
     saveActiveChatId() {
-        localStorage.setItem('core_active_chat_id', this.activeChatId);
+        localStorage.setItem(STORAGE_KEYS.ACTIVE_CHAT_ID, this.activeChatId);
     }
 
     /**
@@ -482,9 +483,9 @@ pluginManager.register({
                             option.textContent = opt.label;
                             selector.appendChild(option);
                         });
-                        selector.value = chat.agent || 'agent-default';
+                        selector.value = chat.agent || DEFAULT_AGENT_ID;
                         selector.addEventListener('change', (e) => {
-                            chat.agent = e.target.value === 'agent-default' ? null : e.target.value;
+                            chat.agent = e.target.value === DEFAULT_AGENT_ID ? null : e.target.value;
                             app.chatManager.debouncedSave();
                         });
                     }
