@@ -445,7 +445,7 @@ export function registerFlowStepDefinitions(flowManager) {
 
             if (key === 'clearHistory') {
                 renderAndConnect(); // Re-render to show/hide the history options
-            } else if (Object.keys(step.data).some(k => k.startsWith('clear'))) {
+            } else if (key.startsWith('clear')) {
                 handleClearHistoryUpdate(step, target, renderAndConnect);
             }
         },
