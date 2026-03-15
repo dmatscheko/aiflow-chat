@@ -6,6 +6,8 @@
 
 'use strict';
 
+import { pluginManager } from './plugin-manager.js';
+
 /**
  * Returns a function that, as long as it continues to be invoked, will not
  * be triggered. The function will be called after it stops being called for
@@ -76,7 +78,7 @@ export function importJson(extension, onParsedData) {
                 onParsedData(parsedData);
             } catch (error) {
                 console.error(`Failed to import file: ${error.message}`);
-                alert(`Error: Could not parse the file. Please ensure it is a valid .${extension} file.`);
+                pluginManager.trigger('onShowToast', `Error: Could not parse the file. Please ensure it is a valid .${extension} file.`);
             }
         };
         reader.readAsText(file);

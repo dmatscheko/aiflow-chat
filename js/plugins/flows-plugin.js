@@ -464,7 +464,7 @@ class FlowRunner {
     async start() {
         if (this.isRunning) return;
         const startNode = this.flow.steps.find(s => !this.flow.connections.some(c => c.to === s.id));
-        if (!startNode) return alert('Flow has no starting node!');
+        if (!startNode) { pluginManager.trigger('onShowToast','Flow has no starting node!'); return; }
         this.isRunning = true;
         await this.executeStep(startNode);
     }

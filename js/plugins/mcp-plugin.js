@@ -318,7 +318,7 @@ class McpPlugin {
             return tools;
         } catch (error) {
             console.error(`MCP: Failed to fetch tools for ${url}`, error);
-            alert(`Failed to connect to MCP server at ${url}. Please check the URL and server status.\n\n${error.message}`);
+            pluginManager.trigger('onShowToast',`Failed to connect to MCP server at ${url}. Please check the URL and server status. ${error.message}`);
             this.#toolCache.set(url, []);
             return [];
         }

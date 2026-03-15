@@ -8,6 +8,8 @@
 
 'use strict';
 
+import { pluginManager } from '../plugin-manager.js';
+
 /**
  * @typedef {import('./flows-plugin.js').FlowManager} FlowManager
  * @typedef {import('../chat-data.js').ChatLog} ChatLog
@@ -828,7 +830,7 @@ export function registerFlowStepDefinitions(flowManager) {
             const fetchTools = async () => {
                 const mcpServerUrl = step.data.mcpServer || app.agentManager.getEffectiveApiConfig().toolSettings.mcpServer;
                 if (!mcpServerUrl) {
-                    alert('Please set an MCP Server URL in the Default Agent settings or in this step.');
+                    pluginManager.trigger('onShowToast','Please set an MCP Server URL in the Default Agent settings or in this step.');
                     return;
                 }
                 try {
@@ -842,7 +844,7 @@ export function registerFlowStepDefinitions(flowManager) {
                     });
                     toolSelect.value = step.data.toolName;
                 } catch (error) {
-                    alert(`Failed to fetch tools: ${error.message}`);
+                    pluginManager.trigger('onShowToast',`Failed to fetch tools: ${error.message}`);
                 }
             };
 
@@ -876,9 +878,9 @@ export function registerFlowStepDefinitions(flowManager) {
                         toolCall.arguments = { ...toolCall.arguments, __hidden_stack_id: app.chatManager?.activeChatId || 'default' };
                     }
                     const result = await app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer);
-                    alert(`Tool Result:\n${_formatMcpResult(result)}`);
+                    pluginManager.trigger('onShowToast',`Tool Result: ${_formatMcpResult(result)}`, 'info');
                 } catch (error) {
-                    alert(`Error testing tool: ${error.message}`);
+                    pluginManager.trigger('onShowToast',`Error testing tool: ${error.message}`);
                 }
             });
 

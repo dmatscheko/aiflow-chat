@@ -361,7 +361,7 @@ class AgentManager {
             this.modelCache.set(apiUrl, models);
             populateSelect(models);
         } catch (error) {
-            alert(`Failed to fetch models: ${error.message}`);
+            pluginManager.trigger('onShowToast',`Failed to fetch models: ${error.message}`);
         }
     }
 
@@ -448,7 +448,7 @@ class AgentManager {
                                 if (effectiveConfig.apiUrl) {
                                     this.fetchModels(agentId, modelInput);
                                 } else {
-                                    alert('Please set an API URL for this agent or the Default Agent first.');
+                                    pluginManager.trigger('onShowToast','Please set an API URL for this agent or the Default Agent first.');
                                 }
                             }
                         }]
@@ -549,7 +549,7 @@ class AgentManager {
                             if (effectiveConfig.toolSettings.mcpServer) {
                                 this.app.mcp.getTools(effectiveConfig.toolSettings.mcpServer, true); // force=true
                             } else {
-                                alert('Please set an MCP Server URL for this agent or the Default Agent first.');
+                                pluginManager.trigger('onShowToast','Please set an MCP Server URL for this agent or the Default Agent first.');
                             }
                         }
                     }]
@@ -645,7 +645,7 @@ pluginManager.register({
                 getItemName: (item) => item.name,
                 onDelete: (itemId, itemName) => {
                     if (itemId === DEFAULT_AGENT_ID) {
-                        alert("The Default Agent cannot be deleted.");
+                        pluginManager.trigger('onShowToast',"The Default Agent cannot be deleted.");
                         return false;
                     }
                     if (confirm(`Are you sure you want to delete agent "${itemName}"?`)) {
@@ -662,10 +662,10 @@ pluginManager.register({
                         onClick: () => importJson('.agents', (data) => {
                             if (Array.isArray(data)) {
                                 data.forEach(d => agentManager.addAgentFromData(d));
-                                alert(`${data.length} agent(s) imported.`);
+                                pluginManager.trigger('onShowToast',`${data.length} agent(s) imported.`, 'success');
                             } else {
                                 agentManager.addAgentFromData(data);
-                                alert('Agent imported.');
+                                pluginManager.trigger('onShowToast','Agent imported.', 'success');
                             }
                         }),
                     }];
