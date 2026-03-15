@@ -47,11 +47,6 @@ export class ClipBadge {
      */
     init() {
         const node = this.getTemplate();
-        if (!document.head.querySelector('#clip-badge-styles')) {
-            const style = node.content.querySelector('style').cloneNode(true);
-            style.id = 'clip-badge-styles';
-            document.head.appendChild(style);
-        }
         this.settings.template = node.content.querySelector('.clip-badge').cloneNode(true);
         if (this.settings.autoRun) this.addAll();
     }
@@ -66,21 +61,8 @@ export class ClipBadge {
         if (!node) {
             node = document.createElement('template');
             node.id = 'clip-badge-template';
+            // Clip badge styles are defined in css/styles.css
             node.innerHTML = `
-                <style>
-                    .clip-badge-pre { position: relative; }
-                    .clip-badge { display: flex; flex-flow: row nowrap; align-items: flex-start; position: absolute; top: 0; right: 0; opacity: 0.4; transition: opacity 0.4s; z-index: 10; }
-                    .clip-badge:hover { opacity: .7; }
-                    .clip-badge-language { margin-right: 8px; margin-top: 1px; font-weight: 600; color: goldenrod; font-size: 0.85em; }
-                    .clip-badge-copy-icon { cursor: pointer; padding: 3px 6px; user-select: none; background: #444; border-radius: 0 8px 0 8px; color: #fff; }
-                    .clip-badge-copy-icon * { vertical-align: top; }
-                    .text-success { color: limegreen !important; font-size: 0.85em; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-                    .clip-badge-swap { cursor: pointer; background: #444; border-radius: 0 0 6px 6px; padding: 0 5px 2px; margin-right: 4px; display: none; font-size: 0.85em; }
-                    .clip-badge-swap-enabled { display: block; }
-                    .katex .clip-badge { opacity: 0; }
-                    .katex:hover .clip-badge { opacity: .7; }
-                    .katex .clip-badge-copy-icon { background: #777; }
-                </style>
                 <div class="clip-badge">
                     <div class="clip-badge-language"></div>
                     <div class="clip-badge-swap" title="Swap view"></div>

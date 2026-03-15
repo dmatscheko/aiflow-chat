@@ -1,16 +1,23 @@
 .mobile-settings-button {
-    display: none; /* Hidden by default */
+    display: none;
     position: fixed;
-    top: 0px;
-    right: 0px;
-    z-index: 1001; /* Above the right panel */
+    top: 0;
+    right: 0;
+    z-index: 1001;
     width: 40px;
     height: 40px;
-    background-color: #80808080; /* Gray */
+    background-color: rgba(128, 128, 128, 0.5);
     border: 1px solid var(--border-color);
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     padding: 5px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: background-color var(--transition-fast);
+}
+
+.mobile-settings-button:hover {
+    background-color: var(--button-hover-bg-color);
 }
 
 .mobile-settings-button svg {
@@ -22,7 +29,7 @@
 
 @media (max-width: 768px) {
     .mobile-settings-button {
-        display: block; /* Show the button on mobile */
+        display: block;
     }
 
     #right-panel {
@@ -31,15 +38,15 @@
         top: 0;
         right: 0;
         bottom: 0;
-        width: 250px; /* Same as the original width */
+        width: 250px;
         z-index: 1000;
-        box-shadow: -5px 0 15px rgba(0, 0, 0, 0.2);
+        box-shadow: var(--shadow-lg);
         transform: translateX(100%);
         transition: transform 0.3s ease-in-out;
     }
 
     #app-container.right-panel-visible #right-panel {
-        display: flex; /* Or block, depending on its content */
+        display: flex;
         transform: translateX(0);
     }
 

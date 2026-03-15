@@ -101,72 +101,7 @@ function updateCloseAllVisibility() {
     }
 }
 
-// --- CSS injection (self-contained plugin) ---
-const style = document.createElement('style');
-style.textContent = `
-#toast-container {
-    position: absolute;
-    top: 52px;
-    right: 8px;
-    z-index: 2000;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-width: 420px;
-    pointer-events: none;
-}
-
-#toast-container > * {
-    pointer-events: auto;
-}
-
-#toast-close-all {
-    align-self: flex-end;
-    background: none;
-    border: none;
-    color: var(--text-color-secondary, #999);
-    font-size: 1.2rem;
-    cursor: pointer;
-    padding: 0 4px;
-    line-height: 1;
-    display: none;
-}
-
-#toast-close-all:hover {
-    color: var(--text-color, #e0e0e0);
-}
-
-.toast {
-    padding: 10px 14px;
-    border-radius: 6px;
-    font-size: 0.88rem;
-    line-height: 1.35;
-    word-break: break-word;
-    cursor: pointer;
-    opacity: 1;
-    transition: opacity 0.3s ease;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-}
-
-.toast-error {
-    background-color: #5c1a1a;
-    border-left: 3px solid #ff4d4d;
-    color: #ffbbbb;
-}
-
-.toast-success {
-    background-color: #1a3a1a;
-    border-left: 3px solid #4dff4d;
-    color: #bbffbb;
-}
-
-.toast-info {
-    background-color: #1a2a4a;
-    border-left: 3px solid #4d9fff;
-    color: #bbddff;
-}
-`;
-document.head.appendChild(style);
+// Toast styles are defined in css/styles.css
 
 // --- Plugin registration ---
 const errorToastPlugin = {
