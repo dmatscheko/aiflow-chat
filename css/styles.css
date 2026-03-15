@@ -751,12 +751,6 @@ textarea.edit-in-place {
     gap: var(--space-xs);
     margin-left: var(--space-lg);
     margin-right: var(--space-md);
-    opacity: 0;
-    transition: opacity var(--transition-fast);
-}
-
-.message:hover .message-controls {
-    opacity: 1;
 }
 
 .message-controls button {
@@ -778,6 +772,32 @@ textarea.edit-in-place {
     width: 16px;
     height: 16px;
     vertical-align: middle;
+}
+
+.message-controls button:disabled {
+    opacity: 0.35;
+    cursor: default;
+    pointer-events: none;
+}
+
+.message-nav-group {
+    display: none;
+    align-items: center;
+    margin-right: var(--space-sm);
+}
+
+.message-controls.has-alternatives .message-nav-group,
+.message-controls.editing-alternative .message-nav-group {
+    display: inline-flex;
+}
+
+.message-controls.editing-alternative .message-nav-group button {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+.message-controls.editing-alternative > button {
+    display: none;
 }
 
 
