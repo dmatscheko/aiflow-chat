@@ -683,16 +683,12 @@ pluginManager.register({
                 addNewButtonLabel: 'Add New Agent',
                 onAddNew: () => agentManager.addAgent({}),
                 getItemName: (item) => item.name,
-                onDelete: (itemId, itemName) => {
+                onDelete: (itemId) => {
                     if (itemId === DEFAULT_AGENT_ID) {
-                        pluginManager.trigger('onShowToast',"The Default Agent cannot be deleted.");
+                        pluginManager.trigger('onShowToast', 'The Default Agent cannot be deleted.');
                         return false;
                     }
-                    if (confirm(`Are you sure you want to delete agent "${itemName}"?`)) {
-                        // Let the list pane handle deletion, and view switching.
-                        return true;
-                    }
-                    return false;
+                    return true;
                 },
                 actions: () => {
                     const actions = [{

@@ -430,18 +430,49 @@ button:active {
     cursor: pointer;
 }
 
-.list-item .delete-button {
+/* --- Inline Delete Actions (trash → confirm/cancel) --- */
+.list-item .delete-actions {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.list-item .delete-btn {
     background: none;
     border: none;
     color: var(--text-color-secondary);
     cursor: pointer;
-    opacity: 0.5;
-    transition: opacity var(--transition-fast);
+    padding: 2px;
+    line-height: 0;
+    border-radius: var(--radius-sm);
+    transition: color var(--transition-fast), opacity var(--transition-fast);
 }
 
-.list-item .delete-button:hover {
-    opacity: 1;
-    color: var(--color-error);
+/* Trash icon: hidden until the list-item is hovered or touched */
+.list-item .delete-trash { display: none; opacity: 0.5; }
+.list-item:hover .delete-trash,
+.list-item:active .delete-trash { display: inline-flex; }
+.list-item .delete-trash:hover { opacity: 1; color: var(--color-error); }
+
+/* Cancel / Confirm: hidden until .confirming */
+.list-item .delete-cancel,
+.list-item .delete-confirm { display: none; }
+
+/* When confirming: hide trash, show cancel + confirm */
+.list-item .delete-actions.confirming .delete-trash { display: none !important; }
+.list-item .delete-actions.confirming .delete-cancel,
+.list-item .delete-actions.confirming .delete-confirm { display: inline-flex; }
+
+.list-item .delete-cancel:hover { color: var(--text-color); }
+.list-item .delete-confirm:hover { color: var(--color-error); }
+
+/* Prevent the label from pushing buttons off-screen */
+.list-item .list-item-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 

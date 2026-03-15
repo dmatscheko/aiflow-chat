@@ -559,9 +559,7 @@ pluginManager.register({
                 addNewButtonLabel: 'Add New Chat',
                 onAddNew: () => appInstance.chatManager.createNewChat(),
                 getItemName: (item) => item.title,
-                onDelete: (itemId, itemName) => {
-                    return confirm(`Are you sure you want to delete chat "${itemName}"?`);
-                },
+                onDelete: () => true,
                 actions: () => {
                     const activeChat = appInstance.chatManager.getActiveChat();
                     const actions = [{

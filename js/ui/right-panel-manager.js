@@ -146,6 +146,14 @@ export class RightPanelManager {
         const listEl = container.querySelector('.item-list');
         const footerEl = container.querySelector('.list-pane-footer');
 
+        const trashSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"></path></svg>';
+        const checkSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+
+        /** Cancels any open inline delete confirmation in this list. */
+        const cancelConfirming = () => {
+            listEl.querySelectorAll('.delete-actions.confirming').forEach(el => el.classList.remove('confirming'));
+        };
+
         const renderList = () => {
             listEl.innerHTML = '';
             config.dataManager.getAll().forEach(item => {
@@ -153,11 +161,15 @@ export class RightPanelManager {
                 li.className = 'list-item';
                 li.dataset.id = item.id;
 
-                const deleteButtonHtml = (config.onDelete && item.id !== DEFAULT_AGENT_ID)
-                    ? '<button class="delete-button">&times;</button>'
+                const deleteHtml = (config.onDelete && item.id !== DEFAULT_AGENT_ID)
+                    ? `<span class="delete-actions">` +
+                      `<button class="delete-btn delete-trash" title="Delete">${trashSvg}</button>` +
+                      `<button class="delete-btn delete-cancel" title="Cancel">&times;</button>` +
+                      `<button class="delete-btn delete-confirm" title="Confirm delete">${checkSvg}</button>` +
+                      `</span>`
                     : '';
 
-                li.innerHTML = `<span>${config.getItemName(item)}</span>${deleteButtonHtml}`;
+                li.innerHTML = `<span class="list-item-label">${config.getItemName(item)}</span>${deleteHtml}`;
                 listEl.appendChild(li);
             });
             updateActiveItem();
@@ -197,34 +209,52 @@ export class RightPanelManager {
             });
         };
 
+        // Close any open delete confirmation when clicking anywhere outside.
+        document.addEventListener('click', () => cancelConfirming());
+
         listEl.addEventListener('click', (e) => {
-            const itemEl = e.target.closest('.list-item');
-            if (!itemEl) return;
+            const btn = e.target.closest('.delete-btn');
+            if (btn) {
+                e.stopPropagation(); // Prevent item selection for all delete-related clicks.
 
-            const itemId = itemEl.dataset.id;
-            const item = config.dataManager.get(itemId);
+                const actionsEl = btn.closest('.delete-actions');
+                const itemEl = btn.closest('.list-item');
+                if (!actionsEl || !itemEl) return;
 
-            if (e.target.classList.contains('delete-button')) {
-                e.stopPropagation();
-                if (item && (!config.onDelete || config.onDelete(itemId, config.getItemName(item)))) {
-                    config.dataManager.delete(itemId);
-                    renderList();
-                    // If the active item was deleted, switch view
-                    if (this.app.activeView.id === itemId) {
-                        const firstItem = config.dataManager.getAll()[0];
-                        if (firstItem) {
-                            this.app.setView(config.viewType, firstItem.id);
-                        } else if (config.onAddNew) {
-                            // If no items left, create a new one automatically
-                            const newItem = config.onAddNew();
-                            renderList();
-                            this.app.setView(config.viewType, newItem.id);
+                if (btn.classList.contains('delete-trash')) {
+                    // Step 1: Show confirm / cancel buttons.
+                    cancelConfirming(); // Close any other open confirmation first.
+                    actionsEl.classList.add('confirming');
+                    e.stopImmediatePropagation(); // Stop the document listener from immediately cancelling.
+                } else if (btn.classList.contains('delete-cancel')) {
+                    actionsEl.classList.remove('confirming');
+                } else if (btn.classList.contains('delete-confirm')) {
+                    // Step 2: Perform the actual deletion.
+                    const itemId = itemEl.dataset.id;
+                    const item = config.dataManager.get(itemId);
+                    if (item && (!config.onDelete || config.onDelete(itemId, config.getItemName(item)))) {
+                        config.dataManager.delete(itemId);
+                        renderList();
+                        if (this.app.activeView.id === itemId) {
+                            const firstItem = config.dataManager.getAll()[0];
+                            if (firstItem) {
+                                this.app.setView(config.viewType, firstItem.id);
+                            } else if (config.onAddNew) {
+                                const newItem = config.onAddNew();
+                                renderList();
+                                this.app.setView(config.viewType, newItem.id);
+                            }
                         }
                     }
                 }
-            } else {
-                this.app.setView(config.viewType, itemId);
+                return;
             }
+
+            // Regular item click — select the item.
+            const itemEl = e.target.closest('.list-item');
+            if (!itemEl) return;
+            cancelConfirming();
+            this.app.setView(config.viewType, itemEl.dataset.id);
         });
 
         renderList();

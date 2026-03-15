@@ -689,13 +689,7 @@ pluginManager.register({
                 addNewButtonLabel: 'Add New Flow',
                 onAddNew: () => flowManager.addFlow({ name: 'New Flow', steps: [], connections: [] }),
                 getItemName: (item) => item.name,
-                onDelete: (itemId, itemName) => {
-                    const flow = flowManager.getFlow(itemId);
-                    if (flow && flow.steps.length > 0) {
-                        return confirm('This flow is not empty. Are you sure you want to delete it?');
-                    }
-                    return true;
-                },
+                onDelete: () => true,
                 actions: () => {
                     const activeFlow = flowManager.getFlow(flowManager.app.activeView.id);
                     const actions = [{
