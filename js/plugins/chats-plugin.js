@@ -10,7 +10,7 @@ import { ChatLog } from '../chat-data.js';
 import { debounce, importJson, exportJson } from '../utils.js';
 import { responseProcessor } from '../response-processor.js';
 import { DataManager } from '../data-manager.js';
-import { formatMessage } from '../ui/message-formatter.js';
+import { formatMessage, updateContentElement, addClipBadge } from '../ui/message-formatter.js';
 import { STORAGE_KEYS, DEFAULT_AGENT_ID } from '../constants.js';
 
 /**
@@ -185,6 +185,11 @@ class ChatManager {
         this._chatViewAbortController = new AbortController();
         const signal = this._chatViewAbortController.signal;
 
+        // Disconnect the previous ChatUI from the log to prevent stale subscribers
+        // from setting message.cache on detached DOM elements during streaming.
+        if (this.chatUI) {
+            this.chatUI.disconnect();
+        }
         this.chatUI = new ChatUI(document.getElementById('chat-container'), this.app.agentManager);
         this.chatUI.setChatLog(chat.log);
         this.app.dom.messageForm = document.getElementById('message-form');
@@ -271,6 +276,14 @@ class ChatManager {
  * Manages the rendering of a `ChatLog` instance into a designated HTML element.
  * It subscribes to a `ChatLog` and automatically re-renders the UI whenever the
  * log changes, ensuring the view is always synchronized with the data model.
+ *
+ * Optimizations:
+ * - Differential DOM updates: only the last message is updated during streaming;
+ *   previous messages are left untouched to preserve text selection.
+ * - Block-level incremental content: within the streaming message, only changed
+ *   or new block elements are touched.
+ * - Smart auto-scroll: pauses when the user manually scrolls up and resumes
+ *   when the user scrolls back to the bottom.
  * @class
  */
 class ChatUI {
@@ -284,30 +297,43 @@ class ChatUI {
         if (!container) {
             throw new Error('ChatUI container element is required.');
         }
-        /**
-         * The DOM element where chat messages are rendered.
-         * @type {HTMLElement}
-         * @private
-         */
+        /** @type {HTMLElement} @private */
         this.container = container;
-        /**
-         * The agent manager instance, used to look up agent details for display.
-         * @type {import('./agents-plugin.js').AgentManager}
-         * @private
-         */
+        /** @type {import('./agents-plugin.js').AgentManager} @private */
         this.agentManager = agentManager;
-        /**
-         * The ChatLog instance this UI is currently displaying.
-         * @type {ChatLog | null}
-         * @private
-         */
+        /** @type {ChatLog | null} @private */
         this.chatLog = null;
-        /**
-         * A pre-bound reference to the update method, used for subscribing and unsubscribing.
-         * @type {() => void}
-         * @private
-         */
+        /** @type {() => void} @private */
         this.boundUpdate = this.update.bind(this);
+
+        // --- Differential update state ---
+        /** @type {Message[]} Previously rendered message list (by reference). @private */
+        this._renderedMessages = [];
+        /** @type {Map<Message, HTMLElement>} Maps Message instances to their wrapper DOM elements. @private */
+        this._messageElements = new Map();
+
+        // --- Smart scroll state ---
+        /** @type {boolean} True when the user has manually scrolled away from the bottom. @private */
+        this._userScrolledAway = false;
+        /** @type {boolean} Set during programmatic scrolls to suppress scroll-event handling. @private */
+        this._programmaticScroll = false;
+
+        this.container.addEventListener('scroll', () => {
+            if (this._programmaticScroll) return;
+            this._userScrolledAway = !this._isNearBottom();
+        }, { passive: true });
+    }
+
+    /**
+     * Disconnects this ChatUI from its current ChatLog by unsubscribing. This prevents
+     * a stale ChatUI from receiving updates and setting message.cache on detached DOM
+     * elements, which would block the new ChatUI from performing incremental updates.
+     */
+    disconnect() {
+        if (this.chatLog) {
+            this.chatLog.unsubscribe(this.boundUpdate);
+            this.chatLog = null;
+        }
     }
 
     /**
@@ -320,55 +346,143 @@ class ChatUI {
             this.chatLog.unsubscribe(this.boundUpdate);
         }
         this.chatLog = chatLog;
+        this._renderedMessages = [];
+        this._messageElements = new Map();
+        this._userScrolledAway = false;
         this.chatLog.subscribe(this.boundUpdate);
         this.update();
     }
 
     /**
-     * Renders the entire chat log content into the container element.
-     * This method is typically called automatically when the connected `ChatLog` is updated.
+     * Renders or incrementally updates the chat UI.
+     *
+     * Fast path (same message list, only content changed):
+     *   - Only messages whose cache has been invalidated are updated in-place.
+     *   - The message wrapper/title/controls are kept; only `.message-content` is patched.
+     *
+     * Full path (message list changed):
+     *   - The container is rebuilt from scratch.
      */
     update() {
         if (!this.chatLog) {
             this.container.innerHTML = '';
+            this._renderedMessages = [];
+            this._messageElements = new Map();
             return;
         }
 
-        const shouldScroll = this.isScrolledToBottom();
-        this.container.innerHTML = ''; // Clear previous content
-
-        const fragment = document.createDocumentFragment();
         const messages = this.chatLog.getActiveMessages();
 
-        messages.forEach(message => {
-            const messageEl = formatMessage(message);
-            fragment.appendChild(messageEl);
-        });
+        if (this._canIncrementalUpdate(messages)) {
+            if (!this._incrementalUpdate(messages)) {
+                this._fullUpdate(messages);
+            }
+        } else {
+            this._fullUpdate(messages);
+        }
 
-        this.container.appendChild(fragment);
+        this._renderedMessages = messages;
 
-        if (shouldScroll) {
+        if (!this._userScrolledAway) {
             this.scrollToBottom();
         }
     }
 
     /**
-     * Checks if the chat container is scrolled to the bottom.
-     * @returns {boolean} `true` if the container is scrolled to the bottom, otherwise `false`.
+     * Checks whether the new message list matches the previously rendered one
+     * (same references, same order) so that we can use the fast incremental path.
+     * @param {Message[]} messages
+     * @returns {boolean}
      * @private
      */
-    isScrolledToBottom() {
+    _canIncrementalUpdate(messages) {
+        if (messages.length !== this._renderedMessages.length) return false;
+        for (let i = 0; i < messages.length; i++) {
+            if (messages[i] !== this._renderedMessages[i]) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Fast path: update only messages whose content has changed (cache === null).
+     * Leaves all other DOM nodes untouched.
+     * @param {Message[]} messages
+     * @returns {boolean} `true` if the incremental update succeeded, `false` if a
+     *   full rebuild is needed (e.g., a message role changed and the wrapper structure
+     *   no longer matches).
+     * @private
+     */
+    _incrementalUpdate(messages) {
+        for (const message of messages) {
+            if (message.cache != null) continue; // content unchanged
+
+            const wrapper = this._messageElements.get(message);
+            if (!wrapper) return false; // safety: missing element → full rebuild
+
+            const bubble = wrapper.querySelector('.message');
+            const existingContent = bubble?.querySelector('.message-content');
+            if (!existingContent) return false; // structural mismatch → full rebuild
+
+            // Block-level diff: only touch changed/new block elements.
+            updateContentElement(existingContent, message);
+
+            // Re-apply clip badges since content changed.
+            this._refreshClipBadge(bubble, message);
+        }
+        return true;
+    }
+
+    /**
+     * Full path: clear the container and rebuild all message elements.
+     * @param {Message[]} messages
+     * @private
+     */
+    _fullUpdate(messages) {
+        this.container.innerHTML = '';
+        this._messageElements = new Map();
+
+        const fragment = document.createDocumentFragment();
+
+        for (const message of messages) {
+            const messageEl = formatMessage(message);
+            this._messageElements.set(message, messageEl);
+            fragment.appendChild(messageEl);
+        }
+
+        this.container.appendChild(fragment);
+    }
+
+    /**
+     * Re-applies copy-to-clipboard badges on a message bubble after its content changed.
+     * Removes stale badges first to avoid duplicates.
+     * @param {HTMLElement} bubble - The `.message` element.
+     * @param {Message} message
+     * @private
+     */
+    _refreshClipBadge(bubble, message) {
+        bubble.querySelectorAll('.clip-badge').forEach(b => b.remove());
+        bubble.querySelectorAll('.clip-badge-pre').forEach(el => el.classList.remove('clip-badge-pre'));
+        addClipBadge(bubble, message);
+    }
+
+    /**
+     * Checks if the chat container is scrolled near the bottom.
+     * @returns {boolean}
+     * @private
+     */
+    _isNearBottom() {
         const { scrollHeight, clientHeight, scrollTop } = this.container;
-        // A small buffer of 5px helps account for rounding errors.
         return scrollHeight - clientHeight <= scrollTop + 5;
     }
 
     /**
-     * Scrolls the chat container to the bottom.
-     * @private
+     * Scrolls the chat container to the bottom, suppressing the scroll listener.
      */
     scrollToBottom() {
+        this._programmaticScroll = true;
         this.container.scrollTop = this.container.scrollHeight;
+        // Clear the flag after the browser has processed the scroll.
+        requestAnimationFrame(() => { this._programmaticScroll = false; });
     }
 }
 

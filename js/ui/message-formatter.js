@@ -162,6 +162,8 @@ function addClipBadge(messageEl, message) {
     };
 
     messageEl.querySelectorAll('table').forEach(table => {
+        // Skip tables already wrapped by a previous addClipBadge call.
+        if (table.parentElement?.classList.contains('hljs-table')) return;
         const div = document.createElement('div');
         div.classList.add('hljs-nobg', 'hljs-table', 'language-table');
         div.dataset.plaintext = encodeURIComponent(tableToCSV(table));
@@ -175,6 +177,49 @@ function addClipBadge(messageEl, message) {
 
 
 /**
+ * Renders the full formatting pipeline (SVG normalization, Markdown, KaTeX) and
+ * returns the resulting HTML string along with the processed DOM element.
+ * @param {string} rawContent - The raw message content.
+ * @returns {HTMLElement} A temporary element containing the rendered content.
+ */
+function renderContentToElement(rawContent) {
+    let html = rawContent || '';
+    html = svgNormalization(html);
+    html = markdown(html);
+
+    const el = document.createElement('div');
+    el.innerHTML = html;
+    processKatex(el);
+    return el;
+}
+
+/**
+ * Post-processes KaTeX elements in a container: extracts LaTeX source for copy badges
+ * and wraps display-math elements in a container div.
+ * @param {HTMLElement} container - The DOM element to process.
+ */
+function processKatex(container) {
+    container.querySelectorAll('.katex').forEach((elem) => {
+        const annotation = elem.querySelector('annotation[encoding="application/x-tex"]');
+        if (annotation) {
+            const latex = annotation.textContent.trim();
+            elem.dataset.plaintext = encodeURIComponent(latex);
+            annotation.remove();
+            if (elem.parentElement.classList.contains('katex-display')) {
+                elem.classList.remove('hljs', 'language-latex', 'katex-display', 'katex');
+                const div = document.createElement('div');
+                div.classList.add('hljs', 'language-latex');
+                div.dataset.plaintext = encodeURIComponent(latex);
+                const katexContainer = elem.parentElement;
+                katexContainer.parentElement.insertBefore(div, katexContainer);
+                katexContainer.parentElement.removeChild(katexContainer);
+                div.appendChild(katexContainer);
+            }
+        }
+    });
+}
+
+/**
  * Renders a message's content through the full formatting pipeline (SVG normalization,
  * Markdown, KaTeX) and returns a cached DOM element. Returns the cached element on
  * subsequent calls unless `message.cache` has been cleared.
@@ -182,43 +227,55 @@ function addClipBadge(messageEl, message) {
  * @returns {HTMLElement} The formatted content element.
  */
 function formatMessageContent(message) {
-    let messageEl;
     // Note: Caching needs invalidation (message.cache = null;) on each message modification
     if (message.cache != null) {
-        messageEl = message.cache;
-        return messageEl;
-    } else {
-        messageEl = document.createElement('div');
-        messageEl.className = 'message-content';
+        return message.cache;
     }
 
+    const messageEl = document.createElement('div');
+    messageEl.className = 'message-content';
 
-    let html = message.value.content || '';
-    html = svgNormalization(html);
-    html = markdown(html);
-
-    messageEl.innerHTML = html;
-    messageEl.querySelectorAll('.katex').forEach((elem) => {
-        const annotation = elem.querySelector('annotation[encoding="application/x-tex"]');
-        if (annotation) {
-            const latex = annotation.textContent.trim();
-            elem.dataset.plaintext = encodeURIComponent(latex);
-            annotation.remove(); // Remove the original annotation tag
-            if (elem.parentElement.classList.contains('katex-display')) {
-                elem.classList.remove('hljs', 'language-latex', 'katex-display', 'katex');
-                const div = document.createElement('div');
-                div.classList.add('hljs', 'language-latex');
-                div.dataset.plaintext = encodeURIComponent(latex);
-                const container = elem.parentElement;
-                container.parentElement.insertBefore(div, container);
-                container.parentElement.removeChild(container);
-                div.appendChild(container);
-            }
-        }
-    });
+    const rendered = renderContentToElement(message.value.content);
+    messageEl.innerHTML = rendered.innerHTML;
 
     message.cache = messageEl;
     return messageEl;
+}
+
+/**
+ * Updates an existing message-content element incrementally by performing a block-level
+ * DOM diff. Unchanged leading block elements are left untouched (preserving text selection),
+ * and only the first divergent element and everything after it are replaced/appended.
+ * @param {HTMLElement} existingContentEl - The existing `.message-content` DOM element.
+ * @param {Message} message - The message with updated content.
+ */
+export function updateContentElement(existingContentEl, message) {
+    const rendered = renderContentToElement(message.value.content);
+    const newChildren = Array.from(rendered.children);
+    const oldChildren = Array.from(existingContentEl.children);
+
+    // Find the first divergent block-level child.
+    let matchCount = 0;
+    const minLen = Math.min(oldChildren.length, newChildren.length);
+    for (let i = 0; i < minLen; i++) {
+        if (oldChildren[i].outerHTML === newChildren[i].outerHTML) {
+            matchCount++;
+        } else {
+            break;
+        }
+    }
+
+    // Remove old children from the divergence point onward.
+    for (let j = oldChildren.length - 1; j >= matchCount; j--) {
+        existingContentEl.removeChild(oldChildren[j]);
+    }
+
+    // Append new/changed children from the divergence point onward.
+    for (let j = matchCount; j < newChildren.length; j++) {
+        existingContentEl.appendChild(newChildren[j]);
+    }
+
+    message.cache = existingContentEl;
 }
 
 /**
@@ -228,6 +285,8 @@ function formatMessageContent(message) {
  * @returns {HTMLElement} The formatted message element, wrapped with depth lines if necessary.
  * @private
  */
+export { addClipBadge };
+
 export function formatMessage(message) {
     // Log messages are display-only: render as simple text between chat bubbles,
     // not inside a bubble, to signal they are not part of the AI conversation.
