@@ -17,10 +17,10 @@ An open-source chat application designed for interacting with AI models through 
 The application is built around a core set of managers and services, with most features being implemented as plugins.
 
 - **`main.js`**: The main entry point of the application. It initializes the core `App` class, which orchestrates all other components and manages the main UI.
--   **`plugin-manager.js`**: The heart of the application's extensibility. It provides a hook-based system where plugins can register to be notified of specific events and modify application behavior or data.
 -   **`chat-data.js`**: Defines the core data structures for chat history. A chat is modeled as a tree of messages, allowing for complex conversational branching and the exploration of alternative AI responses.
 -   **`api-service.js`**: A self-contained service for handling all communication with OpenAI-compatible APIs. It manages endpoint construction, authentication, and the complexities of streaming responses.
 -   **`response-processor.js`**: The engine that drives the AI interaction cycle. It finds pending AI turns, calls the `ApiService`, and triggers plugin hooks upon completion, allowing for multi-step agent and tool interactions.
+-   **`plugin-manager.js`**: The heart of the application's extensibility. It provides a hook-based system where plugins can register to be notified of specific events and modify application behavior or data.
 -   **`js/plugins/`**: This directory contains all the feature-implementing plugins. Each plugin is a self-contained module that registers its functionality (hooks, UI components, etc.) with the `pluginManager`.
 
 ## Getting Started

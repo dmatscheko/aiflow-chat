@@ -29,6 +29,21 @@ const roleMapping = {
 };
 
 /**
+ * Resolves the chat for a flow execution context. Uses the context's chatId
+ * to find the specific chat, falling back to the active chat.
+ * @param {object} context - The flow execution context.
+ * @returns {import('./chats-plugin.js').Chat | undefined}
+ * @private
+ */
+function _getChatForContext(context) {
+    if (context.chatId) {
+        return context.app.chatManager.chats.find(c => c.id === context.chatId)
+            || context.app.chatManager.getActiveChat();
+    }
+    return context.app.chatManager.getActiveChat();
+}
+
+/**
  * Finds the last message in the active chat history that has more than one
  * alternative answer. This is used by steps like the 'Consolidator' to find
  * the conversational branch point to work from.
@@ -259,15 +274,22 @@ function _formatMcpResult(result) {
 }
 
 /**
- * Submits a prompt to the chat via the message input, optionally using a specific agent.
- * This is the standard way for flow steps to trigger a new AI response.
- * @param {object} context - The flow execution context.
+ * Submits a prompt to the correct chat for the current flow execution context.
+ * Uses the direct sendMessage API to target the specific chat by ID, avoiding
+ * any dependency on the currently-visible DOM or active chat.
+ * @param {object} context - The flow execution context (must include chatId).
  * @param {string} prompt - The text to submit.
  * @param {string} [agentId=''] - The agent ID to use for the response.
  */
 function _submitPrompt(context, prompt, agentId = '') {
-    context.app.dom.messageInput.value = prompt;
-    context.app.chatManager.handleFormSubmit({ agentId });
+    const chatId = context.chatId;
+    if (chatId) {
+        context.app.chatManager.sendMessage(chatId, prompt, agentId || null);
+    } else {
+        // Fallback for legacy callers without a chatId in context
+        context.app.dom.messageInput.value = prompt;
+        context.app.chatManager.handleFormSubmit({ agentId });
+    }
 }
 
 
@@ -378,10 +400,12 @@ export function registerFlowStepDefinitions(flowManager) {
         execute: (step, context) => {
             if (!step.data.prompt) return context.stopFlow('Multi Prompt step is not configured.');
 
-            const runner = flowManager.activeFlowRunner;
+            // Find the flow runner for the current chat
+            const chatId = context.chatId;
+            const runner = flowManager.activeFlowRunners.get(chatId);
             if (!runner) return context.stopFlow('Flow runner not active.');
 
-            const chat = context.app.chatManager.getActiveChat();
+            const chat = _getChatForContext(context);
             if (!chat) return context.stopFlow('No active chat.');
 
             // Add the user message that starts the multi-prompt
@@ -398,7 +422,7 @@ export function registerFlowStepDefinitions(flowManager) {
             };
 
             // Trigger the processing of the pending message
-            context.app.responseProcessor.scheduleProcessing(context.app);
+            context.app.responseProcessor.scheduleProcessing(context.app, chatId);
         },
     });
 
@@ -443,7 +467,7 @@ export function registerFlowStepDefinitions(flowManager) {
             }
         },
         execute: (step, context) => {
-            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            const chatLog = _getChatForContext(context)?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
             const sourceMessage = _findLastMessageWithAlternatives(chatLog);
@@ -509,7 +533,7 @@ export function registerFlowStepDefinitions(flowManager) {
             }
         },
         execute: (step, context) => {
-            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            const chatLog = _getChatForContext(context)?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
             const turns = _getTurns(chatLog);
@@ -552,7 +576,7 @@ export function registerFlowStepDefinitions(flowManager) {
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
             if (step.data.message) {
-                const chat = context.app.chatManager.getActiveChat();
+                const chat = _getChatForContext(context);
                 if (chat) {
                     chat.log.addMessage({ role: 'log', content: step.data.message });
                 }
@@ -579,7 +603,7 @@ export function registerFlowStepDefinitions(flowManager) {
             handleClearHistoryUpdate(step, target, renderAndConnect);
         },
         execute: (step, context) => {
-            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            const chatLog = _getChatForContext(context)?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
             const error = executeHistoryClearing(step.data, chatLog, context);
@@ -605,7 +629,7 @@ export function registerFlowStepDefinitions(flowManager) {
         renderOutputConnectors: (step) => _renderOutputConnectors(step, [{name: 'pass', label: 'Pass'}, {name: 'fail', label: 'Fail'}]),
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
-            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            const chatLog = _getChatForContext(context)?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
             const lastContent = _getLastResponseContent(chatLog);
             let isMatch = false;
@@ -630,7 +654,7 @@ export function registerFlowStepDefinitions(flowManager) {
         renderOutputConnectors: (step) => _renderOutputConnectors(step, [{name: 'pass', label: 'Over'}, {name: 'fail', label: 'Under'}]),
         onUpdate: (step, target) => { step.data[target.dataset.key] = parseInt(target.value, 10); },
         execute: (step, context) => {
-            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            const chatLog = _getChatForContext(context)?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
             if (typeof GPTTokenizer_cl100k_base === 'undefined') {
@@ -663,7 +687,7 @@ export function registerFlowStepDefinitions(flowManager) {
         },
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
-            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            const chatLog = _getChatForContext(context)?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
             const lastContent = _getLastResponseContent(chatLog);
             let isMatch = false;
@@ -711,7 +735,7 @@ export function registerFlowStepDefinitions(flowManager) {
             if (target.dataset.key === 'includeLastAnswer') renderAndConnect();
         },
         execute: (step, context) => {
-            const chat = context.app.chatManager.getActiveChat();
+            const chat = _getChatForContext(context);
             const chatLog = chat?.log;
             if (!chatLog) return context.stopFlow('No active chat.');
 
@@ -889,7 +913,7 @@ export function registerFlowStepDefinitions(flowManager) {
         },
 
         execute: (step, context) => {
-            const chatLog = context.app.chatManager.getActiveChat()?.log;
+            const chatLog = _getChatForContext(context)?.log;
             const lastMessage = chatLog ? _getLastResponseContent(chatLog) : '';
             const toolCallStr = _substituteLastResponse(step.data.toolCall, lastMessage);
 
@@ -897,7 +921,7 @@ export function registerFlowStepDefinitions(flowManager) {
                 const toolCall = JSON.parse(toolCallStr);
                 // Auto-inject __hidden_stack_id for stack tools so each chat has its own stack.
                 if (toolCall.tool?.startsWith('stack_')) {
-                    toolCall.arguments = { ...toolCall.arguments, __hidden_stack_id: context.app.chatManager?.activeChatId || 'default' };
+                    toolCall.arguments = { ...toolCall.arguments, __hidden_stack_id: context.chatId || context.app.chatManager?.activeChatId || 'default' };
                 }
                 return context.app.mcp.rpc('tools/call', { name: toolCall.tool, arguments: toolCall.arguments }, step.data.mcpServer)
                     .then(result => {
@@ -907,7 +931,7 @@ export function registerFlowStepDefinitions(flowManager) {
                             const newPrompt = `${step.data.prePrompt || ''}${resultStr}${step.data.postPrompt || ''}`;
                             _submitPrompt(context, newPrompt);
                         } else {
-                            const chat = context.app.chatManager.getActiveChat();
+                            const chat = _getChatForContext(context);
                             if (chat) {
                                 chat.log.addMessage({
                                     role: 'tool',
@@ -947,7 +971,7 @@ export function registerFlowStepDefinitions(flowManager) {
         renderOutputConnectors: (step) => _renderOutputConnectors(step, [{name: 'next', label: 'Next'}, {name: 'empty', label: 'Empty'}]),
         onUpdate: _defaultOnUpdate,
         execute: (step, context) => {
-            const chatId = context.app.chatManager?.activeChatId || 'default';
+            const chatId = context.chatId || context.app.chatManager?.activeChatId || 'default';
             return context.app.mcp.rpc('tools/call', { name: 'stack_pop_from_stack', arguments: { __hidden_stack_id: chatId } })
                 .then(result => {
                     const prompt = result.content && result.content[0] ? result.content[0].text : '';

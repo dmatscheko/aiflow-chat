@@ -114,7 +114,7 @@ const uiControlsPlugin = {
                     // alternatives from different agents by changing the agent selector.
                     const activeAgent = appInstance.chatManager.getActiveChat()?.agent || null;
                     chatLog.addAlternative(message, { role: 'assistant', content: null, agent: activeAgent });
-                    responseProcessor.scheduleProcessing(appInstance);
+                    responseProcessor.scheduleProcessing(appInstance, appInstance.chatManager.activeChatId);
                 } else {
                     // For user messages, set the current message as a template for a new virtual alternative.
                     appInstance.newAlternativeTemplate = message;

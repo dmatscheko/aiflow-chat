@@ -82,23 +82,6 @@ def test_js_flow_runner(page):
             ],
         };
 
-        // Access FlowRunner via creating one
-        const FlowRunnerClass = fm.activeFlowRunner?.constructor ||
-            (() => {
-                fm.activeFlowRunner = null;
-                // Create a temporary runner
-                const tmpFlow = { steps: [], connections: [] };
-                const runner = new (function() {
-                    // We need to get the class - let's construct one
-                    fm.startFlow(testFlow.id);
-                    const cls = fm.activeFlowRunner?.constructor;
-                    if (fm.activeFlowRunner) {
-                        fm.activeFlowRunner.stop('test cleanup');
-                    }
-                    return cls;
-                }())();
-            })();
-
         // Create a runner manually for testing
         // Since FlowRunner is not exported, we get its class from a temporary instantiation
         let RunnerClass = null;
@@ -107,14 +90,16 @@ def test_js_flow_runner(page):
         fm.updateFlow(testFlow);
 
         // Use startFlow to create a runner, then stop it to test the class
-        fm.startFlow(testFlow.id);
-        if (fm.activeFlowRunner) {
-            RunnerClass = fm.activeFlowRunner.constructor;
-            fm.activeFlowRunner.stop('test setup');
+        const activeChatId = window.app.chatManager.activeChatId;
+        fm.startFlow(testFlow.id, activeChatId);
+        const activeRunner = fm.activeFlowRunners.get(activeChatId);
+        if (activeRunner) {
+            RunnerClass = activeRunner.constructor;
+            activeRunner.stop('test setup');
         }
 
         if (RunnerClass) {
-            const runner = new RunnerClass(flow, window.app, fm);
+            const runner = new RunnerClass(flow, window.app, fm, activeChatId);
 
             // Test getNextStep
             const next1 = runner.getNextStep('s1');
@@ -139,7 +124,7 @@ def test_js_flow_runner(page):
                 ],
             };
 
-            const branchRunner = new RunnerClass(branchFlow, window.app, fm);
+            const branchRunner = new RunnerClass(branchFlow, window.app, fm, activeChatId);
             const passNext = branchRunner.getNextStep('b1', 'pass');
             assert(passNext && passNext.id === 'b2', 'getNextStep with pass output returns b2');
 

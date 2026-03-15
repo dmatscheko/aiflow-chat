@@ -3,6 +3,9 @@
  * This file is responsible for orchestrating the process of generating AI
  * responses, handling streaming from the API, and managing a processing loop
  * that allows for complex, multi-step interactions involving agents and tools.
+ *
+ * Supports per-chat concurrent processing: each chat runs its own independent
+ * processing loop, allowing multiple chats to stream and execute tools in parallel.
  */
 
 'use strict';
@@ -16,12 +19,9 @@ import { pluginManager } from './plugin-manager.js';
  */
 
 /**
- * Manages the queue and execution of AI response generation.
- * It scans for pending messages (assistant turns with null content), processes them
- * by calling the AI API, and then allows plugins to handle the completed response,
- * which might in turn create more pending messages (e.g., for tool calls or sub-agents).
- * This cycle continues until no more work is pending and no plugin takes further action.
- * It also manages a stack for nested agent calls, ensuring control returns to parent agents.
+ * Manages the queue and execution of AI response generation on a per-chat basis.
+ * Each chat has its own independent processing loop, agent call stack, and stopped state,
+ * enabling true concurrent processing across multiple chats.
  * @class
  */
 class ResponseProcessor {
@@ -31,141 +31,165 @@ class ResponseProcessor {
      */
     constructor() {
         /**
-         * A flag to prevent multiple concurrent processing loops, ensuring that only
-         * one `processLoop` runs at a time.
-         * @type {boolean}
+         * Tracks which chats currently have an active processing loop.
+         * @type {Set<string>}
+         * @private
          */
-        this.isProcessing = false;
+        this._processingChats = new Set();
         /**
-         * A flag set by the user's stop action (Esc / Stop button). When true, the
-         * processing loop exits at the next check point, and no further agent or flow
-         * work is initiated. Reset to `false` when new processing is scheduled.
-         * @type {boolean}
+         * Tracks which chats have been stopped by the user (Esc / Stop button).
+         * @type {Set<string>}
+         * @private
          */
-        this.isStopped = false;
+        this._stoppedChats = new Set();
         /**
-         * The main application instance, providing access to other components like
-         * `chatManager`, `agentManager`, and `apiService`.
+         * Per-chat agent call stacks. When a sub-agent is called, its parent
+         * is pushed onto the chat's stack. When the sub-agent finishes, the parent
+         * is popped and its turn is resumed.
+         * @type {Map<string, Array<{agentId: string, depth: number, chatId: string}>>}
+         * @private
+         */
+        this._agentCallStacks = new Map();
+        /**
+         * The main application instance.
          * @type {App | null}
          * @private
          */
         this.app = null;
-        /**
-         * A stack to manage nested agent calls. When a sub-agent is called, its parent
-         * is pushed onto this stack. When the sub-agent finishes, the parent is popped
-         * and its turn is resumed. Each entry includes the chat ID so that resumption
-         * targets the correct chat even if the user switches chats during processing.
-         * @type {Array<{agentId: string, depth: number, chatId: string}>}
-         */
-        this.agentCallStack = [];
     }
 
     /**
-     * Immediately halts all ongoing processing. Called when the user presses Esc or
-     * clicks the Stop button. It sets the `isStopped` flag so the `processLoop`
-     * exits at the next check point, and clears the agent call stack so that no
-     * parent agents are resumed after the currently-aborting request finishes.
-     * It also removes any pending (null-content) messages that were already queued,
-     * preventing orphaned work items from being picked up later.
+     * Returns the agent call stack for a specific chat, creating it if needed.
+     * @param {string} chatId - The chat ID.
+     * @returns {Array<{agentId: string, depth: number, chatId: string}>}
      */
-    stop() {
-        this.isStopped = true;
-        this.agentCallStack.length = 0;
-        // Remove pending messages so they don't get picked up by a future processLoop.
-        if (this.app?.chatManager) {
-            for (const chat of this.app.chatManager.chats) {
-                chat.log.removePendingMessages();
+    getAgentCallStack(chatId) {
+        if (!this._agentCallStacks.has(chatId)) {
+            this._agentCallStacks.set(chatId, []);
+        }
+        return this._agentCallStacks.get(chatId);
+    }
+
+    /**
+     * Checks whether a specific chat has been stopped.
+     * @param {string} chatId - The chat ID.
+     * @returns {boolean}
+     */
+    isChatStopped(chatId) {
+        return this._stoppedChats.has(chatId);
+    }
+
+    /**
+     * Checks whether a specific chat is currently processing.
+     * @param {string} chatId - The chat ID.
+     * @returns {boolean}
+     */
+    isChatProcessing(chatId) {
+        return this._processingChats.has(chatId);
+    }
+
+    /**
+     * Immediately halts processing for a specific chat or all chats.
+     * Clears the agent call stack and removes pending messages.
+     * @param {string} [chatId] - If provided, stops only this chat. Otherwise stops all.
+     */
+    stop(chatId) {
+        if (chatId) {
+            this._stoppedChats.add(chatId);
+            const stack = this._agentCallStacks.get(chatId);
+            if (stack) stack.length = 0;
+            if (this.app?.chatManager) {
+                const chat = this.app.chatManager.chats.find(c => c.id === chatId);
+                if (chat) chat.log.removePendingMessages();
+            }
+        } else {
+            // Stop all chats
+            if (this.app?.chatManager) {
+                for (const chat of this.app.chatManager.chats) {
+                    this._stoppedChats.add(chat.id);
+                    const stack = this._agentCallStacks.get(chat.id);
+                    if (stack) stack.length = 0;
+                    chat.log.removePendingMessages();
+                }
             }
         }
     }
 
     /**
-     * Schedules a processing check. If the processor is not already running,
-     * this method kicks off the main processing loop. This is the primary entry point
-     * for initiating all AI response generation and subsequent actions.
-     * @param {App} app - The main application instance, which is stored for the duration of the processing cycle.
+     * Schedules a processing check for a specific chat. If the chat's processor
+     * is not already running, this method kicks off a per-chat processing loop.
+     * @param {App} app - The main application instance.
+     * @param {string} [chatId] - The ID of the chat to process. If omitted, scans all chats.
      */
-    scheduleProcessing(app) {
+    scheduleProcessing(app, chatId) {
         this.app = app;
-        this.isStopped = false;
-        if (!this.isProcessing) {
-            this.processLoop();
-        }
-    }
 
-    /**
-     * Finds the next pending message across all chats.
-     * It iterates through all chats and uses their `findNextPendingMessage` method.
-     * A pending message is defined as one with a role of 'assistant' or 'tool' and `null` content.
-     * @returns {{chat: Chat, message: Message} | null} An object containing the chat instance
-     * and the pending message, or `null` if no pending messages exist in any chat.
-     * @private
-     */
-    _findNextPendingMessage() {
-        if (!this.app || !this.app.chatManager) return null;
-        for (const chat of this.app.chatManager.chats) {
-            const pendingMessage = chat.log.findNextPendingMessage();
-            if (pendingMessage) {
-                return { chat, message: pendingMessage };
+        if (chatId) {
+            this._stoppedChats.delete(chatId);
+            if (!this._processingChats.has(chatId)) {
+                this._processLoopForChat(chatId);
+            }
+        } else {
+            // Legacy/fallback: scan all chats for pending messages and start loops
+            if (app.chatManager) {
+                for (const chat of app.chatManager.chats) {
+                    if (chat.log.findNextPendingMessage()) {
+                        this._stoppedChats.delete(chat.id);
+                        if (!this._processingChats.has(chat.id)) {
+                            this._processLoopForChat(chat.id);
+                        }
+                    }
+                }
             }
         }
-        return null;
     }
 
     /**
-     * The main processing loop that drives the AI interaction cycle.
-     * It robustly handles a sequence of events:
-     * 1. It first prioritizes and processes any pending AI message by calling `processMessage`.
-     * 2. After a message is generated, it immediately triggers the `onResponseComplete` hook,
-     *    allowing plugins (like tool processors) to react.
-     * 3. If a plugin takes action (e.g., queues a new tool call), the loop restarts to handle the new work.
-     * 4. If no messages are pending, it triggers `onResponseComplete` with a `null` context
-     *    to allow plugins to perform actions in an idle state (e.g., starting a new "flow").
-     * 5. If the agent call stack is not empty, it pops the parent agent to resume its turn.
-     * 6. The loop only terminates when a full pass results in no pending messages, no plugin actions,
-     *    and an empty agent call stack, ensuring all work is truly complete.
+     * The per-chat processing loop. Handles the sequence of events for a single chat:
+     * 1. Process any pending AI message.
+     * 2. Trigger onResponseComplete hooks for plugins to react.
+     * 3. Pop the agent call stack if idle.
+     * 4. Check for idle-state plugin actions.
+     * 5. Terminate when no more work exists for this chat.
+     * @param {string} chatId - The ID of the chat to process.
      * @private
      * @async
      */
-    async processLoop() {
-        if (this.isProcessing) return;
-        this.isProcessing = true;
+    async _processLoopForChat(chatId) {
+        if (this._processingChats.has(chatId)) return;
+        this._processingChats.add(chatId);
 
         try {
             while (true) {
-                if (this.isStopped) break;
+                if (this._stoppedChats.has(chatId)) break;
 
-                const workItem = this._findNextPendingMessage();
-                if (workItem) {
-                    const { chat, message } = workItem;
+                const chat = this.app?.chatManager?.chats.find(c => c.id === chatId);
+                if (!chat) break;
+
+                const pendingMessage = chat.log.findNextPendingMessage();
+                if (pendingMessage) {
                     // Highest priority: process any pending AI response.
-                    await this.processMessage(chat, message);
+                    await this.processMessage(chat, pendingMessage);
 
-                    if (this.isStopped) break;
+                    if (this._stoppedChats.has(chatId)) break;
 
                     // Immediately give plugins a chance to react to the new message.
-                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', message, chat);
-                    if (this.isStopped) break;
+                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', pendingMessage, chat);
+                    if (this._stoppedChats.has(chatId)) break;
                     if (aHandlerTookAction) {
-                        // A plugin (e.g., mcp-plugin) took action, so new work might exist.
-                        // Restart the loop to handle it immediately.
                         continue;
                     }
-                    // If no handler acted on this specific message, we still continue,
-                    // as there might be other pending messages.
                     continue;
                 }
 
-                // If we're here, the AI is idle.
+                // If we're here, the chat is idle.
                 // First priority: return control to a parent agent from the call stack.
-                // This MUST be checked before the idle plugin trigger, because plugins
-                // (e.g., the flows-plugin) may take follow-up actions that would skip
-                // the stack pop via `continue`, permanently starving the parent agent.
-                if (this.agentCallStack.length > 0) {
-                    const parentAgentContext = this.agentCallStack.pop();
+                const stack = this.getAgentCallStack(chatId);
+                if (stack.length > 0) {
+                    const parentAgentContext = stack.pop();
                     const targetChat = parentAgentContext.chatId
                         ? this.app.chatManager.chats.find(c => c.id === parentAgentContext.chatId)
-                        : this.app.chatManager.getActiveChat();
+                        : chat;
                     if (targetChat) {
                         targetChat.log.addMessage(
                             { role: 'assistant', content: null, agent: parentAgentContext.agentId },
@@ -174,43 +198,30 @@ class ResponseProcessor {
                     } else {
                         console.warn('Agent call stack: target chat no longer exists, skipping resumption.');
                     }
-                    // Restart the loop (either to process the new turn, or to check for more stack entries).
                     continue;
                 }
 
                 // Second priority: check if any plugin wants to take a follow-up action.
-                const activeChat = this.app.chatManager.getActiveChat();
-                if (activeChat) {
-                    // Trigger with a null message to signify an idle-state check.
-                    const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', null, activeChat);
-                    if (this.isStopped) break;
-                    if (aHandlerTookAction) {
-                        // A plugin (e.g., flows-plugin) took action. Loop again.
-                        continue;
-                    }
+                const aHandlerTookAction = await pluginManager.triggerSequentially('onResponseComplete', null, chat);
+                if (this._stoppedChats.has(chatId)) break;
+                if (aHandlerTookAction) {
+                    continue;
                 }
 
-                // If we reach this point, it means:
-                // 1. There were no pending messages to process.
-                // 2. The agent call stack is empty.
-                // 3. No plugin took any action on the idle state.
-                // Therefore, all work is truly complete.
+                // All work is complete for this chat.
                 break;
             }
         } catch (error) {
-            console.error('Error in processing loop:', error);
+            console.error('Error in processing loop for chat:', chatId, error);
         } finally {
-            this.isProcessing = false;
+            this._processingChats.delete(chatId);
         }
     }
 
     /**
      * Processes a single pending assistant or tool message by making an API call.
-     * It constructs the appropriate payload, including the system prompt and message history,
-     * calls the `apiService` to get a streaming response, and updates the message
-     * content in real-time.
      * @param {Chat} chat - The chat object the message belongs to.
-     * @param {Message} assistantMsg - The pending assistant or tool message to be filled with content.
+     * @param {Message} assistantMsg - The pending message to be filled with content.
      * @private
      * @async
      */

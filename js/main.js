@@ -21,6 +21,7 @@ import { STORAGE_KEYS } from './constants.js';
 import './plugins/chats-plugin.js';
 import './plugins/agents-plugin.js';
 import './plugins/agents-call-plugin.js';
+import './plugins/chat-call-plugin.js';
 import './plugins/flows-plugin.js';
 import './plugins/mcp-plugin.js';
 import './plugins/mobile-style-plugin.js';
@@ -90,10 +91,11 @@ class App {
          */
         this.activeView = { type: 'chat', id: null };
         /**
-         * Controller for aborting in-progress fetch requests (e.g., streaming chat).
-         * @type {AbortController | null}
+         * Per-chat abort controllers, keyed by chat ID. Each chat that is actively
+         * streaming has its own abort controller, enabling concurrent streaming.
+         * @type {Map<string, AbortController>}
          */
-        this.abortController = null;
+        this.abortControllers = new Map();
         /**
          * A map to store the last active ID for each view type, to restore state.
          * @type {Object.<string, string>}

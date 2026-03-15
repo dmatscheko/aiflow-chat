@@ -12,44 +12,64 @@ def test_js_response_processor(page):
 
         const rp = window.app.responseProcessor;
 
-        // --- Test: initial state ---
-        assert(rp.isProcessing === false, 'initial isProcessing should be false');
-        assert(Array.isArray(rp.agentCallStack), 'agentCallStack should be an array');
-        assert(rp.agentCallStack.length === 0, 'agentCallStack should start empty');
+        // --- Test: initial state (per-chat processing) ---
+        // No chats should be processing initially
+        assert(typeof rp.isChatProcessing === 'function', 'isChatProcessing should be a function');
+        assert(typeof rp.isChatStopped === 'function', 'isChatStopped should be a function');
+        assert(typeof rp.getAgentCallStack === 'function', 'getAgentCallStack should be a function');
 
-        // --- Test: _findNextPendingMessage with no pending messages ---
-        const result = rp._findNextPendingMessage();
-        // It should either return null (no pending messages) or a pending message
-        // Since we set up a clean chat, there should be no pending messages
-        const hasPending = result !== null;
-        // We can't assert much about the return since it depends on chat state,
-        // but we can verify it doesn't crash
-        assert(true, '_findNextPendingMessage does not crash');
+        // Test with a dummy chat id
+        assert(rp.isChatProcessing('test-chat') === false, 'no chat should be processing initially');
+        assert(rp.isChatStopped('test-chat') === false, 'no chat should be stopped initially');
+
+        // --- Test: getAgentCallStack returns an array per chat ---
+        const stack = rp.getAgentCallStack('test-chat');
+        assert(Array.isArray(stack), 'getAgentCallStack should return an array');
+        assert(stack.length === 0, 'agent call stack should start empty');
 
         // --- Test: agentCallStack push/pop ---
-        rp.agentCallStack.push({ agentId: 'agent-1', depth: 0 });
-        rp.agentCallStack.push({ agentId: 'agent-2', depth: 1 });
-        assert(rp.agentCallStack.length === 2, 'agentCallStack should have 2 items after push');
+        stack.push({ agentId: 'agent-1', depth: 0 });
+        stack.push({ agentId: 'agent-2', depth: 1 });
+        assert(stack.length === 2, 'agentCallStack should have 2 items after push');
 
-        const popped = rp.agentCallStack.pop();
+        const popped = stack.pop();
         assert(popped.agentId === 'agent-2', 'pop returns last pushed item (LIFO)');
         assert(popped.depth === 1, 'popped item has correct depth');
-        assert(rp.agentCallStack.length === 1, 'stack has 1 item after pop');
+        assert(stack.length === 1, 'stack has 1 item after pop');
+
+        // Same chat returns same stack
+        const sameStack = rp.getAgentCallStack('test-chat');
+        assert(sameStack === stack, 'getAgentCallStack returns same array for same chatId');
+        assert(sameStack.length === 1, 'same stack retains items');
+
+        // Different chat gets different stack
+        const otherStack = rp.getAgentCallStack('other-chat');
+        assert(otherStack !== stack, 'different chatId gets a different stack');
+        assert(otherStack.length === 0, 'other chat stack starts empty');
 
         // Clean up
-        rp.agentCallStack.pop();
-        assert(rp.agentCallStack.length === 0, 'stack is empty after cleanup');
+        stack.pop();
+        assert(stack.length === 0, 'stack is empty after cleanup');
 
-        // --- Test: scheduleProcessing sets app reference ---
+        // --- Test: stop marks chat as stopped ---
+        rp.stop('test-chat');
+        assert(rp.isChatStopped('test-chat') === true, 'chat should be stopped after stop()');
+        assert(rp.isChatStopped('other-chat') === false, 'other chat should not be stopped');
+
+        // --- Test: scheduleProcessing clears stopped state ---
         const originalApp = rp.app;
-        const mockApp = { chatManager: { chats: [], getActiveChat: () => null } };
-        rp.app = mockApp;
-        assert(rp.app === mockApp, 'app reference can be set');
+        rp.app = window.app;
+        rp.scheduleProcessing(window.app, 'test-chat');
+        assert(rp.isChatStopped('test-chat') === false, 'scheduleProcessing should clear stopped state');
 
         // Restore
         rp.app = originalApp;
 
+        // Clean up internal state
+        rp._agentCallStacks.delete('test-chat');
+        rp._agentCallStacks.delete('other-chat');
+
         return errors;
     }""")
 
-    assert errors == [], f"JS ResponseProcessor tests failed:\\n" + "\\n".join(errors)
+    assert errors == [], f"JS ResponseProcessor tests failed:\n" + "\n".join(errors)

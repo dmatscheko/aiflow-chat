@@ -88,7 +88,11 @@ export class FlowManager {
         this.dataManager = new DataManager(STORAGE_KEYS.FLOWS, 'flow');
         this.flows = this.dataManager.getAll();
         this.stepTypes = {};
-        this.activeFlowRunner = null;
+        /**
+         * Per-chat active flow runners. Each chat can run its own flow independently.
+         * @type {Map<string, FlowRunner>}
+         */
+        this.activeFlowRunners = new Map();
         this.dragInfo = {};
         this.panInfo = {};
         this.connectionInfo = {};
@@ -141,17 +145,23 @@ export class FlowManager {
     }
 
     /**
-     * Starts the execution of a flow.
+     * Starts the execution of a flow in the context of a specific chat.
      * @param {string} flowId The ID of the flow to start.
+     * @param {string} [chatId] The ID of the chat to run the flow in. Defaults to the active chat.
      */
-    startFlow(flowId) {
-        if (this.activeFlowRunner) {
-            this.activeFlowRunner.stop('Flow stopped: starting a new flow.');
+    startFlow(flowId, chatId) {
+        const effectiveChatId = chatId || this.app.chatManager?.activeChatId;
+        if (!effectiveChatId) return;
+
+        const existingRunner = this.activeFlowRunners.get(effectiveChatId);
+        if (existingRunner) {
+            existingRunner.stop('Flow stopped: starting a new flow.');
         }
         const flow = this.getFlow(flowId);
         if (flow) {
-            this.activeFlowRunner = new FlowRunner(flow, this.app, this);
-            this.activeFlowRunner.start();
+            const runner = new FlowRunner(flow, this.app, this, effectiveChatId);
+            this.activeFlowRunners.set(effectiveChatId, runner);
+            runner.start();
         }
     }
 
@@ -446,11 +456,13 @@ class FlowRunner {
      * @param {Flow} flow - The flow to be executed.
      * @param {App} app - The main application instance.
      * @param {FlowManager} manager - The `FlowManager` instance.
+     * @param {string} chatId - The ID of the chat this flow runner is bound to.
      */
-    constructor(flow, app, manager) {
+    constructor(flow, app, manager, chatId) {
         this.flow = flow;
         this.app = app;
         this.manager = manager;
+        this.chatId = chatId;
         this.currentStepId = null;
         this.isRunning = false;
         this.isExecutingStep = false;
@@ -478,13 +490,14 @@ class FlowRunner {
         this.currentStepId = null;
         this.multiPromptInfo = { active: false, step: null, counter: 0, baseMessage: null };
         if (message) {
-            const chat = this.app.chatManager.getActiveChat();
+            const chat = this.app.chatManager.chats.find(c => c.id === this.chatId)
+                || this.app.chatManager.getActiveChat();
             if (chat) {
                 chat.log.addMessage({ role: 'log', content: message });
             }
         }
         console.log(message);
-        this.manager.activeFlowRunner = null;
+        this.manager.activeFlowRunners.delete(this.chatId);
     }
 
     /**
@@ -500,6 +513,7 @@ class FlowRunner {
             try {
                 await stepDef.execute(step, {
                     app: this.app,
+                    chatId: this.chatId,
                     getNextStep: (id, out) => this.getNextStep(id, out),
                     executeStep: async (next) => await this.executeStep(next),
                     stopFlow: (msg) => this.stop(msg),
@@ -544,7 +558,7 @@ class FlowRunner {
                 // Add a new alternative with a pending message.
                 chat.log.addAlternative(info.baseMessage, { role: 'assistant', content: null, agent: step.data.agentId });
                 // Trigger the processing of the new pending message.
-                this.app.responseProcessor.scheduleProcessing(this.app);
+                this.app.responseProcessor.scheduleProcessing(this.app, this.chatId);
                 return true; // Flow is still active, handled work.
             } else {
                 // Multi-prompt is finished.
@@ -655,10 +669,12 @@ pluginManager.register({
     },
 
     async onResponseComplete(message, chat) {
-        if (!flowManager.activeFlowRunner) {
+        if (!chat) return false;
+        const runner = flowManager.activeFlowRunners.get(chat.id);
+        if (!runner) {
             return false;
         }
-        return await flowManager.activeFlowRunner.continue(message, chat);
+        return await runner.continue(message, chat);
     },
 
     onRightPanelRegister(rightPanelManager) {

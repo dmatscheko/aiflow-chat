@@ -143,14 +143,14 @@ class AgentsCallPlugin {
         // The processLoop will pop this entry to resume the calling agent after
         // all sub-agent work (including any MCP tool usage by sub-agents) is complete.
         const callingAgentId = message.agent || DEFAULT_AGENT_ID;
-        this.app.responseProcessor.agentCallStack.push({
+        this.app.responseProcessor.getAgentCallStack(activeChat.id).push({
             agentId: callingAgentId,
             depth: message.depth,
             chatId: activeChat.id,
         });
 
         for (const call of agentCalls) {
-            if (this.app.responseProcessor.isStopped) break;
+            if (this.app.responseProcessor.isChatStopped(activeChat.id)) break;
             await this._handleAgentCall(call, message, activeChat);
         }
 
@@ -160,10 +160,10 @@ class AgentsCallPlugin {
     }
 
     /**
-     * Processes non-agent tool calls (e.g., MCP tools) found in a message that also
-     * contains agent calls. This is necessary because `triggerSequentially` stops at the
-     * first handler that returns `true`, so the MCP plugin's `onResponseComplete` would
-     * never run for messages that also contain agent calls.
+     * Processes non-agent tool calls (e.g., MCP tools, chat calls) found in a message
+     * that also contains agent calls. This is necessary because `triggerSequentially`
+     * stops at the first handler that returns `true`, so other plugins' `onResponseComplete`
+     * handlers would never run for messages that also contain agent calls.
      *
      * Tool results are added to the chat log, but no pending assistant message is created
      * since the agent call stack handles resuming the calling agent's turn.
@@ -175,12 +175,12 @@ class AgentsCallPlugin {
      * @private
      */
     async _processNonAgentToolCalls(message, activeChat, allAgentIds) {
-        if (!this.app.mcp) return;
-
-        await this.app.mcp.processMessageToolCalls(message, activeChat, {
-            filter: (call) => !allAgentIds.has(call.name),
-            createPendingMessage: false,
-        });
+        if (this.app.mcp) {
+            await this.app.mcp.processMessageToolCalls(message, activeChat, {
+                filter: (call) => !allAgentIds.has(call.name) && call.name !== 'chat_call',
+                createPendingMessage: false,
+            });
+        }
     }
 
     /**
@@ -254,7 +254,7 @@ class AgentsCallPlugin {
 
         // If the user stopped while the sub-agent was streaming, skip any
         // further recursive processing to avoid resuming parent agents.
-        if (app.responseProcessor.isStopped) return;
+        if (app.responseProcessor.isChatStopped(activeChat.id)) return;
 
         // Recursively check if the sub-agent's response triggers further work
         // (nested agent calls, MCP tool usage, etc.). Any such work is resolved

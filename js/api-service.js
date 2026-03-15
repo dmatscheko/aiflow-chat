@@ -279,8 +279,14 @@ export class ApiService {
      * @returns {Promise<void>} A promise that resolves when the agent call is complete.
      */
     async executeStreamingAgentCall(app, chat, messageToUpdate, messages, agentId) {
-        app.dom.stopButton.style.display = 'block';
-        app.abortController = new AbortController();
+        const chatId = chat.id;
+        const abortController = new AbortController();
+        app.abortControllers.set(chatId, abortController);
+
+        // Show stop button only if this is the currently viewed chat
+        if (app.dom.stopButton && app.activeView.id === chatId) {
+            app.dom.stopButton.style.display = 'block';
+        }
 
         try {
             const effectiveConfig = app.agentManager.getEffectiveApiConfig(agentId);
@@ -298,7 +304,7 @@ export class ApiService {
                 effectiveConfig,
                 messageToUpdate,
                 () => chat.log.notify(),
-                app.abortController.signal
+                abortController.signal
             );
 
         } catch (error) {
@@ -310,8 +316,11 @@ export class ApiService {
             }
             chat.log.notify();
         } finally {
-            app.abortController = null;
-            app.dom.stopButton.style.display = 'none';
+            app.abortControllers.delete(chatId);
+            // Hide stop button only if this is the currently viewed chat
+            if (app.dom.stopButton && app.activeView.id === chatId) {
+                app.dom.stopButton.style.display = 'none';
+            }
         }
     }
 }

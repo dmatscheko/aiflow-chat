@@ -196,6 +196,12 @@ class ChatManager {
         this.app.dom.messageInput = document.getElementById('message-input');
         this.app.dom.stopButton = document.getElementById('stop-button');
 
+        // Show stop button if this chat is currently processing (e.g., user switched back to it)
+        if (this.app.dom.stopButton) {
+            this.app.dom.stopButton.style.display =
+                this.app.abortControllers.has(chatId) ? 'block' : 'none';
+        }
+
         this.app.dom.messageInput.value = chat.draftMessage || '';
 
         this.app.dom.messageInput.addEventListener('input', () => {
@@ -252,21 +258,47 @@ class ChatManager {
 
         const finalAgentId = agentId || activeChat.agent;
         activeChat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId }, {});
-        responseProcessor.scheduleProcessing(this.app);
+        responseProcessor.scheduleProcessing(this.app, activeChat.id);
     }
 
     /**
-     * Stops any ongoing chat response generation or flow execution.
+     * Programmatically sends a message to a specific chat without touching the DOM.
+     * This is used by flows and other automated systems to submit prompts to any chat,
+     * not just the currently active/visible one.
+     * @param {string} chatId - The ID of the target chat.
+     * @param {string} content - The user message content to send.
+     * @param {string} [agentId=null] - Optional agent ID to use for the response.
+     */
+    sendMessage(chatId, content, agentId = null) {
+        const chat = this.chats.find(c => c.id === chatId);
+        if (!chat) return;
+
+        chat.log.addMessage({ role: 'user', content }, {});
+        const finalAgentId = agentId || chat.agent;
+        chat.log.addMessage({ role: 'assistant', content: null, agent: finalAgentId }, {});
+        this.dataManager.save();
+        responseProcessor.scheduleProcessing(this.app, chatId);
+    }
+
+    /**
+     * Stops any ongoing chat response generation or flow execution for the active chat.
+     * Only affects the currently active chat, leaving other chats' processing untouched.
      */
     stopChatFlow() {
-        if (this.app.flowManager && this.app.flowManager.activeFlowRunner) {
-            this.app.flowManager.activeFlowRunner.stop('Flow stopped by user.');
+        const chatId = this.activeChatId;
+        if (!chatId) return;
+
+        if (this.app.flowManager) {
+            const runner = this.app.flowManager.activeFlowRunners.get(chatId);
+            if (runner) {
+                runner.stop('Flow stopped by user.');
+            }
         }
-        // Signal the processing loop to exit and clear the agent call stack so
-        // that no parent agents are resumed after the current request is aborted.
-        responseProcessor.stop();
-        if (this.app.abortController) {
-            this.app.abortController.abort();
+        // Signal the processing loop to exit for this chat only.
+        responseProcessor.stop(chatId);
+        const abortController = this.app.abortControllers.get(chatId);
+        if (abortController) {
+            abortController.abort();
         }
     }
 }
@@ -628,7 +660,7 @@ pluginManager.register({
                     if (runBtn) {
                         runBtn.addEventListener('click', () => {
                             if (chat.flow) {
-                                app.flowManager.startFlow(chat.flow);
+                                app.flowManager.startFlow(chat.flow, chat.id);
                             }
                         });
                     }

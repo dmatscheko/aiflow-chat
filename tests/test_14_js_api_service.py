@@ -172,11 +172,13 @@ def test_js_api_service(page):
         const originalLength = originalMessages.length;
 
         const mockChat = {
+            id: 'mock-chat-id',
             log: { notify: () => {} }
         };
         const mockApp = {
             dom: { stopButton: { style: { display: '' } } },
-            abortController: null,
+            abortControllers: new Map(),
+            activeView: { id: 'mock-chat-id' },
             agentManager: {
                 getEffectiveApiConfig: () => ({
                     apiUrl: 'http://localhost:9999',

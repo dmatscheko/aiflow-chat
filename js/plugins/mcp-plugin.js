@@ -453,6 +453,7 @@ const mcpPluginDefinition = {
                     tools,
                     (call) => {
                         if (call.name.startsWith('agent-')) return false;
+                        if (call.name === 'chat_call') return false;
                         return filter ? filter(call) : true;
                     },
                     (call, msg) => {

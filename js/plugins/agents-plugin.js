@@ -118,7 +118,9 @@ class AgentManager {
                 useCustomToolSettings: true,
                 toolSettings: { allowAll: true, allowed: [] },
                 useCustomAgentCallSettings: false,
-                agentCallSettings: { allowAll: true, allowed: [] }
+                agentCallSettings: { allowAll: true, allowed: [] },
+                useCustomChatCallSettings: false,
+                chatCallSettings: { allowAll: false, allowed: [] }
             };
             // Add the default agent at the beginning of the list.
             this.agents.unshift(newDefaultAgent);
@@ -158,6 +160,8 @@ class AgentManager {
             toolSettings: { allowAll: true, allowed: [] },
             useCustomAgentCallSettings: false,
             agentCallSettings: { allowAll: true, allowed: [] },
+            useCustomChatCallSettings: false,
+            chatCallSettings: { allowAll: false, allowed: [] },
         };
         const newAgent = this.dataManager.add({ ...newAgentDefaults, ...agentData });
         if (this.listPane) {
@@ -246,6 +250,7 @@ class AgentManager {
             ...(defaultAgent.modelSettings || {}),
             toolSettings: { ...(defaultAgent.toolSettings || {}) },
             agentCallSettings: { ...(defaultAgent.agentCallSettings || {}) },
+            chatCallSettings: { ...(defaultAgent.chatCallSettings || {}) },
         };
 
         if (agent && agent.id !== DEFAULT_AGENT_ID) {
@@ -299,6 +304,16 @@ class AgentManager {
                 }
                 if (custom.allowed !== undefined) {
                     effectiveConfig.agentCallSettings.allowed = custom.allowed;
+                }
+            }
+
+            if (agent.useCustomChatCallSettings) {
+                const custom = agent.chatCallSettings || {};
+                if (custom.allowAll !== undefined) {
+                    effectiveConfig.chatCallSettings.allowAll = custom.allowAll;
+                }
+                if (custom.allowed !== undefined) {
+                    effectiveConfig.chatCallSettings.allowed = custom.allowed;
                 }
             }
         }
@@ -585,6 +600,31 @@ class AgentManager {
                 id: 'agentCallSettings', type: 'fieldset', label: 'Agent Call Settings',
                 children: agentCallSettingsChildren,
                 dependsOn: 'useCustomAgentCallSettings', dependsOnValue: true
+            });
+        }
+
+        settingsDefinition.push({ type: 'divider' });
+
+        const chatCallSettingsChildren = [
+            { id: 'allowAll', label: 'Allow all available chats', type: 'checkbox' },
+            {
+                id: 'allowed', type: 'checkbox-list', label: '',
+                options: this.app.chatManager.chats.map(c => ({ value: c.id, label: c.title })),
+                dependsOn: 'allowAll', dependsOnValue: false
+            }
+        ];
+
+        if (isDefaultAgent) {
+            settingsDefinition.push({
+                id: 'chatCallSettings', type: 'fieldset', label: 'Chat Call Settings',
+                children: chatCallSettingsChildren
+            });
+        } else {
+            settingsDefinition.push({ id: 'useCustomChatCallSettings', label: 'Use Custom Chat Call Settings', type: 'checkbox' });
+            settingsDefinition.push({
+                id: 'chatCallSettings', type: 'fieldset', label: 'Chat Call Settings',
+                children: chatCallSettingsChildren,
+                dependsOn: 'useCustomChatCallSettings', dependsOnValue: true
             });
         }
 
