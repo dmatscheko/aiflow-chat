@@ -33,8 +33,8 @@ def print_passed(test_name: str):
 if __name__ == "__main__":
     with sync_playwright() as p:
         # browser = p.chromium.launch(channel="chrome", headless=False, args=["--disable-ipv6"])  # Could help with MacOS errors
-        browser = p.chromium.launch(headless=False)  # For debug
-        # browser = p.chromium.launch(headless=True)  # Normal test operation
+        # browser = p.chromium.launch(headless=False)  # For debug
+        browser = p.chromium.launch(headless=True)  # Normal test operation
         page = browser.new_page()
         page.goto("http://127.0.0.1:8000")
         configure_agent(page)  # Run once
@@ -118,5 +118,5 @@ if __name__ == "__main__":
             page.screenshot(path="test-results/verification_error.png")
             # raise
         finally:
-            input("Press Enter to close the browser...")  # Keeps window open. For debug
+            # input("Press Enter to close the browser...")  # Keeps window open. For debug
             browser.close()
